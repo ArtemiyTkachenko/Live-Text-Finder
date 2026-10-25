@@ -1,0 +1,21 @@
+package com.artkachenko.livetextfinder.camera
+
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import com.artkachenko.livetextfinder.ocr.OcrStatus
+import com.artkachenko.livetextfinder.ocr.OcrUiState
+
+@Composable
+internal actual fun CameraPreview(modifier: Modifier, onState: (OcrUiState) -> Unit) {
+    LaunchedEffect(Unit) {
+        onState(OcrUiState(OcrStatus.Unavailable, "Camera OCR is available on Android in this build."))
+    }
+    Box(modifier, contentAlignment = Alignment.Center) {
+        Text("Android camera preview", color = Color.White)
+    }
+}
