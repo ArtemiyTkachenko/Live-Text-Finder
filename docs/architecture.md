@@ -4,7 +4,7 @@
 
 `androidApp` hosts shared `App`. `commonMain` owns the screen, diagnostic state, and immutable OCR result types. An expect/actual camera composable supplies a native preview and reports state; all camera and OCR implementation details stay in `androidMain`. `iosMain` renders an explicit Android-only notice.
 
-Android owns a session containing PreviewView, camera use cases, and one bundled Latin recognizer. Use CameraX MlKitAnalyzer in original image coordinates, wrapped only to capture matching frame metadata. Copy text, line/element bounds and corner points before publishing; do not leak ML Kit/Android objects. Geometry uses the rotated input image coordinate system, never preview coordinates. Record raw size, rotation, crop, timestamp and sensor-to-buffer matrix. Future highlights will require a separately tested preview transform.
+Android owns a session containing PreviewView, camera use cases, and one bundled Latin recognizer. Use CameraX MlKitAnalyzer in original image coordinates, wrapped only to capture matching frame metadata. Copy text, line/element bounds and corner points before publishing; do not leak ML Kit/Android objects. Common snapshots use adapter-normalized full-buffer upright coordinates, never preview coordinates. The pinned bundled SDK supplies upright bounds but pre-upright corners; CS-003 normalizes corners once during result copying. Record raw size, rotation, crop, timestamp and sensor-to-buffer matrix. Shared projection now reverses full-buffer OCR rotation and the frame sensor-to-buffer transform, then applies the actual PreviewView sensor-to-view transform. See [search requirements](search-requirements.md) for coordinate conventions and limits.
 
 ## Resource and concurrency decisions
 
@@ -12,7 +12,7 @@ Bind rear preview and analysis together to the Compose lifecycle owner. KEEP_ONL
 
 Permissions are requested through Android Activity Result APIs following an explicit button tap. Denial keeps an explanation and retry; permanent denial offers system settings. Recheck permission on resume. Surface setup, camera and recognition errors with recovery.
 
-No image/text persistence, text logging, search, overlays or iOS camera functionality.
+The foundation added no image/text persistence, text logging, search, overlays or iOS camera functionality. CS-001 adds a pure common matcher and transient shared query/count UI, described in [matching requirements](search-requirements.md). It retains the original eligible snapshot and element indices as provenance; CS-002 adds shared projected element polygons and Canvas outlines, supplied by Android actual-view mapping. Use-case/analyzer/recognizer ownership invariants remain unchanged.
 
 ## Primary references
 
@@ -21,3 +21,19 @@ No image/text persistence, text logging, search, overlays or iOS camera function
 - https://developer.android.com/media/camera/camerax/analyze
 - https://developers.google.com/ml-kit/vision/text-recognition/v2/android
 - https://developer.android.com/training/permissions/requesting
+
+## Preview projection and freshness
+
+Android captures copied row-major matrix values on the main thread and associates each result with its own frame plus a unique camera-session/generation ticket. Layout/pre-draw, stream/lifecycle events, frame submission and result delivery inspect actual native target mapping; target rotation/size/matrix changes immediately invalidate projection and reject old tickets. Retries create a new native PreviewView and session identity. No per-frame rebinding occurs. IDLE, zero/unattached view and lifecycle stop clear current results. Errors/permission/session disposal clear geometry; old callbacks cannot revive it.
+
+A session owns one reusable Handler expiry runnable, rescheduled to the current result's receipt deadline and removed on disposal. Receipt time and UI presentation deadlines use one common process-wide monotonic clock origin, not CameraX sensor timestamps or wall-clock time. After 1,500ms without a fresh result, snapshot/projection/count stop being current; query stays in Compose memory. Pure injected-clock tests exercise timing without sleeps.
+
+Common code retains immutable projection data, validates/maps/deduplicates element polygons and draws in preview-local physical pixels. Native preview and shared Canvas fill the same Box; exact pixel size must agree. Invalid mapping suppresses outlines without discarding otherwise-current recognized counts. Clip the draw viewport rather than clamping polygon vertices. This is newest-recognized-frame display with a freshness limit, not object tracking or a runtime alignment guarantee.
+
+## CS-003 adapter correction
+
+User device feedback exposed systematic displaced/quarter-turned outlines despite correct text/counts. Earlier pure projection fixtures began with assumed-upright points, leaving actual SDK result admission untested. Pinned bundled bridge bytecode and host-executed SDK geometry helpers show that its element/line bounds are rotated to upright while its separate corner list is not. `toSnapshot` now applies the captured full-buffer quarter rotation to corners only; SDK bounds remain unchanged. Downstream sensor/view projection is unchanged. See [search requirements](search-requirements.md) for boundary table and [validation](validation.md) for real red/green adapter tests and pending device retest. No native OCR/device correction success is inferred from host execution.
+
+## Bounded presentation stability
+
+Shared presentation state associates nearby current matched occurrences conservatively and one-to-one. Each occurrence retains exact source snapshot/projection/element provenance; missing regions may remain briefly while other matches update. Each missing deadline is min(first missing receipt + 300ms, last observed receipt + 1,500ms), without renewal by repeated misses or recomposition. Latest OCR diagnostics/counts remain distinct. Query/invalidation/session/error/expiry clears retained regions. Current observations replace geometry immediately; overlapping/displaced old copies are retired. No synthetic mixed OCR snapshot, coordinate smoothing or image-based motion tracking is implemented. A common monotonic clock connects Android receipt metadata to the cancellable Compose deadline. Stable header/diagnostics footprints avoid OCR text changes resizing the preview; IME/compact layouts prioritize input and hide the camera preview and secondary views. The user chose this behavior after device testing; preview shrinking is deferred.

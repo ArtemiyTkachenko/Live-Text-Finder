@@ -1,6 +1,8 @@
 package com.artkachenko.livetextfinder.ocr
 
-/** Coordinates are pixels in the input buffer after applying [FrameInfo.rotationDegrees]. */
+import com.artkachenko.livetextfinder.search.FrameProjection
+
+/** Adapter-normalized full-buffer upright pixels after [FrameInfo.rotationDegrees]; SDK fields may differ. */
 internal data class TextPoint(val x: Int, val y: Int)
 internal data class TextBounds(val left: Int, val top: Int, val right: Int, val bottom: Int)
 internal data class TextElement(
@@ -38,4 +40,7 @@ internal data class OcrUiState(
     val status: OcrStatus = OcrStatus.PermissionRequired,
     val message: String = "Allow camera access to scan printed Latin text.",
     val snapshot: OcrSnapshot? = null,
+    val projection: FrameProjection? = null,
+    /** Monotonic receipt time supplied by the live frame owner. */
+    val receivedAtMillis: Long? = null,
 )

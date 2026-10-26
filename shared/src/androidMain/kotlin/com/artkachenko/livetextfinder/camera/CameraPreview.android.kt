@@ -15,12 +15,15 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -91,7 +94,7 @@ internal actual fun CameraPreview(modifier: Modifier, onState: (OcrUiState) -> U
     when {
         !granted -> Box(modifier, contentAlignment = Alignment.Center) {
             Column(
-                Modifier.padding(24.dp),
+                Modifier.verticalScroll(rememberScrollState()).padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
@@ -121,13 +124,14 @@ private fun AndroidCameraFeed(modifier: Modifier, onState: (OcrUiState) -> Unit)
     val context = LocalContext.current
     val owner = LocalLifecycleOwner.current
     val report by rememberUpdatedState(onState)
-    val preview = remember(context) {
+    var attempt by remember { mutableIntStateOf(0) }
+    // A retried/replaced session gets a fresh native transform and stream state.
+    val preview = remember(context, owner, attempt) {
         PreviewView(context).apply {
             implementationMode = PreviewView.ImplementationMode.COMPATIBLE
             scaleType = PreviewView.ScaleType.FILL_CENTER
         }
     }
-    var attempt by remember { mutableIntStateOf(0) }
     var failed by remember { mutableStateOf(false) }
     DisposableEffect(preview, owner, attempt) {
         failed = false
@@ -140,7 +144,9 @@ private fun AndroidCameraFeed(modifier: Modifier, onState: (OcrUiState) -> Unit)
         onDispose { session.close() }
     }
     Box(modifier) {
-        AndroidView(factory = { preview }, modifier = Modifier.matchParentSize())
+        key(preview) {
+            AndroidView(factory = { preview }, modifier = Modifier.matchParentSize())
+        }
         if (failed) {
             Button(onClick = { attempt++ }, modifier = Modifier.align(Alignment.Center)) {
                 Text("Retry camera")

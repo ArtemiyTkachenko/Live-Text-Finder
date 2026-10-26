@@ -1,5 +1,25 @@
 # Validation
 
+## Final user-adjusted tree — 2026-10-26
+
+The user tested the section, changed keyboard behavior to hide camera/secondary views, and accepted it for commit/push. Shrinking the preview is deferred. This is user acceptance of the current section, not an exhaustive benchmark or completion of every historical device checklist.
+
+The four compilation/host-test/lint tasks listed below passed again on this final user-adjusted tree: BUILD SUCCESSFUL in 6s; 62 tests, zero failures/errors/skips; lint 0 errors and 13 warnings. Android and iOS shared compilation passed. No APK task ran. Commit candidates exclude raw execution logs, per-run stage reports, XML/inventories and machine-specific coordinator state; those remain local.
+
+## Current source verification — 2026-10-26
+
+The user reported delayed highlighting, individual boxes disappearing while others remain, and keyboard/layout reachability problems. The bounded correction uses independent short-lived occurrence presentation, immediate fresh geometry, conservative association, draw-time stale/expiry guards, a single inset-aware Column and bounded preview layout. After device testing, the user changed the UI to hide the camera and secondary views while the keyboard is open or the layout is compact; preview shrinking is deferred. Each missing occurrence expires at min(first missing receipt + 300ms, last observed receipt + 1,500ms); repeated misses do not extend it. Latest OCR/counts remain distinct from retained outlines. Native OCR runtime latency is unmeasured; stable panels remove content-driven preview invalidation but do not prove a device latency improvement.
+
+Final command (exit 0, BUILD SUCCESSFUL in 9s; 66 actionable tasks: 21 executed, 45 up-to-date):
+
+```sh
+./gradlew :androidApp:compileDebugKotlin :shared:testAndroidHostTest :androidApp:lintDebug :shared:compileKotlinIosSimulatorArm64 --console=plain
+```
+
+Fresh XML confirms **62 host tests, 0 failures/errors/skips**, including **15 presentation regressions** plus all 47 prior tests. Android and iOS shared compilation passed. Lint: **0 errors, 13 warnings**. Independent source-first review and correction re-review: **PASS WITH LIMITATIONS**, no remaining actionable findings. Review corrected an overlapping same-text ghost-box case and incorrect test expectations; the exact regression now passes. Earlier failed compilation/test attempts are local execution history, not successful validation evidence. No APK task, staging, commit, push or publication ran.
+
+Generated stage artifacts and machine-specific state are retained locally and ignored by Git; none was tracked at entry. Durable requirements/results stay in project documentation. Physical camera alignment, actual recognition latency, individual-box stability during scene motion and IME/landscape/large-font behavior require the user's rebuilt-device retest. Host tests/source review do not establish these observations. User-owned KeyboardUtil content and the existing Git index were preserved; App edits were integrated for the requested layout change.
+
 ## Executed on 2026-10-25
 
 Final command (exit 0, BUILD SUCCESSFUL):
@@ -59,3 +79,57 @@ Fresh correction checks (exit 0, BUILD SUCCESSFUL):
 - Whitespace checks passed for changed files and the staged tree excluding the conventional generated Windows wrapper CRLF lines. No unused imports, dead application code or additional unused files were identified by the reviewer.
 
 Physical-device validation remains pending. Independent review and compilation do not establish device runtime correctness.
+
+## CS-001 query/matching/count — 2026-10-25
+
+Fresh implementation-agent command (exit 0, BUILD SUCCESSFUL in 5s):
+
+```sh
+./gradlew :androidApp:compileDebugKotlin :shared:testAndroidHostTest :androidApp:lintDebug :shared:compileKotlinIosSimulatorArm64 --console=plain
+```
+
+Actual build log (local evidence: `agent-workflow/stages/CS-001/checks.log`). Android debug Kotlin and iOS simulator shared compilation passed. Host XML at `shared/build/test-results/testAndroidHostTest/` confirms **17 tests, 0 failures/errors/skips**: 13 new `TextSearchTest` tests (timestamp `2026-10-25T18:07:03.063Z`), existing 1 frame-rotation test and 3 analysis-lifetime tests. Lint XML: **0 errors, 13 warnings**. No APK assembly, application packaging, export or installation task ran; host-test packaging/resource tasks in the log are not APK generation. These executions belong to the implementer; independent CS-001 review is pending.
+
+[Matching requirements](search-requirements.md) describe implemented defaults and provenance. UI/source inspection confirms direct `remember(query, state)` invalidation and eligible-state gating; software-keyboard/live-device behavior has not been observed. No device installation, camera/OCR runtime, accuracy/performance/battery measurements, preview mapping or highlight alignment validation occurred in CS-001.
+
+Manual checks pending: live query edit/clear and repeated identifier/phrase counts; blank surface replacement; keyboard/landscape/large-font access; permission denial/recovery, errors and background/foreground clearing/recovery. Full milestone later requires real-device aligned outlines across rotation/aspect/layout changes. Offline-first-launch remains pending. Next external action when device validation is due: user builds/installs their APK on an authorized Android device and performs/records these observations; no device availability is inferred from historical evidence.
+
+### CS-R1 correction validation
+
+Initial independent CS-001 review identified one P2 finding, CS-R1: the keyboard-adjusted camera viewport could compress an unscrollable permission/settings column and hide its trailing action. Accepted and corrected by applying vertical scrolling before the existing content padding, preserving the action's content height and a scroll route. Camera/session lifecycle and permission behavior are unchanged. Manual constrained keyboard/landscape/large-font and ordinary portrait observations remain pending; no device reproduction or screenshot was obtained.
+
+Fresh implementation correction command: same four compilation/test/lint tasks above, exit 0, BUILD SUCCESSFUL in 3s (66 tasks: 19 executed, 47 up-to-date). Correction log (local evidence: `agent-workflow/stages/CS-001/correction-checks.log`). Android/iOS shared compilation passed; host XML still confirms 17 tests, zero failures/errors/skips, and lint XML has 13 warnings/no errors. No APK task ran. Test task executed on this correction run; matching test code is unchanged. Source inspection confirms scrolling wraps padding and the permission/settings button. Independent correction verification is pending; compilation does not establish measured runtime reachability.
+
+## CS-002 projection/outlines — 2026-10-25
+
+Fresh implementer command (same authorized compilation-only command as CS-001):
+
+```sh
+./gradlew :androidApp:compileDebugKotlin :shared:testAndroidHostTest :androidApp:lintDebug :shared:compileKotlinIosSimulatorArm64 --console=plain
+```
+
+Final execution: exit 0, BUILD SUCCESSFUL in 5s, 66 tasks (20 executed/46 up-to-date). Actual final log (local evidence: `agent-workflow/stages/CS-002/checks.log`). Android debug/shared compilation, iOS shared simulator compilation, host-test compilation/execution and lint passed. Fresh XML confirms **41 tests, zero failures/errors/skips**: HighlightsTest 13 (timestamp `2026-10-25T20:15:55.659Z`), LiveFrameTrackerTest 11 (`2026-10-25T20:15:55.652Z`), retained TextSearchTest 13, FrameInfoTest 1 and AnalysisLifetimeTest 3. Lint: **0 errors, 13 warnings**. No APK assembly/application packaging/export/install command ran; internal JAR/AAR/resource/host-test packaging tasks are compilation/lint infrastructure.
+
+Earlier CS-002 implementation checkpoints also succeeded: core compilation log (local evidence: `agent-workflow/stages/CS-002/checks-initial.log`), 7s/24 executed tasks before new geometry tests; new-tests checkpoint (local evidence: `agent-workflow/stages/CS-002/checks-tests.log`), 2s/7 executed tasks. The geometry/state safeguard checkpoint (local evidence: `agent-workflow/stages/CS-002/checks-geometry.log`) passed in 4s/21 executed tasks. The native retry-view checkpoint (local evidence: `agent-workflow/stages/CS-002/checks-native-key.log`) passed in 4s/19 executed tasks after keying AndroidView composition to the recreated PreviewView. Final run added draw-time current query/source/native-size suppression for state/layout changes between composition and drawing; iOS shared compilation executed successfully again with that common-source change. No repeated execution after the final successful unchanged target. All executions above belong to the implementer, not an independent reviewer. Independent CS-002 review remains pending.
+
+[Neutral requirements](search-requirements.md) document matrix origins/order, element selection, invalidity and expiry. Pure tests use independently hand-derived landmark coordinates and injected monotonic clocks without sleeps. Native PreviewView/CameraX adapter integration is source-inspected against pinned publisher sources, not platform-executed by host tests; no new Android test runtime/dependency was added. Common sources remain free of Android/CameraX/ML Kit objects/data objects.
+
+**External runtime gate still pending:** user builds/runs their own APK on an authorized Android device and records model/Android version, viewport/orientation and observations: repeated printed identifiers and a multi-element phrase at centre/edges; query edit/clear; blank page; portrait/landscape/rotation; keyboard opening/closing and preview resize; background/foreground; denied permission/settings/retry/error recovery; large-font action reachability; no systematic offset/crop/mirror error; no stale/invalid outlines or live counts. First-launch offline OCR also remains unobserved. No device was installed/launched or measured by this stage. No accuracy/latency/battery or motion-tracking claim. Once code/review is complete, stop for this external action rather than inventing more product scope.
+
+## CS-003 coordinate adapter regression — 2026-10-25
+
+Actual user report (not agent reproduction): persistent stationary highlight displacement/reciprocal quarter turns with correct recognized text/counts. The previous41 tests assumed upright copied geometry and missed the SDK boundary. Pinned artifact bytecode shows bundled bounds are rotated while separate corners are not; actual SDK-helper/result-constructor tests execute that difference. See [requirements boundary table](search-requirements.md).
+
+Real red run before normalization: `./gradlew :shared:testAndroidHostTest --console=plain`, exit1 after18s, **47 tests,5 failures**. All41 prior tests and the pinned bridge proof passed;5 new production-adapter/projection tests failed. Red log (local evidence: `agent-workflow/stages/CS-003/checks-red.log`), actual red XML (local evidence: `agent-workflow/stages/CS-003/red-adapter-results.xml`), source/test fingerprint (local evidence: `agent-workflow/stages/CS-003/red-provenance.json`). At90°, old copied corners remained(80,40)… instead of expected upright(160,80)…; portrait x41.25 differed from116.25, and bounds/corner envelopes diverged. Two earlier setup attempts failed compilation (constructor callback placement, then package-private media.Image fixture); those were setup failures, not geometry-red claims. Their actual logs are preserved in the stage directory.
+
+After normalization, fresh implementer execution:
+
+```sh
+./gradlew :androidApp:compileDebugKotlin :shared:testAndroidHostTest :androidApp:lintDebug :shared:compileKotlinIosSimulatorArm64 --console=plain
+```
+
+Exit0, **BUILD SUCCESSFUL in12s**,66 tasks(45 executed/21 up-to-date). Final log (local evidence: `agent-workflow/stages/CS-003/checks.log`). Fresh host XML: **47 tests,0 failures/errors/skips**, including6 MlKitGeometryAdapterTest (`2026-10-25T21:54:35.400Z`) plus all41 existing tests unchanged. Green adapter XML (local evidence: `agent-workflow/stages/CS-003/green-adapter-results.xml`). The new test-source hash matches the genuine red run. Android compilation, iOS shared compilation and lint passed; **0 lint errors,13 warnings**. No APK generation/export/install.
+
+These six tests execute SDK Java geometry helpers/result constructors with Android operations supplied by Robolectric, real production `toSnapshot` and a fake-detector invocation of the actual analyzer. They do not run native OCR inference or establish physical alignment. All source math/state tests are retained. Release dependency resolution also succeeds and has no Robolectric production artifact. No tests repeated after the successful unchanged source target. Independent CS-003 source-first review remains pending.
+
+**Required user retest after review:** rebuild/run your own APK on the same authorized device; record model/Android version/build/layout. Hold readable horizontal and vertical targets stationary at centre and edges; check orientation and position in portrait/landscape/all rotations and keyboard resize. Check query edit/clear, blank replacement and clearing/recovery after rotation/background/retry. Record pass/fail/not-tested observations. First-launch offline remains pending unless actually observed. The prior user report is evidence of failure; it is not replaced by an agent runtime-fix claim or a completed acceptance checklist.

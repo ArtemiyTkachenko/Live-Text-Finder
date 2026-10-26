@@ -17,3 +17,8 @@ captures
 !*.xcworkspace/contents.xcworkspacedata
 **/xcshareddata/WorkspaceSettings.xcsettings
 node_modules/
+
+# Generated local agent execution evidence and machine/session handoff.
+# Keep on disk for provenance; durable requirements/results belong in docs/*.md.
+/docs/agent-workflow/stages/
+/docs/agent-workflow/state.json

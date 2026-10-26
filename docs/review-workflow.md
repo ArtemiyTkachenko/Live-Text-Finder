@@ -1,36 +1,27 @@
 # Independent review workflow
 
-## Independence
+## Independence and input
 
-Before closing an implementation review, launch a separate, strict reviewer agent with fresh context (`fork_turns="none"`). Do not pass conversation history, implementation rationale, an implementation summary, anticipated findings or suggested conclusions. Give it only the repository path, review criteria, reporting requirements and operational constraints (for example, no APK generation). It may inspect the repository, its instructions, documentation and relevant official references independently. Do not request lenience or omit changed areas.
+Use a separate reviewer with fresh context for each initial review. Provide the original neutral approved specification and acceptance criteria, actual change target, review criteria and operational constraints. Do not provide implementation rationale, summaries, anticipated findings or conclusions. The reviewer independently inspects the target and relevant project context before reporting.
 
 ## Scope and criteria
 
-Inspect the complete proposed change set, including staged, unstaged and untracked files, against the existing codebase. For an initial repository with no HEAD, review the entire proposed tree and separately account for differences between the index and working tree.
-
-Assess:
+Review the complete authorized target. Attribute pre-existing staged, unstaged and untracked changes separately. Assess:
 
 1. Technical soundness and correctness.
 2. Bugs, regressions, edge cases, concurrency and resource ownership.
-3. CLEAN architecture appropriate to the feature: dependency direction, platform boundaries, separation of responsibilities and testability; avoid adding layers merely to satisfy a pattern.
-4. Code smells, duplication, needless complexity and unnecessary abstractions.
+3. Architecture and platform boundaries appropriate to the feature.
+4. Duplication, needless complexity and unnecessary abstractions.
 5. Formatting and project conventions.
-6. Unused imports, unreachable/dead code and unused declarations/dependencies.
-7. Unused or unrelated files in the Git diff, including staged files already deleted from the working tree.
+6. Unused imports, dead code and unused declarations/dependencies.
+7. Unused or unrelated files in the target.
 
-## Findings report
+For configuration-only changes, assess the configuration and active workflow target; do not re-review unrelated application correctness.
 
-The reviewer produces a report with severity, file/line references, concrete evidence, user/developer impact, and a suggested correction or verification for each actionable finding. Separate confirmed issues from uncertainty. Do not invent findings to sound harsh. State review coverage, checks actually run and limitations, including unavailable physical-device validation. Produce a report even if no findings are identified.
+## Findings and resolution
 
-## Resolution
+Each actionable finding states severity, file/location, concrete problem, evidence, trigger, expected behavior and correction direction. Distinguish verified defects, plausible risks, missing tests and external validation. Avoid low-value style findings. State coverage, checks actually run and limitations.
 
-The implementation agent tracks every finding and either:
+The coordinator resolves challenged findings with the user. The implementer corrects accepted findings and records evidence; the independent reviewer verifies each accepted correction. Keep findings open until verified or actually resolved by the user. After one bounded correction cycle, reassess root cause and scope before further work; do not ignore a defect to meet the cycle limit.
 
-- Implements the correction immediately, runs appropriate checks and records the resolution; or
-- Challenges it with evidence and involves the user in deciding the outcome. A challenge remains open until the user resolves it. Continue unrelated accepted corrections while awaiting that decision.
-
-Do not quietly dismiss or defer findings. Send the corrected code back to the reviewer for verification. Record verification and any unresolved issues in the final report. If verification discovers additional actionable issues, repeat the resolution process.
-
-## Validation constraint
-
-Use compilation-only tasks, host tests and lint. Do not generate or export APK files unless the user explicitly requests it. Keep historical validation records accurate rather than rewriting earlier checks as if they had not occurred.
+Return PASS, PASS WITH LIMITATIONS, CHANGES REQUIRED or BLOCKED. A source-level pass does not establish runtime or physical-device behavior. Preserve historical evidence and never claim checks that did not run.

@@ -37,3 +37,9 @@ This increment extends the already generated official project rather than replac
 ## Independent review corrections
 
 Compose UI tooling is declared only as `debugImplementation` in the Android host for debug inspection. Shared production configurations contain no tooling, preview-annotation or unused Compose resources dependency. Unused template catalog aliases/version entries were removed. AndroidX Core remains as an explicit Android dependency because permission and main-executor code directly uses its Java APIs.
+
+## CS-003 host adapter regression dependency
+
+`org.robolectric:robolectric:4.17` is declared only in `androidHostTest` via the version catalog. [Official setup](https://robolectric.org/getting-started/) checked 2026-10-25 lists this stable release; it supports the existing JDK/SDK without an app toolchain upgrade. Tests use API35 to execute the pinned ML Kit bounds helper, public result constructors, Android geometry operations and the real production admission path. Plain host Android stubs cannot execute these operations; a fake-only geometry test would repeat the missing boundary. Robolectric is a test runner/environment, not native OCR/device validation.
+
+Fresh `:androidApp:dependencies --configuration releaseRuntimeClasspath` succeeds and includes the same bundled ML Kit versions but no Robolectric artifact. No production/runtime dependency was added or upgraded. Full graph: CS-003 release-dependencies.log (local evidence: `agent-workflow/stages/CS-003/release-dependencies.log`). Existing CameraX1.6.2/bundled Latin16.0.1 remain unchanged.

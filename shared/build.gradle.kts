@@ -42,6 +42,8 @@ kotlin {
     sourceSets {
         named("androidHostTest").dependencies {
             implementation(libs.kotlin.testJunit)
+            // Execute pinned SDK result constructors/Android matrices at the OCR adapter boundary.
+            implementation(libs.robolectric)
         }
         androidMain.dependencies {
             implementation(libs.androidx.lifecycle.runtimeCompose)
