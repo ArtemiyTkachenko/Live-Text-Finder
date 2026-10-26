@@ -130,6 +130,30 @@ class HighlightsTest {
         assertEquals(listOf(0, 2), draw(snapshot, "foo bar").outlines.map { it.elementIndex })
     }
 
+    @Test
+    fun overlappingTermsCountSeparatelyButOutlineSharedElementOnce() {
+        val snapshot = snapshot(element("foobar"))
+        val spec = ActiveSearchSpec(
+            "parts",
+            "Parts",
+            listOf(SearchTerm("foo", "foo"), SearchTerm("foobar", "foobar")),
+        )
+        val search = searchRecognizedText(
+            spec,
+            OcrUiState(OcrStatus.TextRecognized, snapshot = snapshot),
+        )
+        val projection = FrameProjection(
+            snapshot,
+            FrameIdentity(1, 1),
+            PreviewTarget(400, 200, identity),
+        )
+
+        val highlights = projectHighlights(search, projection, 400, 200)
+
+        assertEquals(2, search.occurrences.size)
+        assertEquals(listOf(0), highlights.outlines.map { it.elementIndex })
+    }
+
     @Test fun equalTextOnSeparateLinesRetainsSeparateOutlineIdentity() {
         val first = snapshot(element())
         val snapshot = first.copy(lines = first.lines + first.lines)

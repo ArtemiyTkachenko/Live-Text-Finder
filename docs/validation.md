@@ -1,5 +1,21 @@
 # Validation
 
+## Saved queries and multi-term lists — 2026-10-26
+
+Android and iOS shared compilation, Android lint and the host suite passed on the corrected saved-search implementation:
+
+```sh
+./gradlew :androidApp:compileDebugKotlin :shared:testAndroidHostTest :androidApp:lintDebug :shared:compileKotlinIosSimulatorArm64 --console=plain
+```
+
+Final execution exited 0: BUILD SUCCESSFUL in 11s. Fresh XML confirms **86 host tests, 0 failures/errors/skips**; lint reports **0 errors, 13 warnings**. The tests retain the previous 62 regressions and cover independent overlapping terms, shared-outline deduplication, term-aware retention, live session draw invalidation, editor close/stale-ID handling, startup typing/clear/load ordering, serialized saves/retry, reset races and strict actual Android JSON/AtomicFile round-trips/recovery. Boundary tests include the exact 10,000-character manual query limit, invalid schema/version/types/names/term totals and preserving the previous file after rejected writes.
+
+Independent initial review found six issues, corrected and independently verified. Correction review exposed one additional accepted-edit/rejected-input startup combination; a bounded reassessment separated dirty accepted state from validation feedback and added three deterministic regressions. Final independent verification: **PASS WITH LIMITATIONS**, with no remaining actionable findings in the reviewed scope. Earlier failed compiler attempts and intermediate passing suites are local execution history, not substitutes for this final result.
+
+`git diff --check` passes. No configured Kotlin formatter exists; manual changed-code inspection and a limited static audit of added/modified Kotlin lines found no remaining scoped findings. This is not a full-file formatter certification. Raw run logs, generated stage Markdown and machine-specific state remain local and untracked. No APK was generated.
+
+The user explicitly defers device testing until the next usage limit. Pending checks: relaunch/process restart after save completion; rapid input/backgrounding and Activity recreation; list CRUD/selection with keyboard, landscape, large fonts and long names; simultaneous live OCR outlines and existing permission/rotation/freshness behavior. Host tests do not establish camera alignment, recognition latency or device UI acceptance. iOS storage remains in-memory and camera remains unsupported.
+
 ## Final user-adjusted tree — 2026-10-26
 
 The user tested the section, changed keyboard behavior to hide camera/secondary views, and accepted it for commit/push. Shrinking the preview is deferred. This is user acceptance of the current section, not an exhaustive benchmark or completion of every historical device checklist.

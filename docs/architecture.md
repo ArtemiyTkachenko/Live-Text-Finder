@@ -14,6 +14,12 @@ Permissions are requested through Android Activity Result APIs following an expl
 
 The foundation added no image/text persistence, text logging, search, overlays or iOS camera functionality. CS-001 adds a pure common matcher and transient shared query/count UI, described in [matching requirements](search-requirements.md). It retains the original eligible snapshot and element indices as provenance; CS-002 adds shared projected element polygons and Canvas outlines, supplied by Android actual-view mapping. Use-case/analyzer/recognizer ownership invariants remain unchanged.
 
+## Saved search sessions
+
+Common code owns immutable saved-list/session values, validation, asynchronous state ordering and the list editor. The Android host retains one application-scoped controller across Activity recreation. Its store lives in `shared/androidMain` and uses versioned app-private JSON through `AtomicFile`, a process-owned serialized background worker and main-thread callbacks. Reads complete before startup edits can be saved; newer manual typing or explicit clear wins over loaded text without discarding the stored library. Pending writes coalesce to the latest state. Load failures keep recovery visible and prevent writes until a confirmed reset; reset completion preserves manual edits made while it was running. The iOS placeholder uses an explicit in-memory store.
+
+Only manual query, list IDs/names/entries and active selection are persisted. Shared validation applies on Android reads and writes, with strict JSON primitive/version checks. OCR results/images remain transient. Multi-term matching counts independent entries separately, deduplicates shared element outlines and scopes retention association to term identity. Draw-time eligibility reads the live session identity to reject outlines composed before a search change.
+
 ## Primary references
 
 - https://kotlinlang.org/docs/multiplatform/multiplatform-project-recommended-structure.html

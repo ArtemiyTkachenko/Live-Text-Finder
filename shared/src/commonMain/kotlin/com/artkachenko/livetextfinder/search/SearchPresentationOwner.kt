@@ -9,7 +9,7 @@ import kotlin.math.min
 
 /** Owns per-occurrence presentation and never combines geometry from different OCR snapshots. */
 internal class SearchPresentationOwner {
-    private var query: String? = null
+    private var searchIdentity: String? = null
     private var contextIdentity: FrameIdentity? = null
     private var contextTarget: PreviewTarget? = null
     private val retiredIdentities = mutableSetOf<FrameIdentity>()
@@ -18,45 +18,49 @@ internal class SearchPresentationOwner {
     private var occurrences = emptyList<PresentedOccurrence>()
 
     fun present(query: String, state: OcrUiState, nowMillis: Long): SearchPresentation {
-        if (this.query != query) {
-            this.query = query
+        return present(manualSearchSpec(query), state, nowMillis)
+    }
+
+    fun present(spec: ActiveSearchSpec, state: OcrUiState, nowMillis: Long): SearchPresentation {
+        if (searchIdentity != spec.identity) {
+            searchIdentity = spec.identity
             clearOccurrences()
             processedSnapshot = null
             processedReceipt = null
         }
 
-        val latestSearch = searchRecognizedText(query, state)
+        val latestSearch = searchRecognizedText(spec, state)
         val snapshot = latestSearch.snapshot
         val projection = state.projection
         val receipt = state.receivedAtMillis
-        if (query.isBlank()) {
+        if (spec.terms.none { normalizeRecognizedText(it.text).isNotEmpty() }) {
             clearOccurrences()
             processedSnapshot = snapshot
             processedReceipt = receipt
-            return result(query, latestSearch, state, emptyList())
+            return result(spec, latestSearch, state, emptyList())
         }
 
         if (state.status != OcrStatus.Scanning && state.status != OcrStatus.TextRecognized) {
             contextIdentity?.let { retiredIdentities += it }
             clearContext()
-            return result(query, latestSearch, state, emptyList())
+            return result(spec, latestSearch, state, emptyList())
         }
         if (snapshot == null || receipt == null || !isReceiptFresh(receipt, nowMillis)) {
             clearOccurrences()
             processedSnapshot = snapshot
             processedReceipt = receipt
-            return result(query, latestSearch, state, emptyList())
+            return result(spec, latestSearch, state, emptyList())
         }
         if (projection == null || projection.snapshot !== snapshot) {
             contextIdentity?.let { retiredIdentities += it }
             clearContext()
-            return result(query, latestSearch, state, emptyList())
+            return result(spec, latestSearch, state, emptyList())
         }
         if (projection.identity in retiredIdentities) {
             clearOccurrences()
             processedSnapshot = snapshot
             processedReceipt = receipt
-            return result(query, latestSearch, state, emptyList())
+            return result(spec, latestSearch, state, emptyList())
         }
 
         if (contextIdentity != null && contextIdentity != projection.identity) {
@@ -66,10 +70,13 @@ internal class SearchPresentationOwner {
             contextTarget = projection.target
             processedSnapshot = null
             processedReceipt = null
-        } else if (contextIdentity == projection.identity && contextTarget != null && contextTarget != projection.target) {
+        } else if (
+            contextIdentity == projection.identity && contextTarget != null &&
+            contextTarget != projection.target
+        ) {
             retiredIdentities += projection.identity
             clearContext()
-            return result(query, latestSearch, state, emptyList())
+            return result(spec, latestSearch, state, emptyList())
         } else if (contextIdentity == null) {
             clearOccurrences()
             contextIdentity = projection.identity
@@ -79,12 +86,17 @@ internal class SearchPresentationOwner {
         }
 
         // The identity matrix and dimensions are checked by the production projection helper.
-        val geometry = projectHighlights(latestSearch, projection, projection.target.width, projection.target.height)
+        val geometry = projectHighlights(
+            latestSearch,
+            projection,
+            projection.target.width,
+            projection.target.height,
+        )
         if (!geometry.ready) {
             clearOccurrences()
             processedSnapshot = snapshot
             processedReceipt = receipt
-            return result(query, latestSearch, state, emptyList())
+            return result(spec, latestSearch, state, emptyList())
         }
 
         if (snapshot !== processedSnapshot || receipt != processedReceipt) {
@@ -94,8 +106,10 @@ internal class SearchPresentationOwner {
             processedReceipt = receipt
         }
 
-        occurrences = occurrences.filter { it.expiresAtMillis?.let { deadline -> nowMillis < deadline } != false }
-        return result(query, latestSearch, state, occurrences)
+        occurrences = occurrences.filter {
+            it.expiresAtMillis?.let { deadline -> nowMillis < deadline } != false
+        }
+        return result(spec, latestSearch, state, occurrences)
     }
 
     private fun collectOccurrences(
@@ -118,6 +132,7 @@ internal class SearchPresentationOwner {
                 .map { normalizeRecognizedText(it).lowercase() }
             if (key.isEmpty()) return@mapNotNull null
             PresentedOccurrence(
+                termId = occurrence.termId,
                 key = key,
                 snapshot = snapshot,
                 projection = projection,
@@ -150,10 +165,12 @@ internal class SearchPresentationOwner {
             if (oldIndex in freshForOld || oldIndex in ambiguousOld) return@mapIndexedNotNull null
 
             val suppressForSegmentation = fresh.any { new ->
-                overlapOfSmallerArea(old.bounds(), new.bounds()) >= SEGMENT_OVERLAP
+                new.termId == old.termId &&
+                    overlapOfSmallerArea(old.bounds(), new.bounds()) >= SEGMENT_OVERLAP
             }
             val suppressDisplacedCopy = fresh.indices.any { newIndex ->
-                newIndex !in oldForFresh && fresh[newIndex].key == old.key
+                newIndex !in oldForFresh && fresh[newIndex].termId == old.termId &&
+                    fresh[newIndex].key == old.key
             }
             if (suppressForSegmentation || suppressDisplacedCopy) return@mapIndexedNotNull null
 
@@ -178,8 +195,15 @@ internal class SearchPresentationOwner {
         val candidates = mutableListOf<Candidate>()
         for (oldIndex in old.indices) {
             for (newIndex in fresh.indices) {
-                if (old[oldIndex].key != fresh[newIndex].key) continue
-                val score = associationScore(old[oldIndex].bounds(), fresh[newIndex].bounds()) ?: continue
+                if (old[oldIndex].termId != fresh[newIndex].termId ||
+                    old[oldIndex].key != fresh[newIndex].key
+                ) {
+                    continue
+                }
+                val score = associationScore(
+                    old[oldIndex].bounds(),
+                    fresh[newIndex].bounds(),
+                ) ?: continue
                 candidates += Candidate(oldIndex, newIndex, score)
             }
         }
@@ -205,7 +229,7 @@ internal class SearchPresentationOwner {
     }
 
     private fun result(
-        query: String,
+        spec: ActiveSearchSpec,
         search: TextSearchResult,
         state: OcrUiState,
         groups: List<PresentedOccurrence>,
@@ -215,14 +239,18 @@ internal class SearchPresentationOwner {
         groups.forEach { group ->
             group.outlines.forEach { outline ->
                 val duplicate = elements.any { existing ->
-                    existing.snapshot === group.snapshot && existing.outline.lineIndex == outline.lineIndex &&
+                    existing.snapshot === group.snapshot &&
+                        existing.outline.lineIndex == outline.lineIndex &&
                         existing.outline.elementIndex == outline.elementIndex
                 }
-                if (!duplicate) elements += PresentedElement(group.snapshot, group.projection, outline, group)
+                if (!duplicate) {
+                    elements += PresentedElement(group.snapshot, group.projection, outline, group)
+                }
             }
         }
         return SearchPresentation(
-            query = query,
+            query = search.query,
+            activeSearchIdentity = spec.identity,
             search = search,
             occurrences = groups,
             observedSnapshot = state.snapshot,
@@ -250,6 +278,7 @@ internal class SearchPresentationOwner {
 }
 
 internal data class PresentedOccurrence(
+    val termId: String,
     val key: List<String>,
     val snapshot: OcrSnapshot,
     val projection: FrameProjection,
@@ -263,6 +292,7 @@ internal data class PresentedOccurrence(
 
 internal data class SearchPresentation(
     val query: String,
+    val activeSearchIdentity: String,
     val search: TextSearchResult,
     val occurrences: List<PresentedOccurrence>,
     val observedSnapshot: OcrSnapshot?,
@@ -289,11 +319,33 @@ internal fun drawableElements(
     overlayWidth: Float,
     overlayHeight: Float,
 ): List<PresentedElement> {
+    return drawableElementsForSearch(
+        manualSearchSpec(currentQuery).identity,
+        manualSearchSpec(composedQuery).identity,
+        presentation,
+        latestState,
+        nowMillis,
+        overlayWidth,
+        overlayHeight,
+    )
+}
+
+internal fun drawableElementsForSearch(
+    currentSearchIdentity: String,
+    composedSearchIdentity: String,
+    presentation: SearchPresentation,
+    latestState: OcrUiState,
+    nowMillis: Long,
+    overlayWidth: Float,
+    overlayHeight: Float,
+): List<PresentedElement> {
     val latestProjection = latestState.projection ?: return emptyList()
     val latestSnapshot = latestState.snapshot ?: return emptyList()
     val latestReceipt = latestState.receivedAtMillis ?: return emptyList()
-    if (currentQuery != composedQuery || currentQuery != presentation.query ||
-        latestSnapshot !== presentation.observedSnapshot || latestReceipt != presentation.observedReceiptAtMillis ||
+    if (currentSearchIdentity != composedSearchIdentity ||
+        currentSearchIdentity != presentation.activeSearchIdentity ||
+        latestSnapshot !== presentation.observedSnapshot ||
+        latestReceipt != presentation.observedReceiptAtMillis ||
         presentation.observedProjection?.identity != latestProjection.identity ||
         presentation.observedProjection.target != latestProjection.target ||
         latestProjection.snapshot !== latestSnapshot || nowMillis < latestReceipt ||
@@ -313,11 +365,30 @@ internal fun drawableElements(
             group.expiresAtMillis?.let { nowMillis < it } == true
         }
         element.snapshot === group.snapshot && group.projection.snapshot === group.snapshot &&
-            element.outline in group.outlines && sourceAgeIsValid && targetIsCurrent && sourceIsEligible &&
+            element.outline in group.outlines && sourceAgeIsValid && targetIsCurrent &&
+            sourceIsEligible &&
             overlayWidth == group.projection.target.width.toFloat() &&
             overlayHeight == group.projection.target.height.toFloat()
     }
 }
+
+internal fun drawableElementsForSession(
+    session: SearchSessionController,
+    composedSearch: ActiveSearchSpec,
+    presentation: SearchPresentation,
+    latestState: OcrUiState,
+    nowMillis: Long,
+    overlayWidth: Float,
+    overlayHeight: Float,
+): List<PresentedElement> = drawableElementsForSearch(
+    session.state.value.activeSearch.identity,
+    composedSearch.identity,
+    presentation,
+    latestState,
+    nowMillis,
+    overlayWidth,
+    overlayHeight,
+)
 
 private data class Candidate(val oldIndex: Int, val newIndex: Int, val iou: Double)
 private data class Match(val oldIndex: Int, val newIndex: Int)

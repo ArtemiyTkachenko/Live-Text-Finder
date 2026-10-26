@@ -10,6 +10,25 @@ internal data class TextOccurrence(
     val start: Int,
     val endExclusive: Int,
     val elementIndices: List<Int>,
+    val termId: String = MANUAL_TERM_ID,
+)
+
+internal const val MANUAL_TERM_ID = "manual"
+
+/** Immutable identity for the complete active search, including mode and every term. */
+data class ActiveSearchSpec(
+    val identity: String,
+    val displayName: String,
+    val terms: List<SearchTerm>,
+)
+
+/** A stable identity paired with one independent literal term or phrase. */
+data class SearchTerm(val id: String, val text: String)
+
+internal fun manualSearchSpec(query: String): ActiveSearchSpec = ActiveSearchSpec(
+    identity = "manual\u0000$query",
+    displayName = "Manual search",
+    terms = if (query.isEmpty()) emptyList() else listOf(SearchTerm(MANUAL_TERM_ID, query)),
 )
 
 /** Original snapshot retains frame metadata and geometry for every referenced element. */
@@ -17,16 +36,24 @@ internal data class TextSearchResult(
     val query: String,
     val snapshot: OcrSnapshot?,
     val occurrences: List<TextOccurrence>,
+    val spec: ActiveSearchSpec = manualSearchSpec(query),
 )
 
 /** Pure replacement result: inactive states deliberately discard any retained snapshot. */
 internal fun searchRecognizedText(query: String, state: OcrUiState): TextSearchResult {
-    val normalizedQuery = normalizeWhitespace(query)
+    return searchRecognizedText(manualSearchSpec(query), state)
+}
+
+internal fun searchRecognizedText(spec: ActiveSearchSpec, state: OcrUiState): TextSearchResult {
+    val normalizedTerms = spec.terms
+        .map { term -> term.copy(text = normalizeWhitespace(term.text)) }
+        .filter { term -> term.text.isNotEmpty() }
     val snapshot = state.snapshot.takeIf {
         state.status == OcrStatus.TextRecognized || state.status == OcrStatus.Scanning
     }
-    if (snapshot == null || normalizedQuery.isEmpty()) {
-        return TextSearchResult(normalizedQuery, snapshot, emptyList())
+    val displayQuery = normalizedTerms.joinToString(" · ") { it.text }
+    if (snapshot == null || normalizedTerms.isEmpty()) {
+        return TextSearchResult(displayQuery, snapshot, emptyList(), spec)
     }
     val occurrences = buildList {
         snapshot.lines.forEachIndexed { lineIndex, line ->
@@ -42,19 +69,23 @@ internal fun searchRecognizedText(query: String, state: OcrUiState): TextSearchR
                     }
                 }
             }
-            var from = 0
-            while (from <= content.length - normalizedQuery.length) {
-                val start = content.indexOf(normalizedQuery, from, ignoreCase = true)
-                if (start < 0) break
-                val end = start + normalizedQuery.length
-                add(TextOccurrence(lineIndex, start, end, spans.filter {
-                    it.start < end && it.endExclusive > start
-                }.map { it.elementIndex }))
-                from = end
+            normalizedTerms.forEach { term ->
+                var from = 0
+                while (from <= content.length - term.text.length) {
+                    val start = content.indexOf(term.text, from, ignoreCase = true)
+                    if (start < 0) {
+                        break
+                    }
+                    val end = start + term.text.length
+                    add(TextOccurrence(lineIndex, start, end, spans.filter {
+                        it.start < end && it.endExclusive > start
+                    }.map { it.elementIndex }, term.id))
+                    from = end
+                }
             }
         }
     }
-    return TextSearchResult(normalizedQuery, snapshot, occurrences)
+    return TextSearchResult(displayQuery, snapshot, occurrences, spec)
 }
 
 private data class ElementSpan(val elementIndex: Int, val start: Int, val endExclusive: Int)

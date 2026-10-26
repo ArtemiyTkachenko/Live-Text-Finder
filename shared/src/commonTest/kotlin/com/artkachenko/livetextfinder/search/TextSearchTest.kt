@@ -127,6 +127,38 @@ class TextSearchTest {
         assertEquals(100L, cleared.snapshot?.frame?.timestampNanos)
     }
 
+    @Test
+    fun independentTermsMayOverlapAndPhraseTermsStayWithinOneLine() {
+        val snapshot = snapshot(
+            listOf("infoobar"),
+            listOf("new"),
+            listOf("york"),
+            listOf("new york"),
+        )
+        val spec = ActiveSearchSpec(
+            "list-1",
+            "Parts",
+            listOf(
+                SearchTerm("t0", "foo"),
+                SearchTerm("t1", "foobar"),
+                SearchTerm("t2", "new york"),
+            ),
+        )
+        val result = searchRecognizedText(
+            spec,
+            OcrUiState(OcrStatus.TextRecognized, snapshot = snapshot),
+        )
+        assertEquals(
+            listOf(
+                TextOccurrence(0, 2, 5, listOf(0), "t0"),
+                TextOccurrence(0, 2, 8, listOf(0), "t1"),
+                TextOccurrence(3, 0, 8, listOf(0), "t2"),
+            ),
+            result.occurrences,
+        )
+        assertEquals(3, result.occurrences.size)
+    }
+
     @Test fun onlyCurrentScanningAndRecognizedSnapshotsAreEligible() {
         val snapshot = snapshot(listOf("foo"))
         OcrStatus.entries.forEach { status ->

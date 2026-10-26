@@ -48,6 +48,11 @@ class SearchPresentationOwnerTest {
     }
 
     private fun present(query: String, state: OcrUiState, now: Long) = owner.present(query, state, now)
+    private fun present(
+        spec: ActiveSearchSpec,
+        state: OcrUiState,
+        now: Long,
+    ) = owner.present(spec, state, now)
     private fun byLeft(presentation: SearchPresentation, left: Float) =
         presentation.occurrences.first { it.boundsLeft() == left }
     private fun PresentedOccurrence.boundsLeft() = outlines.flatMap { it.points }.minOf { it.x }
@@ -165,6 +170,51 @@ class SearchPresentationOwnerTest {
         assertEquals(1, next.occurrences.size)
         assertSame(current.snapshot, next.occurrences.single().snapshot)
         assertEquals(10f, next.outlinedElements.single().outline.points.minOf { it.x })
+    }
+
+    @Test
+    fun anotherTermCannotSuppressRetentionAndChangingListIdentityClearsIt() {
+        val spec = ActiveSearchSpec(
+            "list-one",
+            "Parts",
+            listOf(SearchTerm("one:0", "alpha"), SearchTerm("one:1", "beta")),
+        )
+        present(spec, state(listOf(Box("alpha", 10)), 1, 0), 0)
+        val betaOnly = state(listOf(Box("beta", 10)), 2, 100)
+        val retained = present(spec, betaOnly, 100)
+        assertEquals(1, retained.search.occurrences.size)
+        assertEquals(setOf("one:0", "one:1"), retained.occurrences.map { it.termId }.toSet())
+        assertEquals(2, retained.occurrences.size)
+
+        val otherList = spec.copy(
+            identity = "list-two",
+            terms = listOf(SearchTerm("two:0", "alpha"), SearchTerm("two:1", "beta")),
+        )
+        val switched = present(otherList, betaOnly, 110)
+        assertEquals(1, switched.occurrences.size)
+        assertEquals("two:1", switched.occurrences.single().termId)
+    }
+
+    @Test
+    fun liveSessionIdentityChangeSuppressesPreviouslyComposedHighlights() {
+        val session = inMemorySearchSessionController()
+        session.setManualQuery("alpha")
+        val composedSearch = session.state.value.activeSearch
+        val matchingState = state(listOf(Box("alpha", 10)), 1, 0)
+        val presentation = SearchPresentationOwner().present(composedSearch, matchingState, 0)
+        session.setManualQuery("beta")
+
+        val drawable = drawableElementsForSession(
+            session,
+            composedSearch,
+            presentation,
+            matchingState,
+            1,
+            400f,
+            200f,
+        )
+
+        assertTrue(drawable.isEmpty())
     }
 
     @Test fun segmentationChangeContainingOldPhraseUsesSmallerAreaOverlapAndNoGhost() {

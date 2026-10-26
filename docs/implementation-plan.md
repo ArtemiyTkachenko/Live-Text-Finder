@@ -36,3 +36,7 @@ User feedback reopened alignment after CS-002's external gate: stationary highli
 User feedback clarified individual box dropouts, delayed highlighting and IME reachability. Completed bounded per-occurrence grace, stable Column/weighted preview and commit hygiene; independent review/correction verification passed with device limitations. Final host suite: 62 tests, zero failures; Android/iOS compilation and lint passed. See current [requirements](search-requirements.md) and [validation](validation.md). User rebuilt-device retest remains the next gate; no feature continuation or APK task is authorized.
 
 User follow-up: device-tested section accepted for commit/push. Current keyboard/compact behavior hides camera/secondary views; preview shrinking is deferred. No exhaustive device benchmark is inferred.
+
+## Last query and named lists — 2026-10-26
+
+The user approved Android query retention and named multi-term lists together, then authorized repeated reviewed stages and commits with device checks deferred. This supersedes the earlier per-stage stop instructions for this run. The bounded implementation adds safe asynchronous app-private persistence, list create/edit/select/delete and simultaneous independent matching while preserving the manual query and existing camera/keyboard policy. Independent review and correction verification are required before commit; source/host checks do not establish device relaunch or live OCR behavior. Freeze/resume and image import/export remain outside this increment.
