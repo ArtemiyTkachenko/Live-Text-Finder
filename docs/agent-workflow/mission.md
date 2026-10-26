@@ -2,17 +2,19 @@
 
 ## Current handoff
 
+Saved query and multi-term lists are committed as `5bc726c` with independent PASS WITH LIMITATIONS and 86 passing host tests. HTTPS credentials blocked the push; continue local commits per user instruction. The completed next increment is Android freeze/resume under the autonomous continuation authorization: retain one analyzed frame with its own OCR snapshot, allow searching it, then resume live scanning. Images remain memory-only; device checks stay deferred.
+
 The user authorized remembering the last manual query and named reusable search lists together, and clarified that all terms/phrases in a selected list are searched simultaneously. Android data stays app-private; no recognized OCR text or images are persisted. Manual query and active list selection restore across launches. The completed bounded implementation includes list create/edit/select/delete, safe asynchronous persistence, independent multi-term matching and existing geometry/retention safeguards. Independent review passed with device limitations; all 86 host tests and required compilation/lint checks passed. See the current user request and local state for execution ownership.
 
 The prior core live-search section was accepted by the user and published to main. Their chosen keyboard/compact behavior hides camera and secondary views; preview shrinking is deferred. Preserve that behavior. Historical stage evidence and machine-specific state remain local/Git-ignored; version only durable requirements, implementation and meaningful tests. Do not generate another per-run report collection.
 
 The user now authorizes autonomous reviewed stages and commits, with main pushes when possible and local commits/continued work if push authentication fails. Device testing is deferred until the next usage limit; retain pending checks without blocking source development. Complete independent review/correction verification and relevant checks for each stage. No APK generation, background scheduler or worker delegation is authorized. Native role discovery/routing remains unverified; explicit configured-model dispatch is the disclosed workaround.
 
-## Approved current product milestone
+## Completed saved-search milestone
 
 **Restore last query and manage named multi-term search lists** was approved on 2026-10-26. This extends the accepted core live-search section. Entries are independent literal terms/phrases, with spaces inside an entry treated as a phrase; matching remains per OCR line. Preserve latest recognition counts, distinct-element outline deduplication, query/search identity invalidation and per-occurrence short retention.
 
-Excluded: freeze/resume, import/export, list colors/categories/sorting, backend/cloud/accounts, OCR-result or image persistence, monetization, publishing, iOS camera and durable iOS storage, and revisiting preview shrinking. iOS retains its unsupported-camera placeholder and explicit in-memory saved-search boundary.
+Excluded from the saved-list increment: freeze/resume, import/export, list colors/categories/sorting, backend/cloud/accounts, OCR-result or image persistence, monetization, publishing, iOS camera and durable iOS storage, and revisiting preview shrinking. iOS retains its unsupported-camera placeholder and explicit in-memory saved-search boundary.
 
 ## Direction and foundation history
 

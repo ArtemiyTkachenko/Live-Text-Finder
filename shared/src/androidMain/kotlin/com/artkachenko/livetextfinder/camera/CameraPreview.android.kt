@@ -45,14 +45,19 @@ import com.artkachenko.livetextfinder.ocr.OcrStatus
 import com.artkachenko.livetextfinder.ocr.OcrUiState
 
 @Composable
-internal actual fun CameraPreview(modifier: Modifier, onState: (OcrUiState) -> Unit) {
+internal actual fun CameraPreview(
+    modifier: Modifier,
+    owner: FrozenFrameOwner,
+    isContentVisible: () -> Boolean,
+    onState: (OcrUiState) -> Unit,
+) {
     val context = LocalContext.current
-    val owner = LocalLifecycleOwner.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val report by rememberUpdatedState(onState)
     var granted by remember { mutableStateOf(context.hasCameraPermission()) }
     var requested by rememberSaveable { mutableStateOf(false) }
-    var foreground by remember(owner) {
-        mutableStateOf(owner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))
+    var foreground by remember(lifecycleOwner) {
+        mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))
     }
     var permissionRevision by remember { mutableStateOf(0) }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
@@ -60,16 +65,16 @@ internal actual fun CameraPreview(modifier: Modifier, onState: (OcrUiState) -> U
         requested = true
         permissionRevision++
     }
-    DisposableEffect(owner, context) {
+    DisposableEffect(lifecycleOwner, context) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 granted = context.hasCameraPermission()
                 permissionRevision++
             }
-            foreground = owner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+            foreground = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
         }
-        owner.lifecycle.addObserver(observer)
-        onDispose { owner.lifecycle.removeObserver(observer) }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
     val activity = context.findActivity()
     val settingsRequired = remember(granted, requested, activity, permissionRevision) {
@@ -92,6 +97,10 @@ internal actual fun CameraPreview(modifier: Modifier, onState: (OcrUiState) -> U
         )
     }
     when {
+        owner.state.value.mode == FreezeMode.Frozen -> {
+            FrozenBitmapPreview(owner, modifier, isContentVisible)
+        }
+
         !granted -> Box(modifier, contentAlignment = Alignment.Center) {
             Column(
                 Modifier.verticalScroll(rememberScrollState()).padding(24.dp),
@@ -114,34 +123,48 @@ internal actual fun CameraPreview(modifier: Modifier, onState: (OcrUiState) -> U
             }
         }
 
-        foreground -> AndroidCameraFeed(modifier, onState)
+        foreground -> AndroidCameraFeed(modifier, owner, onState)
         else -> Box(modifier)
     }
 }
 
 @Composable
-private fun AndroidCameraFeed(modifier: Modifier, onState: (OcrUiState) -> Unit) {
+private fun AndroidCameraFeed(
+    modifier: Modifier,
+    frameOwner: FrozenFrameOwner,
+    onState: (OcrUiState) -> Unit,
+) {
     val context = LocalContext.current
-    val owner = LocalLifecycleOwner.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val report by rememberUpdatedState(onState)
     var attempt by remember { mutableIntStateOf(0) }
     // A retried/replaced session gets a fresh native transform and stream state.
-    val preview = remember(context, owner, attempt) {
+    val preview = remember(context, lifecycleOwner, attempt) {
         PreviewView(context).apply {
             implementationMode = PreviewView.ImplementationMode.COMPATIBLE
             scaleType = PreviewView.ScaleType.FILL_CENTER
         }
     }
     var failed by remember { mutableStateOf(false) }
-    DisposableEffect(preview, owner, attempt) {
+    DisposableEffect(preview, lifecycleOwner, attempt) {
         failed = false
         report(OcrUiState(OcrStatus.Starting, "Starting rear camera and bundled text recognizer…"))
-        val session = AndroidCameraSession(context, owner, preview) { state ->
+        val session = AndroidCameraSession(
+            context = context,
+            owner = lifecycleOwner,
+            view = preview,
+            onCaptured = frameOwner::accept,
+            onCaptureFailure = frameOwner::fail,
+        ) { state ->
             failed = state.status == OcrStatus.Error || state.status == OcrStatus.Unavailable
             report(state)
         }
+        frameOwner.attachSession(session::requestCapture, session::cancelCapture)
         session.start()
-        onDispose { session.close() }
+        onDispose {
+            frameOwner.detachSession()
+            session.close()
+        }
     }
     Box(modifier) {
         key(preview) {

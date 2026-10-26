@@ -6,18 +6,21 @@ internal class AnalysisLifetime(private val release: () -> Unit) {
     private var closed = false
     private var released = false
 
+    @Synchronized
     fun tryBegin(): Boolean {
         if (closed || busy) return false
         busy = true
         return true
     }
 
+    @Synchronized
     fun finish() {
         check(busy)
         busy = false
         releaseIfIdle()
     }
 
+    @Synchronized
     fun close() {
         closed = true
         releaseIfIdle()

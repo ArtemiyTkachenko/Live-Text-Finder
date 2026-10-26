@@ -6,10 +6,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
@@ -40,6 +42,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.artkachenko.livetextfinder.camera.CameraPreview
+import com.artkachenko.livetextfinder.camera.FreezeMode
+import com.artkachenko.livetextfinder.camera.rememberFrozenFrameOwner
 import com.artkachenko.livetextfinder.ocr.OcrStatus
 import com.artkachenko.livetextfinder.ocr.OcrUiState
 import com.artkachenko.livetextfinder.search.SearchListEditorState
@@ -47,9 +51,10 @@ import com.artkachenko.livetextfinder.search.SearchPresentationOwner
 import com.artkachenko.livetextfinder.search.SearchSessionController
 import com.artkachenko.livetextfinder.search.drawableElementsForSession
 import com.artkachenko.livetextfinder.search.inMemorySearchSessionController
+import com.artkachenko.livetextfinder.search.projectFrozenHighlights
 import com.artkachenko.livetextfinder.search.projectHighlights
+import com.artkachenko.livetextfinder.search.searchRecognizedText
 import com.artkachenko.livetextfinder.utils.MonotonicClock
-import com.artkachenko.livetextfinder.utils.isKeyboardVisible
 import kotlinx.coroutines.delay
 
 /** Main live text search screen. */
@@ -61,34 +66,64 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
             val sessionState = session.state.value
             val query = sessionState.persisted.manualQuery
             val selectedList = sessionState.activeList
-            var managerOpen by remember { mutableStateOf(false) }
+            val managerOpenState = remember { mutableStateOf(false) }
+            var managerOpen by managerOpenState
             var editor by remember { mutableStateOf(SearchListEditorState()) }
             var deleteId by remember { mutableStateOf<String?>(null) }
             var resetConfirm by remember { mutableStateOf(false) }
             var previewSize by remember { mutableStateOf(IntSize.Zero) }
-            var rootSize by remember { mutableStateOf(IntSize.Zero) }
+            val rootSizeState = remember { mutableStateOf(IntSize.Zero) }
+            var rootSize by rootSizeState
             var graceTimerRevision by remember { mutableIntStateOf(0) }
+            val frozenOwner = rememberFrozenFrameOwner()
+            val freezeState = frozenOwner.state.value
+            val density = LocalDensity.current
+            val imeInsets = WindowInsets.ime
+            val isContentVisible = {
+                val currentRootSize = rootSizeState.value
+                val isCompact =
+                    (currentRootSize != IntSize.Zero &&
+                        currentRootSize.height / density.density < 500f) ||
+                        density.fontScale >= 1.3f
+                !managerOpenState.value && !isCompact && imeInsets.getBottom(density) == 0
+            }
             val presentationOwner = remember { SearchPresentationOwner() }
             val activeSearch = sessionState.activeSearch
             val presentation = remember(activeSearch, state, graceTimerRevision) {
                 presentationOwner.present(activeSearch, state, MonotonicClock.nowMillis())
             }
-            val search = presentation.search
+            val frozenFrame = freezeState.frame
+            val frozenSearch = remember(activeSearch, frozenFrame) {
+                frozenFrame?.let { frame ->
+                    searchRecognizedText(
+                        activeSearch,
+                        OcrUiState(OcrStatus.TextRecognized, snapshot = frame.snapshot),
+                    )
+                }
+            }
+            val search = frozenSearch ?: presentation.search
             LaunchedEffect(presentation.expiresAtMillis) {
                 val deadline = presentation.expiresAtMillis ?: return@LaunchedEffect
                 val wait = deadline - MonotonicClock.nowMillis()
                 if (wait > 0) delay(wait)
                 graceTimerRevision++
             }
-            val highlights = remember(search, state.projection, previewSize) {
-                projectHighlights(search, state.projection, previewSize.width, previewSize.height)
+            val highlights = remember(search, state.projection, previewSize, freezeState.mode) {
+                if (freezeState.mode == FreezeMode.Frozen) {
+                    projectFrozenHighlights(
+                        search,
+                        previewSize.width.toFloat(),
+                        previewSize.height.toFloat(),
+                    )
+                } else {
+                    projectHighlights(
+                        search,
+                        state.projection,
+                        previewSize.width,
+                        previewSize.height,
+                    )
+                }
             }
-            val density = LocalDensity.current
-            val compactLayout =
-                (rootSize != IntSize.Zero && rootSize.height / density.density < 500f) ||
-                density.fontScale >= 1.3f
-            val keyboardVisible = isKeyboardVisible()
-
             // This is the only IME inset owner. The weighted preview receives the remaining
             // height directly, so OCR status changes do not recalculate its available space.
             Column(
@@ -97,7 +132,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                     .imePadding()
                     .onSizeChanged { rootSize = it },
             ) {
-                val shouldShowViews = !compactLayout && !keyboardVisible && !managerOpen
+                val shouldShowViews = isContentVisible()
                 Column(
                     Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -134,6 +169,29 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                             Text("Manual search", modifier = Modifier.padding(top = 12.dp))
                         }
                     }
+                    when (freezeState.mode) {
+                        FreezeMode.Live -> TextButton(
+                            onClick = {
+                                frozenOwner.freeze(
+                                    cameraReady = state.status == OcrStatus.Scanning ||
+                                        state.status == OcrStatus.TextRecognized,
+                                )
+                            },
+                            enabled = state.status == OcrStatus.Scanning ||
+                                state.status == OcrStatus.TextRecognized,
+                        ) {
+                            Text("Freeze frame")
+                        }
+                        FreezeMode.Freezing -> TextButton(onClick = frozenOwner::cancel) {
+                            Text("Cancel freeze")
+                        }
+                        FreezeMode.Frozen -> TextButton(onClick = frozenOwner::resume) {
+                            Text("Resume live")
+                        }
+                    }
+                    if (freezeState.error != null) {
+                        Text(freezeState.error, color = MaterialTheme.colorScheme.error)
+                    }
                     if (sessionState.recoveryRequired) {
                         Text(
                             sessionState.error ?: "Saved search data needs recovery.",
@@ -157,6 +215,10 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                     if (shouldShowViews) {
                         Text(
                             when {
+                                freezeState.mode == FreezeMode.Frozen -> {
+                                    "Frozen matches: ${search.occurrences.size} · " +
+                                        "outlined elements: ${highlights.outlines.size}"
+                                }
                                 search.snapshot == null && state.status == OcrStatus.Scanning -> {
                                     "Waiting for fresh recognized text"
                                 }
@@ -279,20 +341,48 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                             .background(Color.Black)
                             .onSizeChanged { previewSize = it },
                     ) {
-                        CameraPreview(Modifier.fillMaxSize()) { state = it }
+                        CameraPreview(
+                            Modifier.fillMaxSize(),
+                            frozenOwner,
+                            isContentVisible,
+                        ) { state = it }
                         Canvas(Modifier.matchParentSize()) {
-                            val outlines = drawableElementsForSession(
-                                session,
-                                activeSearch,
-                                presentation,
-                                state,
-                                MonotonicClock.nowMillis(),
-                                size.width,
-                                size.height,
-                            )
+                            val currentFreezeState = frozenOwner.state.value
+                            val currentSearchIdentity = session.state.value.activeSearch.identity
+                            val outlines = if (!isContentVisible()) {
+                                emptyList()
+                            } else if (freezeState.mode == FreezeMode.Frozen) {
+                                if (currentFreezeState.mode == FreezeMode.Frozen &&
+                                    currentFreezeState.frame === frozenFrame &&
+                                    currentSearchIdentity == activeSearch.identity
+                                ) {
+                                    projectFrozenHighlights(
+                                        search,
+                                        size.width,
+                                        size.height,
+                                    ).outlines
+                                } else {
+                                    emptyList()
+                                }
+                            } else {
+                                if (currentFreezeState.mode == FreezeMode.Live ||
+                                    currentFreezeState.mode == FreezeMode.Freezing
+                                ) {
+                                    drawableElementsForSession(
+                                        session,
+                                        activeSearch,
+                                        presentation,
+                                        state,
+                                        MonotonicClock.nowMillis(),
+                                        size.width,
+                                        size.height,
+                                    ).map { it.outline }
+                                } else {
+                                    emptyList()
+                                }
+                            }
                             clipRect {
-                                outlines.forEach { presented ->
-                                    val outline = presented.outline
+                                outlines.forEach { outline ->
                                     val path = Path().apply {
                                         moveTo(outline.points.first().x, outline.points.first().y)
                                         outline.points.drop(1).forEach { lineTo(it.x, it.y) }

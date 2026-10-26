@@ -40,3 +40,7 @@ User follow-up: device-tested section accepted for commit/push. Current keyboard
 ## Last query and named lists — 2026-10-26
 
 The user approved Android query retention and named multi-term lists together, then authorized repeated reviewed stages and commits with device checks deferred. This supersedes the earlier per-stage stop instructions for this run. The bounded implementation adds safe asynchronous app-private persistence, list create/edit/select/delete and simultaneous independent matching while preserving the manual query and existing camera/keyboard policy. Independent review and correction verification are required before commit; source/host checks do not establish device relaunch or live OCR behavior. Freeze/resume and image import/export remain outside this increment.
+
+## Memory-only freeze/resume — 2026-10-26
+
+The coordinator selected this bounded next prototype increment under the user's autonomous continuation instruction. Capture ownership and common state/geometry checkpoints precede full frozen rendering/search integration; full source-first independent review and corrections precede commit. Device capture correspondence, orientation/colors, UI, latency and memory behavior remain deferred checks. Image import/export, iOS OCR, preview shrinking and APK generation remain outside this increment.

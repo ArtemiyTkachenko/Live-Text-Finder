@@ -1,5 +1,21 @@
 # Validation
 
+## Memory-only freeze/resume — 2026-10-26
+
+The Android freeze increment pairs one requested analysis proxy's copied pixels with that same proxy's OCR snapshot, keeps searching while frozen and explicitly resumes live scanning. Required checks use the existing compilation-only command below; no APK or device run was performed.
+
+```sh
+./gradlew :androidApp:compileDebugKotlin :shared:testAndroidHostTest :androidApp:lintDebug :shared:compileKotlinIosSimulatorArm64 --console=plain
+```
+
+The final compilation/test run exited 0 in 10s and passed Android/iOS shared compilation, **115 host tests with 0 failures/errors/skips**, and lint with **0 errors, 13 warnings**. It retains all 86 saved-search/core tests. Added tests exercise actual production analyzer ownership with controlled executors/recognizer tasks, failure/cancel/late-result paths, process-wide copy rejection, controller deadlines, retained-owner lifecycle boundaries, frozen query/list matching, deduplicated outlines and rotation/viewport geometry.
+
+A concrete JPEG ImageProxy executes the real CameraX `toBitmap()` path with asymmetric pixel landmarks and nontrivial rotation/crop metadata. Separate tests invoke the drawing helper used by the actual frozen composable through CanvasDrawScope and Robolectric native graphics: real asymmetric pixels across all four rotations, two viewport shapes, hidden/re-enabled rendering, wrong bitmap and resume invalidation. These establish host conversion/render behavior, not native camera YUV conversion or physical-device correctness. No shadowed converter is presented as native-YUV proof.
+
+Initial independent review found stale frozen viewport/visibility eligibility, missing production-render/failure coverage and introduced Kotlin brace violations. Corrections project outlines using the current draw viewport, read live visibility/mode/frame/search state, exercise the actual renderer and missing failures, and apply scoped style fixes. Final independent verification: **PASS WITH LIMITATIONS**, with no remaining actionable findings. No configured Kotlin formatter exists; changed-code manual review and a limited static audit are separate from Android lint. Historical untouched style is not certified. No compiler/style checks were suppressed.
+
+Pending user device checks: same-frame capture correspondence and colors, all orientations/aspects, frozen query/list editing with keyboard and manager, cancel/resume/background/recreation, real YUV conversion, capture latency and memory behavior. The user defers these checks until the next usage limit. Frozen images remain memory-only, with a 4,000,000-pixel bound and no image persistence/export. Raw execution logs and coordinator state remain local and untracked.
+
 ## Saved queries and multi-term lists — 2026-10-26
 
 Android and iOS shared compilation, Android lint and the host suite passed on the corrected saved-search implementation:

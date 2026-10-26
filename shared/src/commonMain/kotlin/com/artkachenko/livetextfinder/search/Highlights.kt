@@ -1,5 +1,6 @@
 package com.artkachenko.livetextfinder.search
 
+import com.artkachenko.livetextfinder.camera.FrozenFrameFit
 import com.artkachenko.livetextfinder.ocr.FrameInfo
 import com.artkachenko.livetextfinder.ocr.OcrSnapshot
 import com.artkachenko.livetextfinder.ocr.TextElement
@@ -16,6 +17,42 @@ internal data class FrameProjection(
 internal data class PreviewPoint(val x: Float, val y: Float)
 internal data class ElementOutline(val lineIndex: Int, val elementIndex: Int, val points: List<PreviewPoint>)
 internal data class Highlights(val ready: Boolean, val outlines: List<ElementOutline>)
+
+/** Projects frozen matches through the same centered Fit transform used by the Android renderer. */
+internal fun projectFrozenHighlights(
+    search: TextSearchResult,
+    viewportWidth: Float,
+    viewportHeight: Float,
+): Highlights {
+    val snapshot = search.snapshot ?: return Highlights(false, emptyList())
+    val frame = snapshot.frame
+    val fit = FrozenFrameFit(
+        frame.bufferWidth,
+        frame.bufferHeight,
+        frame.rotationDegrees,
+        viewportWidth,
+        viewportHeight,
+    )
+    if (!fit.isValid) return Highlights(false, emptyList())
+    val elements = search.occurrences.flatMap { occurrence ->
+        occurrence.elementIndices.map { occurrence.lineIndex to it }
+    }.distinct()
+    val outlines = elements.mapNotNull { (lineIndex, elementIndex) ->
+        val element = snapshot.lines.getOrNull(lineIndex)?.elements?.getOrNull(elementIndex)
+            ?: return@mapNotNull null
+        val points = elementPolygon(element)?.map { point ->
+            fit.mapUprightPoint(point) ?: return@mapNotNull null
+        } ?: return@mapNotNull null
+        if (!validPolygon(points) ||
+            !intersectsPreview(points, viewportWidth.toInt(), viewportHeight.toInt())
+        ) {
+            null
+        } else {
+            ElementOutline(lineIndex, elementIndex, points)
+        }
+    }
+    return Highlights(true, outlines)
+}
 
 /** Reuses the exact frame only; overlay and native preview share origin and physical pixel size. */
 internal fun projectHighlights(

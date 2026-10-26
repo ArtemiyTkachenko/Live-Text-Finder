@@ -17,6 +17,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.Observer
+import com.artkachenko.livetextfinder.ocr.CapturedCameraFrame
 import com.artkachenko.livetextfinder.ocr.LiveFrameTracker
 import com.artkachenko.livetextfinder.ocr.MlKitTextAnalyzer
 import com.artkachenko.livetextfinder.ocr.OcrStatus
@@ -28,6 +29,8 @@ internal class AndroidCameraSession(
     private val context: Context,
     private val owner: LifecycleOwner,
     private val view: PreviewView,
+    private val onCaptured: (CapturedCameraFrame) -> Boolean = { false },
+    private val onCaptureFailure: (Long, String) -> Unit = { _, _ -> },
     private val onState: (OcrUiState) -> Unit,
 ) : AutoCloseable {
     private val executor = ContextCompat.getMainExecutor(context)
@@ -72,10 +75,20 @@ internal class AndroidCameraSession(
             view.viewTreeObserver.addOnPreDrawListener(preDrawListener)
             view.previewStreamState.observe(owner, streamObserver)
             owner.lifecycle.addObserver(lifecycleObserver)
-            analyzer = MlKitTextAnalyzer(executor, {
-                refreshMapping()
-                frames.ticket()
-            }) { state, identity ->
+            analyzer = MlKitTextAnalyzer(
+                executor = executor,
+                captureIdentity = {
+                    refreshMapping()
+                    frames.ticket()
+                },
+                captureExecutor = CaptureCopyWorker,
+                onCaptured = { captured ->
+                    !closed && frames.ticket() == captured.identity && onCaptured(captured)
+                },
+                onCaptureFailure = { requestId, message ->
+                    if (!closed) onCaptureFailure(requestId, message)
+                },
+            ) { state, identity ->
                 if (!closed) {
                     refreshMapping()
                     if (frames.receive(identity, state)) {
@@ -111,6 +124,21 @@ internal class AndroidCameraSession(
         } catch (error: Exception) {
             fail(OcrUiState(OcrStatus.Error, "Could not initialize camera recognition. Retry the camera."))
         }
+    }
+
+    fun requestCapture(requestId: Long): Boolean {
+        if (closed) return false
+        refreshMapping()
+        if (frames.state.status != OcrStatus.Scanning &&
+            frames.state.status != OcrStatus.TextRecognized
+        ) {
+            return false
+        }
+        return analyzer?.requestCapture(requestId) == true
+    }
+
+    fun cancelCapture(requestId: Long) {
+        analyzer?.cancelCapture(requestId)
     }
 
     private fun fail(state: OcrUiState) {

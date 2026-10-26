@@ -6,6 +6,8 @@ The shared screen shows a rear camera preview, a manual query field with Android
 
 Android saves only the manual query, named lists and active selection in app-private storage. Each list entry is an independent literal term or phrase. Open **Search lists** to create, edit, select or delete a list; typing returns to the preserved manual search. Saving and recovery feedback reflects storage completion. iOS keeps these preferences in memory. OCR text and camera images are never saved.
 
+Freeze captures one next analyzed image with that same frame’s OCR result. The full captured buffer is fitted upright, so its framing can differ from the live preview. Queries and lists remain editable against the frozen image; **Resume live** returns to scanning. Frozen pixels stay in memory while editing and are discarded on resume, backgrounding or Activity recreation. They are never written to disk. Device capture/color/alignment checks remain pending.
+
 ## Structure
 
 - `androidApp`: Activity and Android manifest.

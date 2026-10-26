@@ -20,6 +20,12 @@ Common code owns immutable saved-list/session values, validation, asynchronous s
 
 Only manual query, list IDs/names/entries and active selection are persisted. Shared validation applies on Android reads and writes, with strict JSON primitive/version checks. OCR results/images remain transient. Multi-term matching counts independent entries separately, deduplicates shared element outlines and scopes retention association to term identity. Draw-time eligibility reads the live session identity to reject outlines composed before a search change.
 
+## Memory-only freeze
+
+An app-scope Android owner retains a copied bitmap and immutable source snapshot independently of the visible camera renderer. A request captures the next accepted analysis proxy's metadata/ticket, copies its full raw pixels off the main thread, then hands that same proxy to ML Kit. Only its OCR callback may publish the pair. A process-wide single-flight worker rejects concurrent copies rather than queuing stale work. Conversion is bounded to 4,000,000 pixels; ordinary live frames never copy bitmaps. Candidate cancellation releases copied pixels while ML Kit retains responsibility for its original proxy; recognizer release remains deferred until analysis finishes. Lifetime synchronization covers cleanup if UI handoff fails.
+
+Common state coordinates request identity, cancellation and the five-second deadline. Android keeps all bitmap/proxy types native and owns lifecycle cleanup. Frozen acceptance closes live camera composition; hiding its frozen renderer for keyboard/list editing retains the pair. Resume, lifecycle stop and owner disposal discard it. Frozen matching uses its exact snapshot without live receipt expiry or dropout retention. Shared full-buffer upright Fit geometry and native raw-buffer rendering use the captured rotation once; the frozen path does not reuse PreviewView mapping. Draw-time guards reject changed owner/frame/search state. No image/content persistence or export is implemented.
+
 ## Primary references
 
 - https://kotlinlang.org/docs/multiplatform/multiplatform-project-recommended-structure.html
