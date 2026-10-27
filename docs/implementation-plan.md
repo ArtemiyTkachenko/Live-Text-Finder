@@ -44,3 +44,7 @@ The user approved Android query retention and named multi-term lists together, t
 ## Memory-only freeze/resume — 2026-10-26
 
 The coordinator selected this bounded next prototype increment under the user's autonomous continuation instruction. Capture ownership and common state/geometry checkpoints precede full frozen rendering/search integration; full source-first independent review and corrections precede commit. Device capture correspondence, orientation/colors, UI, latency and memory behavior remain deferred checks. Image import/export, iOS OCR, preview shrinking and APK generation remain outside this increment.
+
+## Android single-image import — 2026-10-27
+
+The next bounded increment adds a system image picker, bounded JPEG/PNG/WebP decoding with EXIF orientation, recognition of the exact normalized image and searchable memory-only presentation. It preserves camera provenance and suspends camera work during import. Independent source review, corrections and compilation/host checks precede commit. Picker/provider behavior, native OCR, orientation and lifecycle UI acceptance remain pending user device checks. Export/sharing, persistent images/URIs, iOS import/OCR, preview shrinking and APK generation are excluded.

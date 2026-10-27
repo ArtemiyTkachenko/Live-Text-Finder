@@ -12,14 +12,15 @@ Checked 2026-10-25 against official documentation and publisher Maven artifacts.
 | Build JDK | 21 | Existing daemon criteria; JVM bytecode remains 11. |
 | Android compile / target SDK | 37 / 37 | Retain installed stable template SDK. |
 | Android minimum SDK | 24 | Retain template; meets ML Kit API 23 minimum. |
-| Activity Compose | 1.13.0 | Existing template version; Android-only permission launcher. |
+| Activity Compose | 1.13.0 | Existing template version; Android permission and system image-picker launchers. |
 | JetBrains Lifecycle Runtime Compose | 2.11.0 | Existing template version; Android source set consumes lifecycle owner. |
 | CameraX camera2, lifecycle, view, mlkit-vision | 1.6.2 | Explicit requested stable release, one version for all artifacts. Core arrives transitively. |
 | ML Kit bundled Latin OCR | 16.0.1 | `com.google.mlkit:text-recognition`; model ships in the APK. No Play Services model download required. |
+| ExifInterface | 1.4.2 | Explicit Android compile access for image-import orientation; this same artifact/version already arrived at runtime through CameraX. |
 | AndroidX Core | 1.19.1 | Android-only direct dependency for ContextCompat and ActivityCompat; no unused core-ktx dependency. |
 | Kotlin test / JUnit | 2.4.20 / 4.13.2 (transitive JUnit) | kotlin-test-junit supplies host assertions and JUnit runner integration; tests cover request lifetime and rotation metadata. |
 
-No dependency injection, navigation, storage or backend dependencies were added. Camera coordination uses the main executor, while ML Kit runs recognition asynchronously on its own workers. There is no app-owned executor to leak or shut down prematurely.
+No dependency injection, navigation, storage or backend dependencies were added. Camera coordination uses the main executor, while ML Kit runs recognition asynchronously on its own workers. The foundation used no application-owned executor. Current saved-search I/O and still-image capture/import use narrowly owned, bounded workers; see the architecture for their lifetime rules.
 
 ## Sources
 
@@ -43,3 +44,7 @@ Compose UI tooling is declared only as `debugImplementation` in the Android host
 `org.robolectric:robolectric:4.17` is declared only in `androidHostTest` via the version catalog. [Official setup](https://robolectric.org/getting-started/) checked 2026-10-25 lists this stable release; it supports the existing JDK/SDK without an app toolchain upgrade. Tests use API35 to execute the pinned ML Kit bounds helper, public result constructors, Android geometry operations and the real production admission path. Plain host Android stubs cannot execute these operations; a fake-only geometry test would repeat the missing boundary. Robolectric is a test runner/environment, not native OCR/device validation.
 
 Fresh `:androidApp:dependencies --configuration releaseRuntimeClasspath` succeeds and includes the same bundled ML Kit versions but no Robolectric artifact. No production/runtime dependency was added or upgraded. Full graph: CS-003 release-dependencies.log (local evidence: `agent-workflow/stages/CS-003/release-dependencies.log`). Existing CameraX1.6.2/bundled Latin16.0.1 remain unchanged.
+
+## Image import orientation — 2026-10-27
+
+Explicitly declare the existing `androidx.exifinterface:exifinterface:1.4.2` runtime artifact for uniform image orientation handling on the supported minimum SDK. The pre-change debug dependency-insight report already resolved 1.4.2, and the updated release runtime graph resolves the same version. This promotes an existing runtime dependency to direct compile access without adding or upgrading a runtime library. No media-storage permission, picker dependency or cloud service is added.

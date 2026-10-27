@@ -1,7 +1,16 @@
 package com.artkachenko.livetextfinder.search
 
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.unit.dp
 import com.artkachenko.livetextfinder.camera.FrozenFrameFit
+import com.artkachenko.livetextfinder.camera.ImportedImagePhase
+import com.artkachenko.livetextfinder.camera.ImportedImageState
 import com.artkachenko.livetextfinder.ocr.FrameInfo
+import com.artkachenko.livetextfinder.ocr.ImportedTextSnapshot
 import com.artkachenko.livetextfinder.ocr.OcrSnapshot
 import com.artkachenko.livetextfinder.ocr.TextElement
 import kotlin.math.abs
@@ -17,6 +26,22 @@ internal data class FrameProjection(
 internal data class PreviewPoint(val x: Float, val y: Float)
 internal data class ElementOutline(val lineIndex: Int, val elementIndex: Int, val points: List<PreviewPoint>)
 internal data class Highlights(val ready: Boolean, val outlines: List<ElementOutline>)
+
+/** Draws the same paired outline used for live, frozen, and imported matches. */
+internal fun DrawScope.drawHighlightOutlines(outlines: List<ElementOutline>) {
+    clipRect {
+        outlines.forEach { outline ->
+            val first = outline.points.firstOrNull() ?: return@forEach
+            val path = Path().apply {
+                moveTo(first.x, first.y)
+                outline.points.drop(1).forEach { lineTo(it.x, it.y) }
+                close()
+            }
+            drawPath(path, Color.Black, style = Stroke(6.dp.toPx()))
+            drawPath(path, Color.Yellow, style = Stroke(3.dp.toPx()))
+        }
+    }
+}
 
 /** Projects frozen matches through the same centered Fit transform used by the Android renderer. */
 internal fun projectFrozenHighlights(
@@ -52,6 +77,68 @@ internal fun projectFrozenHighlights(
         }
     }
     return Highlights(true, outlines)
+}
+
+/** Fits imported OCR geometry over its normalized still bitmap using the same Fit transform. */
+internal fun projectImportedHighlights(
+    search: TextSearchResult,
+    snapshot: ImportedTextSnapshot,
+    viewportWidth: Float,
+    viewportHeight: Float,
+): Highlights {
+    if (search.content !== snapshot || snapshot.width <= 0 || snapshot.height <= 0) {
+        return Highlights(false, emptyList())
+    }
+    val fit = FrozenFrameFit(
+        snapshot.width,
+        snapshot.height,
+        0,
+        viewportWidth,
+        viewportHeight,
+    )
+    if (!fit.isValid) {
+        return Highlights(false, emptyList())
+    }
+    val elements = search.occurrences.flatMap { occurrence ->
+        occurrence.elementIndices.map { occurrence.lineIndex to it }
+    }.distinct()
+    val outlines = elements.mapNotNull { (lineIndex, elementIndex) ->
+        val element = snapshot.lines.getOrNull(lineIndex)?.elements?.getOrNull(elementIndex)
+            ?: return@mapNotNull null
+        val points = elementPolygon(element)?.map { point ->
+            fit.mapUprightPoint(point) ?: return@mapNotNull null
+        } ?: return@mapNotNull null
+        if (!validPolygon(points) ||
+            !intersectsPreview(points, viewportWidth.toInt(), viewportHeight.toInt())
+        ) {
+            null
+        } else {
+            ElementOutline(lineIndex, elementIndex, points)
+        }
+    }
+    return Highlights(true, outlines)
+}
+
+/** Rechecks import and search identities before exposing outlines at draw time. */
+internal fun importedHighlightsForDraw(
+    search: TextSearchResult,
+    displayedSnapshot: ImportedTextSnapshot?,
+    currentImportState: ImportedImageState,
+    displayedSearchIdentity: String,
+    currentSearchIdentity: String,
+    viewportWidth: Float,
+    viewportHeight: Float,
+    contentVisible: Boolean,
+): Highlights {
+    if (!contentVisible || displayedSnapshot == null ||
+        currentImportState.phase != ImportedImagePhase.Imported ||
+        currentImportState.snapshot !== displayedSnapshot ||
+        displayedSearchIdentity != currentSearchIdentity ||
+        search.spec.identity != displayedSearchIdentity || search.content !== displayedSnapshot
+    ) {
+        return Highlights(false, emptyList())
+    }
+    return projectImportedHighlights(search, displayedSnapshot, viewportWidth, viewportHeight)
 }
 
 /** Reuses the exact frame only; overlay and native preview share origin and physical pixel size. */

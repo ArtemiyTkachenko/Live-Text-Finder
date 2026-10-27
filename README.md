@@ -8,6 +8,8 @@ Android saves only the manual query, named lists and active selection in app-pri
 
 Freeze captures one next analyzed image with that same frame’s OCR result. The full captured buffer is fitted upright, so its framing can differ from the live preview. Queries and lists remain editable against the frozen image; **Resume live** returns to scanning. Frozen pixels stay in memory while editing and are discarded on resume, backgrounding or Activity recreation. They are never written to disk. Device capture/color/alignment checks remain pending.
 
+Android also supports importing one JPEG, PNG or WebP image through the system picker, including without camera permission. Imported pixels are sampled to at most 4,000,000 pixels, normalized for EXIF orientation and recognized on-device. Queries and lists search the retained image until **Return to camera**; backgrounding or Activity recreation discards it. Imported images and their text are never persisted. Image-provider, picker and native OCR device checks remain pending.
+
 ## Structure
 
 - `androidApp`: Activity and Android manifest.

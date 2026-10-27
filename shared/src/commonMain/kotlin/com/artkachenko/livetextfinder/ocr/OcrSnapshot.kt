@@ -2,7 +2,7 @@ package com.artkachenko.livetextfinder.ocr
 
 import com.artkachenko.livetextfinder.search.FrameProjection
 
-/** Adapter-normalized full-buffer upright pixels after [FrameInfo.rotationDegrees]; SDK fields may differ. */
+/** Adapter-normalized upright pixel geometry from the SDK. */
 internal data class TextPoint(val x: Int, val y: Int)
 internal data class TextBounds(val left: Int, val top: Int, val right: Int, val bottom: Int)
 internal data class TextElement(
@@ -30,7 +30,26 @@ internal data class FrameInfo(
     val uprightHeight: Int get() = if (rotationDegrees % 180 == 0) bufferHeight else bufferWidth
 }
 
-internal data class OcrSnapshot(val text: String, val lines: List<TextLine>, val frame: FrameInfo)
+internal interface RecognizedTextContent {
+    val text: String
+    val lines: List<TextLine>
+}
+
+/** Camera recognition retains the real frame metadata used by live projection. */
+internal data class OcrSnapshot(
+    override val text: String,
+    override val lines: List<TextLine>,
+    val frame: FrameInfo,
+) : RecognizedTextContent
+
+/** Imported recognition geometry belongs to the normalized still image. */
+internal data class ImportedTextSnapshot(
+    override val text: String,
+    override val lines: List<TextLine>,
+    val width: Int,
+    val height: Int,
+    val sourceIdentity: Long,
+) : RecognizedTextContent
 
 internal enum class OcrStatus {
     PermissionRequired, Starting, Scanning, TextRecognized, Paused, Unavailable, Error,

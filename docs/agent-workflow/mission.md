@@ -2,6 +2,8 @@
 
 ## Current handoff
 
+Current bounded work: Android single-image import into the still-image search flow, selected under the user’s autonomous continuation instruction. Use the system picker and temporary access, bounded orientation-correct decode and exact-bitmap OCR; retain no image/URI history. Export remains outside this increment. The prior freeze increment is committed as `baa5302`, independently reviewed with limitations and 115 passing tests.
+
 Saved query and multi-term lists are committed as `5bc726c` with independent PASS WITH LIMITATIONS and 86 passing host tests. HTTPS credentials blocked the push; continue local commits per user instruction. The completed next increment is Android freeze/resume under the autonomous continuation authorization: retain one analyzed frame with its own OCR snapshot, allow searching it, then resume live scanning. Images remain memory-only; device checks stay deferred.
 
 The user authorized remembering the last manual query and named reusable search lists together, and clarified that all terms/phrases in a selected list are searched simultaneously. Android data stays app-private; no recognized OCR text or images are persisted. Manual query and active list selection restore across launches. The completed bounded implementation includes list create/edit/select/delete, safe asynchronous persistence, independent multi-term matching and existing geometry/retention safeguards. Independent review passed with device limitations; all 86 host tests and required compilation/lint checks passed. See the current user request and local state for execution ownership.

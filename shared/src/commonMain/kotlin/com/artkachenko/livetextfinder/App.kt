@@ -33,9 +33,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
@@ -43,16 +40,24 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.artkachenko.livetextfinder.camera.CameraPreview
 import com.artkachenko.livetextfinder.camera.FreezeMode
+import com.artkachenko.livetextfinder.camera.ImportedImagePhase
+import com.artkachenko.livetextfinder.camera.ImportedImagePicker
+import com.artkachenko.livetextfinder.camera.ImportedImagePreview
 import com.artkachenko.livetextfinder.camera.rememberFrozenFrameOwner
+import com.artkachenko.livetextfinder.camera.rememberImportedImageOwner
 import com.artkachenko.livetextfinder.ocr.OcrStatus
 import com.artkachenko.livetextfinder.ocr.OcrUiState
 import com.artkachenko.livetextfinder.search.SearchListEditorState
 import com.artkachenko.livetextfinder.search.SearchPresentationOwner
 import com.artkachenko.livetextfinder.search.SearchSessionController
+import com.artkachenko.livetextfinder.search.drawHighlightOutlines
 import com.artkachenko.livetextfinder.search.drawableElementsForSession
+import com.artkachenko.livetextfinder.search.importedHighlightsForDraw
 import com.artkachenko.livetextfinder.search.inMemorySearchSessionController
 import com.artkachenko.livetextfinder.search.projectFrozenHighlights
 import com.artkachenko.livetextfinder.search.projectHighlights
+import com.artkachenko.livetextfinder.search.projectImportedHighlights
+import com.artkachenko.livetextfinder.search.searchRecognizedContent
 import com.artkachenko.livetextfinder.search.searchRecognizedText
 import com.artkachenko.livetextfinder.utils.MonotonicClock
 import kotlinx.coroutines.delay
@@ -63,6 +68,9 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
     MaterialTheme {
         Surface(Modifier.fillMaxSize()) {
             var state by remember { mutableStateOf(OcrUiState()) }
+            val importedOwner = rememberImportedImageOwner()
+            ImportedImagePicker(importedOwner)
+            val importedState = importedOwner.state.value
             val sessionState = session.state.value
             val query = sessionState.persisted.manualQuery
             val selectedList = sessionState.activeList
@@ -101,15 +109,36 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                     )
                 }
             }
-            val search = frozenSearch ?: presentation.search
+            val cameraSearch = frozenSearch ?: presentation.search
+            val importedSearch = remember(activeSearch, importedState.snapshot) {
+                importedState.snapshot?.let { snapshot ->
+                    searchRecognizedContent(activeSearch, snapshot)
+                }
+            }
+            val search = importedSearch ?: cameraSearch
             LaunchedEffect(presentation.expiresAtMillis) {
                 val deadline = presentation.expiresAtMillis ?: return@LaunchedEffect
                 val wait = deadline - MonotonicClock.nowMillis()
                 if (wait > 0) delay(wait)
                 graceTimerRevision++
             }
-            val highlights = remember(search, state.projection, previewSize, freezeState.mode) {
-                if (freezeState.mode == FreezeMode.Frozen) {
+            val highlights = remember(
+                search,
+                importedState.snapshot,
+                state.projection,
+                previewSize,
+                freezeState.mode,
+            ) {
+                if (importedState.phase == ImportedImagePhase.Imported &&
+                    importedState.snapshot != null
+                ) {
+                    projectImportedHighlights(
+                        search,
+                        importedState.snapshot,
+                        previewSize.width.toFloat(),
+                        previewSize.height.toFloat(),
+                    )
+                } else if (freezeState.mode == FreezeMode.Frozen) {
                     projectFrozenHighlights(
                         search,
                         previewSize.width.toFloat(),
@@ -169,24 +198,55 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                             Text("Manual search", modifier = Modifier.padding(top = 12.dp))
                         }
                     }
-                    when (freezeState.mode) {
-                        FreezeMode.Live -> TextButton(
-                            onClick = {
-                                frozenOwner.freeze(
-                                    cameraReady = state.status == OcrStatus.Scanning ||
-                                        state.status == OcrStatus.TextRecognized,
-                                )
-                            },
-                            enabled = state.status == OcrStatus.Scanning ||
-                                state.status == OcrStatus.TextRecognized,
-                        ) {
-                            Text("Freeze frame")
+                    if (importedState.phase == ImportedImagePhase.Live ||
+                        importedState.phase == ImportedImagePhase.Error
+                    ) {
+                        when (freezeState.mode) {
+                            FreezeMode.Live -> TextButton(
+                                onClick = {
+                                    frozenOwner.freeze(
+                                        cameraReady = state.status == OcrStatus.Scanning ||
+                                            state.status == OcrStatus.TextRecognized,
+                                    )
+                                },
+                                enabled = state.status == OcrStatus.Scanning ||
+                                    state.status == OcrStatus.TextRecognized,
+                            ) {
+                                Text("Freeze frame")
+                            }
+                            FreezeMode.Freezing -> TextButton(onClick = frozenOwner::cancel) {
+                                Text("Cancel freeze")
+                            }
+                            FreezeMode.Frozen -> TextButton(onClick = frozenOwner::resume) {
+                                Text("Resume live")
+                            }
                         }
-                        FreezeMode.Freezing -> TextButton(onClick = frozenOwner::cancel) {
-                            Text("Cancel freeze")
+                    }
+                    when (importedState.phase) {
+                        ImportedImagePhase.Unsupported -> Unit
+                        ImportedImagePhase.Imported -> {
+                            TextButton(onClick = importedOwner::cancel) {
+                                Text("Return to camera")
+                            }
                         }
-                        FreezeMode.Frozen -> TextButton(onClick = frozenOwner::resume) {
-                            Text("Resume live")
+                        ImportedImagePhase.Picking,
+                        ImportedImagePhase.Reading,
+                        ImportedImagePhase.Recognizing -> {
+                            TextButton(onClick = importedOwner::cancel) {
+                                Text("Cancel import")
+                            }
+                        }
+                        ImportedImagePhase.Live,
+                        ImportedImagePhase.Error -> {
+                            TextButton(onClick = {
+                                if (freezeState.mode == FreezeMode.Freezing) {
+                                    frozenOwner.cancel()
+                                }
+                                frozenOwner.resume()
+                                importedOwner.beginPicker()
+                            }) {
+                                Text("Import image")
+                            }
                         }
                     }
                     if (freezeState.error != null) {
@@ -212,7 +272,32 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                     } else if (sessionState.saving) {
                         Text("Saving…")
                     }
-                    if (shouldShowViews) {
+                    if (importedState.phase == ImportedImagePhase.Imported) {
+                        Text(
+                            "Imported matches: ${search.occurrences.size} · " +
+                                "outlined elements: ${highlights.outlines.size}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.heightIn(min = 40.dp, max = 40.dp),
+                        )
+                    } else if (importedState.phase == ImportedImagePhase.Picking ||
+                        importedState.phase == ImportedImagePhase.Reading ||
+                        importedState.phase == ImportedImagePhase.Recognizing
+                    ) {
+                        Text(
+                            when (importedState.phase) {
+                                ImportedImagePhase.Picking -> "Choosing image…"
+                                ImportedImagePhase.Reading -> "Reading image…"
+                                else -> "Recognizing text…"
+                            },
+                        )
+                    } else if (importedState.phase == ImportedImagePhase.Error) {
+                        Text(
+                            importedState.message.orEmpty(),
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    } else if (shouldShowViews) {
                         Text(
                             when {
                                 freezeState.mode == FreezeMode.Frozen -> {
@@ -341,15 +426,46 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                             .background(Color.Black)
                             .onSizeChanged { previewSize = it },
                     ) {
-                        CameraPreview(
-                            Modifier.fillMaxSize(),
-                            frozenOwner,
-                            isContentVisible,
-                        ) { state = it }
+                        when (importedState.phase) {
+                            ImportedImagePhase.Imported -> ImportedImagePreview(
+                                importedOwner,
+                                Modifier.fillMaxSize(),
+                                isContentVisible,
+                            )
+                            ImportedImagePhase.Picking,
+                            ImportedImagePhase.Reading,
+                            ImportedImagePhase.Recognizing -> Unit
+                            else -> CameraPreview(
+                                Modifier.fillMaxSize(),
+                                frozenOwner,
+                                isContentVisible,
+                            ) { state = it }
+                        }
                         Canvas(Modifier.matchParentSize()) {
                             val currentFreezeState = frozenOwner.state.value
                             val currentSearchIdentity = session.state.value.activeSearch.identity
-                            val outlines = if (!isContentVisible()) {
+                            val currentImportState = importedOwner.state.value
+                            val outlines = if (
+                                importedState.phase == ImportedImagePhase.Imported ||
+                                currentImportState.phase == ImportedImagePhase.Imported
+                            ) {
+                                importedHighlightsForDraw(
+                                    search,
+                                    importedState.snapshot,
+                                    currentImportState,
+                                    activeSearch.identity,
+                                    currentSearchIdentity,
+                                    size.width,
+                                    size.height,
+                                    isContentVisible(),
+                                ).outlines
+                            } else if (!isContentVisible()) {
+                                emptyList()
+                            } else if (
+                                importedState.phase == ImportedImagePhase.Picking ||
+                                importedState.phase == ImportedImagePhase.Reading ||
+                                importedState.phase == ImportedImagePhase.Recognizing
+                            ) {
                                 emptyList()
                             } else if (freezeState.mode == FreezeMode.Frozen) {
                                 if (currentFreezeState.mode == FreezeMode.Frozen &&
@@ -381,17 +497,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                                     emptyList()
                                 }
                             }
-                            clipRect {
-                                outlines.forEach { outline ->
-                                    val path = Path().apply {
-                                        moveTo(outline.points.first().x, outline.points.first().y)
-                                        outline.points.drop(1).forEach { lineTo(it.x, it.y) }
-                                        close()
-                                    }
-                                    drawPath(path, Color.Black, style = Stroke(6.dp.toPx()))
-                                    drawPath(path, Color.Yellow, style = Stroke(3.dp.toPx()))
-                                }
-                            }
+                            drawHighlightOutlines(outlines)
                         }
                     }
                 }

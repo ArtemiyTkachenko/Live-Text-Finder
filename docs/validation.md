@@ -1,5 +1,15 @@
 # Validation
 
+## Android single-image import — 2026-10-27
+
+Import uses the system single-image picker, a bounded JPEG/PNG/WebP decoder with all EXIF orientations, bundled on-device OCR and a separate normalized imported snapshot. The imported bitmap remains memory-only and is searchable with manual queries or named lists. No APK or device run was performed.
+
+The final corrected implementation passed the required Android compilation, full host suite, Android lint and iOS simulator compilation in 12s: **133 tests, zero failures/errors/skips**, lint **zero errors and 13 warnings**. Decoder fixtures execute actual JPEG EXIF orientations 1–8, PNG/WebP decoding, unsupported/truncated/oversized rejection and conservative sampling. SDK boundary tests inspect the exact bitmap and rotation zero and copy real SDK result objects. Native host graphics exercise decoded/adopted pixels and production drawing across viewport aspects. These do not execute native OCR inference or prove device behavior.
+
+Initial independent review identified two required coverage gaps: pending SDK task ownership through the production processor, and actual App outline eligibility across query/list edits and hidden retention. Both were corrected and independently verified: **PASS WITH LIMITATIONS**, no remaining material findings. Production-processor tests now retain a real decoded bitmap and recognizer while a controllable SDK task is pending, verify cancellation/background rejection and cleanup, and prove gate reuse after success/failure. App and tests share the draw-time import eligibility helper; tests cover manual edits/clear, multi-term lists, deduplication, stale identities, viewport changes and hidden retention. Earlier failed test setup attempts are not passing evidence. No configured Kotlin formatter exists; scoped manual inspection and a limited static audit found no remaining introduced issues.
+
+Pending user device checks: permission-free import, system picker/provider variants and cancellation, EXIF/mirrored image alignment, native OCR quality/latency, memory use, keyboard/list editing, background/foreground and recreation. Imported content is discarded on ordinary backgrounding or recreation; only a pending picker ticket can survive the external picker stop. No image, recognized text or URI history is persisted. Raw logs and per-run reports remain local and untracked.
+
 ## Memory-only freeze/resume — 2026-10-26
 
 The Android freeze increment pairs one requested analysis proxy's copied pixels with that same proxy's OCR snapshot, keeps searching while frozen and explicitly resumes live scanning. Required checks use the existing compilation-only command below; no APK or device run was performed.

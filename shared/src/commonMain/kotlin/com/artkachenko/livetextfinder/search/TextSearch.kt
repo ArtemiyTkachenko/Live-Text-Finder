@@ -3,6 +3,7 @@ package com.artkachenko.livetextfinder.search
 import com.artkachenko.livetextfinder.ocr.OcrSnapshot
 import com.artkachenko.livetextfinder.ocr.OcrStatus
 import com.artkachenko.livetextfinder.ocr.OcrUiState
+import com.artkachenko.livetextfinder.ocr.RecognizedTextContent
 
 /** Offsets refer to the normalized line, not character boxes or preview coordinates. */
 internal data class TextOccurrence(
@@ -34,10 +35,12 @@ internal fun manualSearchSpec(query: String): ActiveSearchSpec = ActiveSearchSpe
 /** Original snapshot retains frame metadata and geometry for every referenced element. */
 internal data class TextSearchResult(
     val query: String,
-    val snapshot: OcrSnapshot?,
+    val content: RecognizedTextContent?,
     val occurrences: List<TextOccurrence>,
     val spec: ActiveSearchSpec = manualSearchSpec(query),
-)
+) {
+    val snapshot: OcrSnapshot? get() = content as? OcrSnapshot
+}
 
 /** Pure replacement result: inactive states deliberately discard any retained snapshot. */
 internal fun searchRecognizedText(query: String, state: OcrUiState): TextSearchResult {
@@ -45,18 +48,25 @@ internal fun searchRecognizedText(query: String, state: OcrUiState): TextSearchR
 }
 
 internal fun searchRecognizedText(spec: ActiveSearchSpec, state: OcrUiState): TextSearchResult {
-    val normalizedTerms = spec.terms
-        .map { term -> term.copy(text = normalizeWhitespace(term.text)) }
-        .filter { term -> term.text.isNotEmpty() }
     val snapshot = state.snapshot.takeIf {
         state.status == OcrStatus.TextRecognized || state.status == OcrStatus.Scanning
     }
+    return searchRecognizedContent(spec, snapshot)
+}
+
+internal fun searchRecognizedContent(
+    spec: ActiveSearchSpec,
+    content: RecognizedTextContent?,
+): TextSearchResult {
+    val normalizedTerms = spec.terms
+        .map { term -> term.copy(text = normalizeWhitespace(term.text)) }
+        .filter { term -> term.text.isNotEmpty() }
     val displayQuery = normalizedTerms.joinToString(" · ") { it.text }
-    if (snapshot == null || normalizedTerms.isEmpty()) {
-        return TextSearchResult(displayQuery, snapshot, emptyList(), spec)
+    if (content == null || normalizedTerms.isEmpty()) {
+        return TextSearchResult(displayQuery, content, emptyList(), spec)
     }
     val occurrences = buildList {
-        snapshot.lines.forEachIndexed { lineIndex, line ->
+        content.lines.forEachIndexed { lineIndex, line ->
             val content = StringBuilder()
             val spans = buildList {
                 line.elements.forEachIndexed { index, element ->
@@ -85,7 +95,7 @@ internal fun searchRecognizedText(spec: ActiveSearchSpec, state: OcrUiState): Te
             }
         }
     }
-    return TextSearchResult(displayQuery, snapshot, occurrences, spec)
+    return TextSearchResult(displayQuery, content, occurrences, spec)
 }
 
 private data class ElementSpan(val elementIndex: Int, val start: Int, val endExclusive: Int)

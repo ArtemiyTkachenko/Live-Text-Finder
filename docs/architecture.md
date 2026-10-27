@@ -26,6 +26,12 @@ An app-scope Android owner retains a copied bitmap and immutable source snapshot
 
 Common state coordinates request identity, cancellation and the five-second deadline. Android keeps all bitmap/proxy types native and owns lifecycle cleanup. Frozen acceptance closes live camera composition; hiding its frozen renderer for keyboard/list editing retains the pair. Resume, lifecycle stop and owner disposal discard it. Frozen matching uses its exact snapshot without live receipt expiry or dropout retention. Shared full-buffer upright Fit geometry and native raw-buffer rendering use the captured rotation once; the frozen path does not reuse PreviewView mapping. Draw-time guards reject changed owner/frame/search state. No image/content persistence or export is implemented.
 
+## Single-image import
+
+Android registers the system image picker independently of camera permission and preview visibility. A request ticket distinguishes the original picker callback from cancelled or replaced requests. Only an outstanding picker request may survive the external picker stop; a returned URI waits for the foreground lifecycle before processing. Processing and retained pixels are invalidated on ordinary backgrounding, disposal or recreation.
+
+One process-wide operation gate spans provider reading, bounded decoding and recognition completion. Cancellation invalidates publication immediately while blocked provider/native work drains before another operation starts. The decoder reads at most 16 MiB once, checks actual JPEG/PNG/WebP format and dimensions, samples conservatively before allocation and applies all EXIF orientations. OCR receives that same upright bitmap with rotation zero. Imported snapshots carry normalized dimensions and a source identity, without camera metadata or the camera corner correction. Shared literal matching and Fit projection retain separate camera and imported provenance. No URI grant, image or recognized text is persisted.
+
 ## Primary references
 
 - https://kotlinlang.org/docs/multiplatform/multiplatform-project-recommended-structure.html

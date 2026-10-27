@@ -54,6 +54,7 @@ kotlin {
             implementation(libs.camera.view)
             implementation(libs.camera.mlkit.vision)
             implementation(libs.mlkit.text.recognition)
+            implementation(libs.androidx.exifinterface)
         }
         commonMain.dependencies {
             implementation(libs.compose.runtime)
