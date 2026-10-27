@@ -2,6 +2,7 @@ package com.artkachenko.livetextfinder.camera
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
+import com.artkachenko.livetextfinder.search.HighlightColor
 import com.artkachenko.livetextfinder.search.TextSearchResult
 
 /** Visible state for an explicit still-image sharing request. */
@@ -27,7 +28,11 @@ internal expect class ImageShareOwner() {
 
     internal fun dispose()
 
-    internal fun updateCurrent(sourceIdentity: String?, searchIdentity: String)
+    internal fun updateCurrent(
+        sourceIdentity: String?,
+        searchIdentity: String,
+        highlightColor: HighlightColor = HighlightColor.Yellow
+    )
 }
 
 internal expect fun ImageShareOwner.shareFrozen(
@@ -35,6 +40,7 @@ internal expect fun ImageShareOwner.shareFrozen(
     search: TextSearchResult,
     currentSourceIdentity: () -> String?,
     currentSearchIdentity: () -> String,
+    currentHighlightColor: () -> HighlightColor = { HighlightColor.Yellow },
 )
 
 internal expect fun ImageShareOwner.shareImported(
@@ -42,4 +48,5 @@ internal expect fun ImageShareOwner.shareImported(
     search: TextSearchResult,
     currentSourceIdentity: () -> String?,
     currentSearchIdentity: () -> String,
+    currentHighlightColor: () -> HighlightColor = { HighlightColor.Yellow },
 )

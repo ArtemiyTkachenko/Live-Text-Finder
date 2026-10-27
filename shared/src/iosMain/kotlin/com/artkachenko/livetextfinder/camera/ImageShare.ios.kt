@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import com.artkachenko.livetextfinder.search.HighlightColor
 import com.artkachenko.livetextfinder.search.TextSearchResult
 
 @Composable
@@ -18,7 +19,11 @@ internal actual class ImageShareOwner actual constructor() {
 
     internal actual fun dispose() = Unit
 
-    internal actual fun updateCurrent(sourceIdentity: String?, searchIdentity: String) = Unit
+    internal actual fun updateCurrent(
+        sourceIdentity: String?,
+        searchIdentity: String,
+        highlightColor: HighlightColor,
+    ) = Unit
 
     internal fun unsupported() {
         mutableState.value = ImageShareState(
@@ -33,6 +38,7 @@ internal actual fun ImageShareOwner.shareFrozen(
     search: TextSearchResult,
     currentSourceIdentity: () -> String?,
     currentSearchIdentity: () -> String,
+    currentHighlightColor: () -> HighlightColor,
 ) = unsupported()
 
 internal actual fun ImageShareOwner.shareImported(
@@ -40,4 +46,5 @@ internal actual fun ImageShareOwner.shareImported(
     search: TextSearchResult,
     currentSourceIdentity: () -> String?,
     currentSearchIdentity: () -> String,
+    currentHighlightColor: () -> HighlightColor,
 ) = unsupported()

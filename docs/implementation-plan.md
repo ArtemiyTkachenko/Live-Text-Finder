@@ -52,3 +52,7 @@ The next bounded increment adds a system image picker, bounded JPEG/PNG/WebP dec
 ## Android annotated still sharing — 2026-10-27
 
 The coordinator selected explicit sharing of one frozen/imported image with current highlights as the next bounded increment. It adds background upright rendering and capped PNG encoding, a private temporary cache, narrow FileProvider read access and the Android Sharesheet. Current-source/search validation and cancellation prevent late chooser launches; handed-off files survive lifecycle cleanup. Independent source-first review and actual renderer/encoder/provider/ownership tests precede commit. No gallery save, permanent history, iOS share, backend, APK or real external share is included in development checks; user device acceptance remains deferred.
+
+## Global highlight appearance — 2026-10-27
+
+Add a four-colour global palette with Yellow default, a compact accessible selection dialog, backward-compatible Android preference storage and consistent preview/share rendering. Keep colour separate from matching identity and invalidate pending sharing on an appearance change. Actual storage migration, native draw/PNG pixels and owner cancellation tests plus fresh independent review precede commit; device UI/accessibility and live appearance checks remain deferred. No geometry/OCR, per-list style, new dependency, preview shrinking or APK generation.

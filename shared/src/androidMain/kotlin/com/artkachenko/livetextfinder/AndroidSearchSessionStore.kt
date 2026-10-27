@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.util.AtomicFile
+import com.artkachenko.livetextfinder.search.HighlightColor
 import com.artkachenko.livetextfinder.search.MAX_LISTS
 import com.artkachenko.livetextfinder.search.PersistedSearchState
 import com.artkachenko.livetextfinder.search.SavedSearchList
@@ -85,6 +86,7 @@ private class AndroidSearchSessionStore(context: Context) : SearchSessionStore {
 
     private fun encode(state: PersistedSearchState): String = JSONObject().apply {
         put("version", VERSION)
+        put("highlightColor", state.highlightColor.storageKey)
         put("manualQuery", state.manualQuery)
         put("activeListId", state.activeListId ?: JSONObject.NULL)
         put("lists", JSONArray().apply {
@@ -100,12 +102,12 @@ private class AndroidSearchSessionStore(context: Context) : SearchSessionStore {
 
     private fun decode(json: String): PersistedSearchState {
         val root = JSONObject(json)
-        require(root.length() == ROOT_FIELD_COUNT) {
-            "Unsupported saved search file fields."
-        }
         val version = root.get("version")
-        require(version is Int && version == VERSION) {
+        require(version is Int && version in MIN_VERSION..VERSION) {
             "Unsupported saved search file version."
+        }
+        require(root.length() == if (version == 1) V1_ROOT_FIELD_COUNT else ROOT_FIELD_COUNT) {
+            "Unsupported saved search file fields."
         }
         val manualQuery = root.get("manualQuery") as? String
             ?: error("Saved manual query has an invalid type.")
@@ -143,7 +145,15 @@ private class AndroidSearchSessionStore(context: Context) : SearchSessionStore {
                 add(SavedSearchList(id, name, terms))
             }
         }
-        val value = PersistedSearchState(manualQuery, lists, activeListId)
+        val highlightColor = if (version == 1) {
+            HighlightColor.Yellow
+        } else {
+            val key = root.get("highlightColor") as? String
+                ?: error("Saved highlight colour has an invalid type.")
+            HighlightColor.fromStorageKey(key)
+                ?: error("Saved highlight colour is unknown.")
+        }
+        val value = PersistedSearchState(manualQuery, lists, activeListId, highlightColor)
         val validationError = validatePersistedSearchState(value)
         require(validationError == null) {
             validationError ?: "Saved search data is invalid."
@@ -152,8 +162,10 @@ private class AndroidSearchSessionStore(context: Context) : SearchSessionStore {
     }
 
     private companion object {
-        const val VERSION = 1
-        const val ROOT_FIELD_COUNT = 4
+        const val VERSION = 2
+        const val MIN_VERSION = 1
+        const val V1_ROOT_FIELD_COUNT = 4
+        const val ROOT_FIELD_COUNT = 5
         const val LIST_FIELD_COUNT = 3
         const val MAX_FILE_BYTES = 256 * 1024
         const val BUFFER_SIZE = 8 * 1024

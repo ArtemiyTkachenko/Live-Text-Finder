@@ -18,6 +18,7 @@ data class PersistedSearchState(
     val manualQuery: String,
     val lists: List<SavedSearchList>,
     val activeListId: String?,
+    val highlightColor: HighlightColor = HighlightColor.Yellow,
 )
 
 /** The current load, search, and persistence state shown by the interface. */
@@ -251,6 +252,17 @@ class SearchSessionController(private val store: SearchSessionStore) {
         update(current.copy(lists = lists, activeListId = activeListId))
     }
 
+    /** Changes the global outline colour after the saved session is healthy. */
+    fun setHighlightColor(color: HighlightColor) {
+        val current = state.value
+        if (!current.loaded || current.recoveryRequired ||
+            current.persisted.highlightColor == color
+        ) {
+            return
+        }
+        update(current.persisted.copy(highlightColor = color))
+    }
+
     /** Retries the latest save, reloads after an ordinary read failure, or confirms reset. */
     fun retry() {
         val current = state.value
@@ -272,7 +284,12 @@ class SearchSessionController(private val store: SearchSessionStore) {
                         ""
                     }
                     state.value = SearchSessionState(
-                        persisted = PersistedSearchState(manualQuery, emptyList(), null),
+                        persisted = PersistedSearchState(
+                            manualQuery,
+                            emptyList(),
+                            null,
+                            HighlightColor.Yellow,
+                        ),
                         loaded = true,
                     )
                     queryValidationError = null

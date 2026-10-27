@@ -21,6 +21,7 @@ import com.artkachenko.livetextfinder.ocr.TextLine
 import com.artkachenko.livetextfinder.ocr.TextPoint
 import com.artkachenko.livetextfinder.search.ActiveSearchSpec
 import com.artkachenko.livetextfinder.search.FrameIdentity
+import com.artkachenko.livetextfinder.search.HighlightColor
 import com.artkachenko.livetextfinder.search.SearchSessionController
 import com.artkachenko.livetextfinder.search.SearchTerm
 import com.artkachenko.livetextfinder.search.inMemorySearchSessionController
@@ -30,6 +31,7 @@ import com.artkachenko.livetextfinder.search.projectImportedHighlights
 import com.artkachenko.livetextfinder.search.searchRecognizedContent
 import com.artkachenko.livetextfinder.search.searchRecognizedText
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.io.RandomAccessFile
 import java.nio.file.Files
 import java.util.concurrent.CountDownLatch
@@ -67,6 +69,255 @@ class ImageShareBoundaryTest {
             PackageManager.GET_META_DATA,
         )
         SharedImageProvider().attachInfo(context, provider)
+    }
+
+    @Test
+    fun everyPaletteColorSurvivesProductionRendererPngAndProviderDecode() {
+        HighlightColor.entries.forEach { highlightColor ->
+            val source = asymmetricBitmap(40, 24)
+            val originalSourcePixels = IntArray(source.width * source.height)
+            source.getPixels(
+                originalSourcePixels,
+                0,
+                source.width,
+                0,
+                0,
+                source.width,
+                source.height,
+            )
+            val snapshot = frozenSnapshot(40, 24, 0)
+            val frozenSearch = searchRecognizedText(
+                manualSearchSpec("target"),
+                OcrUiState(OcrStatus.TextRecognized, snapshot = snapshot),
+            )
+            val (importedFixtureBitmap, importedSnapshot, _) = importedFixture()
+            importedFixtureBitmap.recycle()
+            val importedSearch = searchRecognizedContent(
+                manualSearchSpec("target"),
+                importedSnapshot,
+            )
+            val renderedBitmaps = listOf(
+                AndroidImageShareRenderer.renderFrozen(
+                    source,
+                    0,
+                    projectFrozenHighlights(frozenSearch, 40f, 24f).outlines,
+                    highlightColor,
+                ),
+                AndroidImageShareRenderer.renderImported(
+                    source,
+                    projectImportedHighlights(importedSearch, importedSnapshot, 40f, 24f)
+                        .outlines,
+                    highlightColor,
+                ),
+            )
+            try {
+                renderedBitmaps.forEach { rendered ->
+                    val output = ShareCache.reserve(RuntimeEnvironment.getApplication().cacheDir)
+                    try {
+                        output.encode(rendered)
+                        val file = output.publish()
+                        val uri = FileProvider.getUriForFile(
+                            RuntimeEnvironment.getApplication(),
+                            "${RuntimeEnvironment.getApplication().packageName}.shared-images",
+                            file,
+                        )
+                        val decoded = RuntimeEnvironment.getApplication().contentResolver
+                            .openInputStream(uri)!!
+                            .use { stream -> BitmapFactory.decodeStream(stream) }
+                        assertEquals(highlightColor.argb.toInt(), decoded.getPixel(9, 6))
+                        assertEquals(Color.BLACK, decoded.getPixel(5, 10))
+                        assertEquals(Color.RED, decoded.getPixel(1, 1))
+                        val pixelsAfterPipeline = IntArray(source.width * source.height)
+                        source.getPixels(
+                            pixelsAfterPipeline,
+                            0,
+                            source.width,
+                            0,
+                            0,
+                            source.width,
+                            source.height,
+                        )
+                        assertContentEquals(originalSourcePixels, pixelsAfterPipeline)
+                        assertFalse(source.isRecycled)
+                        decoded.recycle()
+                    } finally {
+                        output.delete()
+                    }
+                }
+            } finally {
+                renderedBitmaps.forEach(Bitmap::recycle)
+                source.recycle()
+            }
+        }
+    }
+
+    @Test
+    fun capturedShareColorRendersOldColorButLiveCallbackSuppressesStaleChooser() {
+        val context = RuntimeEnvironment.getApplication()
+        val (source, snapshot, _) = importedFixture()
+        val imageOwner = adoptedOwner(source, snapshot)
+        val session = inMemorySearchSessionController()
+        session.setManualQuery("target")
+        val search = searchRecognizedContent(session.state.value.activeSearch, snapshot)
+        val sourceIdentity = importedIdentity(snapshot)
+        val shareOwner = startedShareOwner(context)
+        val heldWorker = AtomicReference<Runnable?>()
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val encodedColor = AtomicInteger()
+        val launches = AtomicInteger()
+        shareOwner.updateCurrent(sourceIdentity, search.spec.identity, HighlightColor.Yellow)
+        shareOwner.dispatchWorkerForTest = { worker -> heldWorker.set(worker) }
+        shareOwner.beforeHandoffForTest = {
+            val published = checkNotNull(BitmapFactory.decodeFile(shareFiles(context.cacheDir)
+                .single().path))
+            encodedColor.set(published.getPixel(9, 6))
+            published.recycle()
+            entered.countDown()
+            check(release.await(5, TimeUnit.SECONDS))
+        }
+        shareOwner.shareLauncherForTest = { launches.incrementAndGet() }
+        shareOwner.shareImported(
+            imageOwner,
+            search,
+            currentSourceIdentity = { sourceIdentity },
+            currentSearchIdentity = { session.state.value.activeSearch.identity },
+            currentHighlightColor = { session.state.value.persisted.highlightColor },
+        )
+        val worker = checkNotNull(heldWorker.get())
+
+        try {
+            ShareWorkGate.executor.execute(worker)
+            assertTrue(entered.await(5, TimeUnit.SECONDS))
+            assertEquals(HighlightColor.Yellow.argb.toInt(), encodedColor.get())
+            session.setHighlightColor(HighlightColor.Cyan)
+        } finally {
+            release.countDown()
+            waitForGate()
+            shadowOf(Looper.getMainLooper()).idle()
+        }
+        assertEquals(0, launches.get())
+        assertTrue(shareFiles(context.cacheDir).isEmpty())
+        assertFalse(source.isRecycled)
+        shareOwner.dispose()
+        imageOwner.dispose()
+        source.recycle()
+    }
+
+    @Test
+    fun colorChangeBeforeHeldProductionWorkerKeepsCapturedPngColorAndSuppressesChooser() {
+        val context = RuntimeEnvironment.getApplication()
+        val (source, snapshot, _) = importedFixture()
+        val imageOwner = adoptedOwner(source, snapshot)
+        val session = inMemorySearchSessionController()
+        session.setManualQuery("target")
+        val search = searchRecognizedContent(session.state.value.activeSearch, snapshot)
+        val sourceIdentity = importedIdentity(snapshot)
+        val shareOwner = startedShareOwner(context)
+        val heldWorker = AtomicReference<Runnable?>()
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val encodedColor = AtomicInteger()
+        val launches = AtomicInteger()
+        shareOwner.updateCurrent(sourceIdentity, search.spec.identity, HighlightColor.Yellow)
+        shareOwner.dispatchWorkerForTest = { worker -> heldWorker.set(worker) }
+        shareOwner.beforeHandoffForTest = {
+            val published = checkNotNull(BitmapFactory.decodeFile(shareFiles(context.cacheDir)
+                .single().path))
+            encodedColor.set(published.getPixel(9, 6))
+            published.recycle()
+            entered.countDown()
+            check(release.await(5, TimeUnit.SECONDS))
+        }
+        shareOwner.shareLauncherForTest = { launches.incrementAndGet() }
+        shareOwner.shareImported(
+            imageOwner,
+            search,
+            currentSourceIdentity = { sourceIdentity },
+            currentSearchIdentity = { session.state.value.activeSearch.identity },
+            currentHighlightColor = { session.state.value.persisted.highlightColor },
+        )
+        val worker = checkNotNull(heldWorker.get())
+        session.setHighlightColor(HighlightColor.Cyan)
+
+        try {
+            ShareWorkGate.executor.execute(worker)
+            assertTrue(entered.await(5, TimeUnit.SECONDS))
+            assertEquals(HighlightColor.Yellow.argb.toInt(), encodedColor.get())
+        } finally {
+            release.countDown()
+            waitForGate()
+            shadowOf(Looper.getMainLooper()).idle()
+        }
+        assertEquals(0, launches.get())
+        assertTrue(shareFiles(context.cacheDir).isEmpty())
+        assertFalse(source.isRecycled)
+        shareOwner.dispose()
+        imageOwner.dispose()
+        source.recycle()
+    }
+
+    @Test
+    fun frozenColorUpdateCancelsPendingShareAndRetryPublishesNewColor() {
+        val context = RuntimeEnvironment.getApplication()
+        val source = asymmetricBitmap(40, 24)
+        val snapshot = frozenSnapshot(40, 24, 0)
+        val identity = FrameIdentity(4, 2)
+        val frozenOwner = createFrozenOwner(source, snapshot, identity)
+        val session = inMemorySearchSessionController()
+        session.setManualQuery("target")
+        val search = searchRecognizedText(
+            session.state.value.activeSearch,
+            OcrUiState(OcrStatus.TextRecognized, snapshot = snapshot),
+        )
+        val sourceIdentity = "frozen:$identity"
+        val shareOwner = startedShareOwner(context)
+        val heldWorker = AtomicReference<Runnable?>()
+        var launchCount = 0
+        shareOwner.updateCurrent(sourceIdentity, search.spec.identity, HighlightColor.Yellow)
+        shareOwner.dispatchWorkerForTest = { worker -> heldWorker.set(worker) }
+        shareOwner.shareLauncherForTest = { launchCount++ }
+        shareOwner.shareFrozen(
+            frozenOwner,
+            search,
+            currentSourceIdentity = { sourceIdentity },
+            currentSearchIdentity = { session.state.value.activeSearch.identity },
+            currentHighlightColor = { session.state.value.persisted.highlightColor },
+        )
+
+        session.setHighlightColor(HighlightColor.Cyan)
+        shareOwner.updateCurrent(sourceIdentity, search.spec.identity, HighlightColor.Cyan)
+        ShareWorkGate.executor.execute(checkNotNull(heldWorker.get()))
+        waitForGate()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(0, launchCount)
+        assertTrue(shareFiles(context.cacheDir).isEmpty())
+
+        shareOwner.dispatchWorkerForTest = null
+        shareOwner.shareFrozen(
+            frozenOwner,
+            search,
+            currentSourceIdentity = { sourceIdentity },
+            currentSearchIdentity = { session.state.value.activeSearch.identity },
+            currentHighlightColor = { session.state.value.persisted.highlightColor },
+        )
+        waitForGate()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(1, launchCount)
+        val file = shareFiles(context.cacheDir).single()
+        val decoded = context.contentResolver.openInputStream(
+            FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.shared-images",
+                file,
+            ),
+        )!!.use { stream -> BitmapFactory.decodeStream(stream) }
+        assertEquals(HighlightColor.Cyan.argb.toInt(), decoded.getPixel(9, 6))
+        assertEquals(Color.BLACK, decoded.getPixel(5, 10))
+        decoded.recycle()
+        shareFiles(context.cacheDir).forEach(File::delete)
+        shareOwner.dispose()
+        source.recycle()
     }
 
     @Test

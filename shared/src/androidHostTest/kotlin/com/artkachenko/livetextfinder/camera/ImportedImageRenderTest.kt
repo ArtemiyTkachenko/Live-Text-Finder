@@ -13,6 +13,7 @@ import com.artkachenko.livetextfinder.ocr.TextBounds
 import com.artkachenko.livetextfinder.ocr.TextElement
 import com.artkachenko.livetextfinder.ocr.TextLine
 import com.artkachenko.livetextfinder.ocr.TextPoint
+import com.artkachenko.livetextfinder.search.HighlightColor
 import com.artkachenko.livetextfinder.search.drawHighlightOutlines
 import com.artkachenko.livetextfinder.search.importedHighlightsForDraw
 import com.artkachenko.livetextfinder.search.manualSearchSpec
@@ -93,6 +94,12 @@ class ImportedImageRenderTest {
         val portrait = render(owner, search, 44L, decoded, 48, 80)
         assertEquals(Color.RED, portrait.getPixel(6, 32))
         assertEquals(Color.YELLOW, portrait.getPixel(24, 33))
+        HighlightColor.entries.forEach { highlightColor ->
+            val colored = render(owner, search, 44L, decoded, 80, 48, highlightColor)
+            assertEquals(highlightColor.argb.toInt(), colored.getPixel(40, 12))
+            assertEquals(Color.BLACK, colored.getPixel(17, 20))
+            colored.recycle()
+        }
 
         owner.cancel()
         val afterCancel = render(owner, search, 44L, decoded, 80, 48)
@@ -111,6 +118,7 @@ class ImportedImageRenderTest {
         sourceBitmap: Bitmap,
         width: Int,
         height: Int,
+        highlightColor: HighlightColor = HighlightColor.Yellow,
         isVisible: () -> Boolean = { true },
     ): Bitmap {
         val target = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
@@ -135,7 +143,7 @@ class ImportedImageRenderTest {
                 drawProjection.outlines.isNotEmpty() &&
                 owner.state.value.snapshot?.sourceIdentity == sourceIdentity
             ) {
-                drawHighlightOutlines(drawProjection.outlines)
+                drawHighlightOutlines(drawProjection.outlines, highlightColor)
             }
         }
         return target

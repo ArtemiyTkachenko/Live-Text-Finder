@@ -6,9 +6,15 @@ import android.graphics.Color
 import android.graphics.Matrix
 import android.graphics.Paint
 import com.artkachenko.livetextfinder.search.ElementOutline
+import com.artkachenko.livetextfinder.search.HighlightColor
 
 internal object AndroidImageShareRenderer {
-    fun renderFrozen(source: Bitmap, rotation: Int, outlines: List<ElementOutline>): Bitmap {
+    fun renderFrozen(
+        source: Bitmap,
+        rotation: Int,
+        outlines: List<ElementOutline>,
+        highlightColor: HighlightColor = HighlightColor.Yellow,
+    ): Bitmap {
         val upright = if (rotation == 0) {
             source
         } else {
@@ -16,7 +22,7 @@ internal object AndroidImageShareRenderer {
             Bitmap.createBitmap(source, 0, 0, source.width, source.height, matrix, true)
         }
         return try {
-            drawOutlines(upright, outlines)
+            drawOutlines(upright, outlines, highlightColor)
         } finally {
             if (upright !== source) {
                 upright.recycle()
@@ -24,10 +30,17 @@ internal object AndroidImageShareRenderer {
         }
     }
 
-    fun renderImported(source: Bitmap, outlines: List<ElementOutline>): Bitmap =
-        drawOutlines(source, outlines)
+    fun renderImported(
+        source: Bitmap,
+        outlines: List<ElementOutline>,
+        highlightColor: HighlightColor = HighlightColor.Yellow,
+    ): Bitmap = drawOutlines(source, outlines, highlightColor)
 
-    private fun drawOutlines(source: Bitmap, outlines: List<ElementOutline>): Bitmap {
+    private fun drawOutlines(
+        source: Bitmap,
+        outlines: List<ElementOutline>,
+        highlightColor: HighlightColor,
+    ): Bitmap {
         val output = source.copy(Bitmap.Config.ARGB_8888, true)
         try {
             val canvas = Canvas(output)
@@ -48,7 +61,7 @@ internal object AndroidImageShareRenderer {
                     strokeWidth = 6f
                 })
                 canvas.drawPath(path, Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = Color.YELLOW
+                    color = highlightColor.argb.toInt()
                     style = Paint.Style.STROKE
                     strokeWidth = 3f
                 })

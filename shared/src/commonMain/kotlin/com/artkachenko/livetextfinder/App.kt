@@ -15,12 +15,16 @@ import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -31,10 +35,12 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -51,6 +57,7 @@ import com.artkachenko.livetextfinder.camera.shareFrozen
 import com.artkachenko.livetextfinder.camera.shareImported
 import com.artkachenko.livetextfinder.ocr.OcrStatus
 import com.artkachenko.livetextfinder.ocr.OcrUiState
+import com.artkachenko.livetextfinder.search.HighlightColor
 import com.artkachenko.livetextfinder.search.SearchListEditorState
 import com.artkachenko.livetextfinder.search.SearchPresentationOwner
 import com.artkachenko.livetextfinder.search.SearchSessionController
@@ -83,6 +90,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
             var editor by remember { mutableStateOf(SearchListEditorState()) }
             var deleteId by remember { mutableStateOf<String?>(null) }
             var resetConfirm by remember { mutableStateOf(false) }
+            var colorDialogOpen by remember { mutableStateOf(false) }
             var previewSize by remember { mutableStateOf(IntSize.Zero) }
             val rootSizeState = remember { mutableStateOf(IntSize.Zero) }
             var rootSize by rootSizeState
@@ -128,8 +136,16 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                     "frozen:${freezeState.frame?.identity}"
                 else -> null
             }
-            LaunchedEffect(sourceIdentity, activeSearch.identity) {
-                shareOwner.updateCurrent(sourceIdentity, activeSearch.identity)
+            LaunchedEffect(
+                sourceIdentity,
+                activeSearch.identity,
+                sessionState.persisted.highlightColor,
+            ) {
+                shareOwner.updateCurrent(
+                    sourceIdentity,
+                    activeSearch.identity,
+                    sessionState.persisted.highlightColor,
+                )
             }
             LaunchedEffect(presentation.expiresAtMillis) {
                 val deadline = presentation.expiresAtMillis ?: return@LaunchedEffect
@@ -197,7 +213,10 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
                         TextButton(onClick = {
                             managerOpen = !managerOpen
                             editor = editor.close()
@@ -207,11 +226,26 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                         if (selectedList != null) {
                             Text(
                                 "${selectedList.name} · ${selectedList.terms.size} terms",
-                                modifier = Modifier.padding(top = 12.dp),
+                                modifier = Modifier.weight(1f).padding(top = 12.dp),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                             )
                         } else {
-                            Text("Manual search", modifier = Modifier.padding(top = 12.dp))
+                            Text(
+                                "Manual search",
+                                modifier = Modifier.weight(1f).padding(top = 12.dp),
+                                maxLines = 1,
+                            )
                         }
+                    }
+                    TextButton(
+                        onClick = { colorDialogOpen = true },
+                        enabled = sessionState.loaded && !sessionState.recoveryRequired,
+                    ) {
+                        Text(
+                            "Highlight color: " +
+                                sessionState.persisted.highlightColor.displayName,
+                        )
                     }
                     if (importedState.phase == ImportedImagePhase.Live ||
                         importedState.phase == ImportedImagePhase.Error
@@ -368,6 +402,9 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                                             currentSearchIdentity = {
                                                 session.state.value.activeSearch.identity
                                             },
+                                            currentHighlightColor = {
+                                                session.state.value.persisted.highlightColor
+                                            },
                                         )
                                     } else {
                                         shareOwner.shareFrozen(
@@ -380,6 +417,9 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                                             },
                                             currentSearchIdentity = {
                                                 session.state.value.activeSearch.identity
+                                            },
+                                            currentHighlightColor = {
+                                                session.state.value.persisted.highlightColor
                                             },
                                         )
                                     }
@@ -559,7 +599,10 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                                     emptyList()
                                 }
                             }
-                            drawHighlightOutlines(outlines)
+                            drawHighlightOutlines(
+                                outlines,
+                                session.state.value.persisted.highlightColor,
+                            )
                         }
                     }
                 }
@@ -637,7 +680,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                     text = {
                         Text(
                             "This removes the unreadable saved file and starts with an empty " +
-                                "manual query and no lists.",
+                                "manual query, no lists, and Yellow highlight colour.",
                         )
                     },
                     confirmButton = {
@@ -650,6 +693,47 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                     },
                     dismissButton = {
                         TextButton(onClick = { resetConfirm = false }) { Text("Cancel") }
+                    },
+                )
+            }
+            if (colorDialogOpen) {
+                AlertDialog(
+                    onDismissRequest = { colorDialogOpen = false },
+                    title = { Text("Highlight color") },
+                    text = {
+                        Column(
+                            Modifier.heightIn(max = 320.dp)
+                                .verticalScroll(rememberScrollState())
+                                .selectableGroup(),
+                        ) {
+                            HighlightColor.entries.forEach { color ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().selectable(
+                                        selected = sessionState.persisted.highlightColor == color,
+                                        enabled = sessionState.loaded &&
+                                            !sessionState.recoveryRequired,
+                                        role = Role.RadioButton,
+                                        onClick = { session.setHighlightColor(color) },
+                                    ),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    RadioButton(
+                                        selected = sessionState.persisted.highlightColor == color,
+                                        onClick = null,
+                                        enabled = sessionState.loaded &&
+                                            !sessionState.recoveryRequired,
+                                    )
+                                    Box(
+                                        Modifier.padding(end = 12.dp).size(24.dp)
+                                            .background(color.composeColor),
+                                    )
+                                    Text(color.displayName)
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { colorDialogOpen = false }) { Text("Done") }
                     },
                 )
             }

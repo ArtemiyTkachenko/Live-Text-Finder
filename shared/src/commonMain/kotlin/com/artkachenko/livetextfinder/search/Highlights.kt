@@ -28,7 +28,10 @@ internal data class ElementOutline(val lineIndex: Int, val elementIndex: Int, va
 internal data class Highlights(val ready: Boolean, val outlines: List<ElementOutline>)
 
 /** Draws the same paired outline used for live, frozen, and imported matches. */
-internal fun DrawScope.drawHighlightOutlines(outlines: List<ElementOutline>) {
+internal fun DrawScope.drawHighlightOutlines(
+    outlines: List<ElementOutline>,
+    highlightColor: HighlightColor = HighlightColor.Yellow,
+) {
     clipRect {
         outlines.forEach { outline ->
             val first = outline.points.firstOrNull() ?: return@forEach
@@ -38,7 +41,7 @@ internal fun DrawScope.drawHighlightOutlines(outlines: List<ElementOutline>) {
                 close()
             }
             drawPath(path, Color.Black, style = Stroke(6.dp.toPx()))
-            drawPath(path, Color.Yellow, style = Stroke(3.dp.toPx()))
+            drawPath(path, highlightColor.composeColor, style = Stroke(3.dp.toPx()))
         }
     }
 }

@@ -1,5 +1,15 @@
 # Validation
 
+## Global highlight appearance — 2026-10-27
+
+Yellow, Cyan, Magenta and White are global highlight choices across live, frozen and imported previews and newly shared PNGs. Android schema v1 preferences load as Yellow without an eager rewrite; schema v2 persists the choice. Invalid preferences remain protected by the existing recovery flow. Colour changes preserve matching identity and cancel pending sharing before handoff.
+
+Final checks passed in 13s: Android compilation, iOS simulator shared compilation, **163 host tests with zero failures/errors/skips**, and Android lint with **zero errors, 13 warnings**. All 153 previous tests remain. New evidence covers actual storage migration/strict rejection, asynchronous preference ordering/reset, all palette foreground and black under-stroke pixels through production preview helpers, production PNG encoding/provider reads, exact source pixel preservation, and actual colour changes before rendering or before handoff. An earlier failed fixture setup is not passing evidence.
+
+Independent correction verification: **PASS WITH LIMITATIONS**, no remaining actionable findings. The accepted corrections added missing black/source-pixel assertions, reconciled standing documentation and fixed scoped test indentation. No configured Kotlin formatter exists; scoped manual inspection and a limited static audit found no remaining introduced issues. Raw logs and per-run reports remain outside the committed tree; historical evidence is preserved.
+
+Device acceptance remains pending: dialog visibility/selection/accessibility, appearance across camera/frozen/imported modes, preference restoration, and chooser/recipient behaviour after colour changes. Host rendering does not prove physical camera alignment or device accessibility. No APK, device run or real external share was performed.
+
 ## Android annotated still sharing — 2026-10-27
 
 The bounded increment prepares one upright, highlighted PNG from a retained frozen/imported source and opens Android's chooser through a narrow FileProvider read grant. Only explicit sharing creates a temporary derivative; retained source images and OCR remain memory-only. No APK, device run or real external share was performed.

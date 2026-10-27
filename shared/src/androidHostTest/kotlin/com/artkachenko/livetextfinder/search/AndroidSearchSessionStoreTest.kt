@@ -31,8 +31,14 @@ class AndroidSearchSessionStoreTest {
             listOf(SavedSearchList("stable", "Parts", listOf("foo", "new york"))),
             "stable",
         )
-        assertTrue(await { first.save(initial, it) }.isSuccess)
-        assertEquals(initial, await { androidSearchSessionStore(context).load(it) }.getOrThrow())
+        HighlightColor.entries.forEach { color ->
+            val colored = initial.copy(highlightColor = color)
+            assertTrue(await { first.save(colored, it) }.isSuccess)
+            assertEquals(
+                colored,
+                await { androidSearchSessionStore(context).load(it) }.getOrThrow(),
+            )
+        }
 
         val updated = initial.copy(manualQuery = "", lists = emptyList(), activeListId = null)
         assertTrue(await { androidSearchSessionStore(context).save(updated, it) }.isSuccess)
@@ -46,6 +52,72 @@ class AndroidSearchSessionStoreTest {
         val store = androidSearchSessionStore(context)
         assertIs<IllegalArgumentException>(await { store.load(it) }.exceptionOrNull())
         assertEquals("{\"version\":99}", file.readText())
+    }
+
+    @Test
+    fun versionOneFileLoadsYellowPreservesSearchAndNextEditWritesVersionTwo() {
+        val file = File(context.filesDir, "saved-searches.json")
+        val versionOne = JSONObject()
+            .put("version", 1)
+            .put("manualQuery", "manual")
+            .put("activeListId", "stable")
+            .put(
+                "lists",
+                JSONArray().put(
+                    JSONObject()
+                        .put("id", "stable")
+                        .put("name", "Parts")
+                        .put("terms", JSONArray().put("foo").put("new york")),
+                ),
+            )
+            .toString()
+        file.writeText(versionOne)
+
+        val store = androidSearchSessionStore(context)
+        val loaded = await { store.load(it) }.getOrThrow()
+        assertEquals(
+            PersistedSearchState(
+                "manual",
+                listOf(SavedSearchList("stable", "Parts", listOf("foo", "new york"))),
+                "stable",
+                HighlightColor.Yellow,
+            ),
+            loaded,
+        )
+        assertEquals(versionOne, file.readText())
+
+        val updated = checkNotNull(loaded).copy(highlightColor = HighlightColor.Cyan)
+        assertTrue(await { store.save(updated, it) }.isSuccess)
+        val written = JSONObject(file.readText())
+        assertEquals(2, written.getInt("version"))
+        assertEquals("cyan", written.getString("highlightColor"))
+        assertEquals(updated, await { androidSearchSessionStore(context).load(it) }.getOrThrow())
+    }
+
+    @Test
+    fun unknownVersionTwoColorAndSchemaAreRejectedWithoutOverwritingSourceBytes() {
+        val file = File(context.filesDir, "saved-searches.json")
+        val valid = JSONObject()
+            .put("version", 2)
+            .put("manualQuery", "kept")
+            .put("activeListId", JSONObject.NULL)
+            .put("lists", JSONArray())
+            .put("highlightColor", "ultraviolet")
+            .toString()
+        val store = androidSearchSessionStore(context)
+
+        val invalidColors = listOf(
+            valid,
+            valid.replace("\"ultraviolet\"", "17"),
+            valid.replace("\"ultraviolet\"", "true"),
+            valid.replace("\"ultraviolet\"", "null"),
+            valid.replace("\"highlightColor\":\"ultraviolet\"", "\"extra\":true"),
+        )
+        invalidColors.forEach { bytes ->
+            file.writeText(bytes)
+            assertTrue(await { store.load(it) }.isFailure)
+            assertEquals(bytes, file.readText())
+        }
     }
 
     @Test

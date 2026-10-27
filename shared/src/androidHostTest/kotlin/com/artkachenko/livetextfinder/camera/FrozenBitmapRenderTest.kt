@@ -11,8 +11,18 @@ import androidx.compose.ui.unit.LayoutDirection
 import com.artkachenko.livetextfinder.ocr.CapturedCameraFrame
 import com.artkachenko.livetextfinder.ocr.FrameInfo
 import com.artkachenko.livetextfinder.ocr.OcrSnapshot
+import com.artkachenko.livetextfinder.ocr.OcrStatus
+import com.artkachenko.livetextfinder.ocr.OcrUiState
 import com.artkachenko.livetextfinder.ocr.TextBounds
+import com.artkachenko.livetextfinder.ocr.TextElement
+import com.artkachenko.livetextfinder.ocr.TextLine
+import com.artkachenko.livetextfinder.ocr.TextPoint
 import com.artkachenko.livetextfinder.search.FrameIdentity
+import com.artkachenko.livetextfinder.search.HighlightColor
+import com.artkachenko.livetextfinder.search.drawHighlightOutlines
+import com.artkachenko.livetextfinder.search.manualSearchSpec
+import com.artkachenko.livetextfinder.search.projectFrozenHighlights
+import com.artkachenko.livetextfinder.search.searchRecognizedText
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -101,6 +111,29 @@ class FrozenBitmapRenderTest {
         pixels.recycle()
     }
 
+    @Test
+    fun frozenPreviewDrawsEverySelectedColorOverRetainedFrame() {
+        val pixels = asymmetricBitmap()
+        val owner = frozenOwner(pixels, 0, includeTarget = true)
+        val frame = assertNotNull(owner.state.value.frame)
+        HighlightColor.entries.forEach { highlightColor ->
+            val preview = render(
+                owner,
+                frame,
+                pixels,
+                80,
+                48,
+                highlightColor = highlightColor,
+            )
+            assertEquals(Color.RED, preview.getPixel(1, 1))
+            assertEquals(highlightColor.argb.toInt(), preview.getPixel(40, 12))
+            assertEquals(Color.BLACK, preview.getPixel(17, 20))
+            preview.recycle()
+        }
+        owner.stop()
+        pixels.recycle()
+    }
+
     private fun render(
         owner: FrozenFrameOwner,
         frame: FrozenSearchFrame,
@@ -108,6 +141,7 @@ class FrozenBitmapRenderTest {
         width: Int,
         height: Int,
         visible: () -> Boolean = { true },
+        highlightColor: HighlightColor? = null,
     ): Bitmap {
         val target = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         CanvasDrawScope().draw(
@@ -117,6 +151,14 @@ class FrozenBitmapRenderTest {
             size = Size(width.toFloat(), height.toFloat()),
         ) {
             drawFrozenBitmap(owner, frame, bitmap, visible)
+            if (highlightColor != null && visible()) {
+                val search = searchRecognizedText(
+                    manualSearchSpec("target"),
+                    OcrUiState(OcrStatus.TextRecognized, snapshot = frame.snapshot),
+                )
+                val outlines = projectFrozenHighlights(search, size.width, size.height).outlines
+                drawHighlightOutlines(outlines, highlightColor)
+            }
         }
         return target
     }
@@ -146,7 +188,11 @@ class FrozenBitmapRenderTest {
         return bitmap
     }
 
-    private fun frozenOwner(bitmap: Bitmap, rotation: Int): FrozenFrameOwner {
+    private fun frozenOwner(
+        bitmap: Bitmap,
+        rotation: Int,
+        includeTarget: Boolean = false,
+    ): FrozenFrameOwner {
         val owner = FrozenFrameOwner()
         var requestId = 0L
         owner.attachSession(
@@ -162,8 +208,30 @@ class FrozenBitmapRenderTest {
             requestId = requestId,
             bitmap = bitmap,
             snapshot = OcrSnapshot(
-                text = "",
-                lines = emptyList(),
+                text = if (includeTarget) "target" else "",
+                lines = if (includeTarget) {
+                    listOf(
+                        TextLine(
+                            "target",
+                            null,
+                            emptyList(),
+                            listOf(
+                                TextElement(
+                                    "target",
+                                    TextBounds(20, 12, 60, 30),
+                                    listOf(
+                                        TextPoint(20, 12),
+                                        TextPoint(60, 12),
+                                        TextPoint(60, 30),
+                                        TextPoint(20, 30),
+                                    ),
+                                ),
+                            ),
+                        ),
+                    )
+                } else {
+                    emptyList()
+                },
                 frame = FrameInfo(
                     timestampNanos = 42L,
                     bufferWidth = bitmap.width,

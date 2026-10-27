@@ -18,6 +18,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.artkachenko.livetextfinder.search.ElementOutline
+import com.artkachenko.livetextfinder.search.HighlightColor
 import com.artkachenko.livetextfinder.search.TextSearchResult
 import com.artkachenko.livetextfinder.search.projectFrozenHighlights
 import com.artkachenko.livetextfinder.search.projectImportedHighlights
@@ -60,6 +61,7 @@ internal actual class ImageShareOwner actual constructor() {
     @Volatile private var foreground = false
     @Volatile private var currentSourceIdentity: String? = null
     @Volatile private var currentSearchIdentity: String = ""
+    @Volatile private var currentHighlightColor: HighlightColor = HighlightColor.Yellow
     @Volatile private var requestId = 0L
     internal actual val state: State<ImageShareState> = _state
 
@@ -82,12 +84,18 @@ internal actual class ImageShareOwner actual constructor() {
         cancel()
     }
 
-    internal actual fun updateCurrent(sourceIdentity: String?, searchIdentity: String) {
+    internal actual fun updateCurrent(
+        sourceIdentity: String?,
+        searchIdentity: String,
+        highlightColor: HighlightColor,
+    ) {
         checkMainThread()
         currentSourceIdentity = sourceIdentity
         currentSearchIdentity = searchIdentity
+        currentHighlightColor = highlightColor
         if (_state.value.status == ImageShareStatus.Preparing &&
-            (pendingSourceIdentity != sourceIdentity || pendingSearchIdentity != searchIdentity)
+            (pendingSourceIdentity != sourceIdentity || pendingSearchIdentity != searchIdentity ||
+                pendingHighlightColor != highlightColor)
         ) {
             cancel()
         }
@@ -95,6 +103,7 @@ internal actual class ImageShareOwner actual constructor() {
 
     private var pendingSourceIdentity: String? = null
     private var pendingSearchIdentity: String? = null
+    private var pendingHighlightColor: HighlightColor? = null
     internal var beforeHandoffForTest: (() -> Unit)? = null
     internal var shareLauncherForTest: ((Intent) -> Unit)? = null
     internal var renderBitmapForTest: (() -> Bitmap)? = null
@@ -134,6 +143,7 @@ internal actual class ImageShareOwner actual constructor() {
         search: TextSearchResult,
         readSourceIdentity: () -> String?,
         readSearchIdentity: () -> String,
+        readHighlightColor: () -> HighlightColor,
     ) {
         val freezeState = owner.state.value
         if (freezeState.mode != FreezeMode.Frozen) {
@@ -149,6 +159,8 @@ internal actual class ImageShareOwner actual constructor() {
         ) return showError("The image or search changed. Try sharing again.")
         currentSourceIdentity = sourceIdentity
         currentSearchIdentity = search.spec.identity
+        val highlightColor = readHighlightColor()
+        currentHighlightColor = highlightColor
         if (bitmap.width != snapshot.frame.bufferWidth ||
             bitmap.height != snapshot.frame.bufferHeight ||
             snapshot.frame.rotationDegrees !in VALID_ROTATIONS
@@ -177,6 +189,8 @@ internal actual class ImageShareOwner actual constructor() {
             outlines.outlines,
             readSourceIdentity,
             readSearchIdentity,
+            readHighlightColor,
+            highlightColor,
             isSourceCurrent = {
                 val current = owner.state.value
                 current.mode == FreezeMode.Frozen &&
@@ -187,6 +201,7 @@ internal actual class ImageShareOwner actual constructor() {
                 bitmap,
                 snapshot.frame.rotationDegrees,
                 outlines.outlines,
+                highlightColor,
             )
         }
     }
@@ -196,6 +211,7 @@ internal actual class ImageShareOwner actual constructor() {
         search: TextSearchResult,
         readSourceIdentity: () -> String?,
         readSearchIdentity: () -> String,
+        readHighlightColor: () -> HighlightColor,
     ) {
         val state = owner.state.value
         val snapshot = state.snapshot ?: return showError("Import an image before sharing.")
@@ -208,6 +224,8 @@ internal actual class ImageShareOwner actual constructor() {
         ) return showError("The image or search changed. Try sharing again.")
         currentSourceIdentity = sourceIdentity
         currentSearchIdentity = search.spec.identity
+        val highlightColor = readHighlightColor()
+        currentHighlightColor = highlightColor
         if (bitmap.width != snapshot.width || bitmap.height != snapshot.height) {
             return showError("The imported image does not match its OCR result.")
         }
@@ -226,13 +244,19 @@ internal actual class ImageShareOwner actual constructor() {
             outlines.outlines,
             readSourceIdentity,
             readSearchIdentity,
+            readHighlightColor,
+            highlightColor,
             isSourceCurrent = {
                 owner.currentBitmap() === bitmap &&
                     owner.state.value.snapshot === snapshot &&
                     owner.state.value.phase == ImportedImagePhase.Imported
             },
         ) {
-            AndroidImageShareRenderer.renderImported(bitmap, outlines.outlines)
+            AndroidImageShareRenderer.renderImported(
+                bitmap,
+                outlines.outlines,
+                highlightColor,
+            )
         }
     }
 
@@ -245,6 +269,8 @@ internal actual class ImageShareOwner actual constructor() {
         outlines: List<ElementOutline>,
         readSourceIdentity: () -> String?,
         readSearchIdentity: () -> String,
+        readHighlightColor: () -> HighlightColor,
+        highlightColor: HighlightColor,
         isSourceCurrent: () -> Boolean,
         render: () -> Bitmap,
     ) {
@@ -263,6 +289,7 @@ internal actual class ImageShareOwner actual constructor() {
         val ticket = ++requestId
         pendingSourceIdentity = sourceIdentity
         pendingSearchIdentity = searchIdentity
+        pendingHighlightColor = highlightColor
         _state.value = ImageShareState(ImageShareStatus.Preparing, "Preparing image…")
         try {
             val worker = Runnable {
@@ -291,6 +318,8 @@ internal actual class ImageShareOwner actual constructor() {
                                     searchIdentity,
                                     readSourceIdentity,
                                     readSearchIdentity,
+                                    readHighlightColor,
+                                    highlightColor,
                                     isSourceCurrent,
                                 )
                             ) {
@@ -358,6 +387,8 @@ internal actual class ImageShareOwner actual constructor() {
                         searchIdentity,
                         readSourceIdentity,
                         readSearchIdentity,
+                        readHighlightColor,
+                        highlightColor,
                         isSourceCurrent,
                         if (error is ShareQuotaExceededException) {
                             error.message.orEmpty()
@@ -375,6 +406,8 @@ internal actual class ImageShareOwner actual constructor() {
                         searchIdentity,
                         readSourceIdentity,
                         readSearchIdentity,
+                        readHighlightColor,
+                        highlightColor,
                         isSourceCurrent,
                         "Could not prepare image. Try again.",
                     )
@@ -400,12 +433,16 @@ internal actual class ImageShareOwner actual constructor() {
         searchIdentity: String,
         readSourceIdentity: () -> String?,
         readSearchIdentity: () -> String,
+        readHighlightColor: () -> HighlightColor,
+        highlightColor: HighlightColor,
         isSourceCurrent: () -> Boolean,
     ): Boolean =
         ticket == requestId && !disposed && foreground &&
             currentSourceIdentity == sourceIdentity && currentSearchIdentity == searchIdentity &&
+            currentHighlightColor == highlightColor && pendingHighlightColor == highlightColor &&
             pendingSourceIdentity == sourceIdentity && pendingSearchIdentity == searchIdentity &&
             readSourceIdentity() == sourceIdentity && readSearchIdentity() == searchIdentity &&
+            readHighlightColor() == highlightColor &&
             isSourceCurrent()
 
     private fun postFailure(
@@ -414,6 +451,8 @@ internal actual class ImageShareOwner actual constructor() {
         searchIdentity: String,
         readSourceIdentity: () -> String?,
         readSearchIdentity: () -> String,
+        readHighlightColor: () -> HighlightColor,
+        highlightColor: HighlightColor,
         isSourceCurrent: () -> Boolean,
         message: String,
     ) {
@@ -424,6 +463,8 @@ internal actual class ImageShareOwner actual constructor() {
                     searchIdentity,
                     readSourceIdentity,
                     readSearchIdentity,
+                    readHighlightColor,
+                    highlightColor,
                     isSourceCurrent,
                 )
             ) {
@@ -481,14 +522,28 @@ internal actual fun ImageShareOwner.shareFrozen(
     search: TextSearchResult,
     currentSourceIdentity: () -> String?,
     currentSearchIdentity: () -> String,
-) = requestFrozen(owner, search, currentSourceIdentity, currentSearchIdentity)
+    currentHighlightColor: () -> HighlightColor,
+) = requestFrozen(
+    owner,
+    search,
+    currentSourceIdentity,
+    currentSearchIdentity,
+    currentHighlightColor,
+)
 
 internal actual fun ImageShareOwner.shareImported(
     owner: ImportedImageOwner,
     search: TextSearchResult,
     currentSourceIdentity: () -> String?,
     currentSearchIdentity: () -> String,
-) = requestImported(owner, search, currentSourceIdentity, currentSearchIdentity)
+    currentHighlightColor: () -> HighlightColor,
+) = requestImported(
+    owner,
+    search,
+    currentSourceIdentity,
+    currentSearchIdentity,
+    currentHighlightColor,
+)
 
 internal object ShareWorkGate {
     val executor = Executors.newSingleThreadExecutor { runnable ->

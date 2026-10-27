@@ -44,6 +44,84 @@ class SearchSessionControllerTest {
     }
 
     @Test
+    fun highlightColorWaitsForHealthyLoadAndPreservesSearchIdentity() {
+        val store = ControlledStore()
+        val session = SearchSessionController(store)
+        val beforeLoad = session.state.value.persisted
+        session.setHighlightColor(HighlightColor.Cyan)
+        assertEquals(beforeLoad, session.state.value.persisted)
+        assertTrue(store.writes.isEmpty())
+
+        val saved = PersistedSearchState(
+            "manual",
+            listOf(SavedSearchList("stable", "Parts", listOf("foo"))),
+            "stable",
+        )
+        store.completeLoad(saved)
+        val identity = session.state.value.activeSearch.identity
+        session.setHighlightColor(HighlightColor.Magenta)
+
+        assertEquals(HighlightColor.Magenta, session.state.value.persisted.highlightColor)
+        assertEquals(saved.manualQuery, session.state.value.persisted.manualQuery)
+        assertEquals(saved.lists, session.state.value.persisted.lists)
+        assertEquals(saved.activeListId, session.state.value.persisted.activeListId)
+        assertEquals(identity, session.state.value.activeSearch.identity)
+        assertEquals(HighlightColor.Magenta, store.writes.single().first.highlightColor)
+    }
+
+    @Test
+    fun highlightColorIsBlockedDuringRecoveryAndResetReturnsToYellow() {
+        val store = ControlledStore()
+        val session = SearchSessionController(store)
+        store.failLoad("unsupported version")
+        session.setHighlightColor(HighlightColor.White)
+
+        assertEquals(HighlightColor.Yellow, session.state.value.persisted.highlightColor)
+        assertTrue(store.writes.isEmpty())
+
+        session.retry()
+        store.completeReset()
+        assertEquals(HighlightColor.Yellow, session.state.value.persisted.highlightColor)
+        assertEquals(HighlightColor.Yellow, store.writes.single().first.highlightColor)
+    }
+
+    @Test
+    fun lateLoadMergesManualEditAndQueuedColorWritesKeepLatestValue() {
+        val store = ControlledStore()
+        val session = SearchSessionController(store)
+        session.setManualQuery("typed before load")
+        session.setHighlightColor(HighlightColor.Cyan)
+        store.completeLoad(
+            PersistedSearchState(
+                "stored query",
+                listOf(SavedSearchList("stable", "Parts", listOf("foo"))),
+                "stable",
+                HighlightColor.White,
+            ),
+        )
+        assertEquals("typed before load", session.state.value.persisted.manualQuery)
+        assertNull(session.state.value.persisted.activeListId)
+        assertEquals(HighlightColor.White, session.state.value.persisted.highlightColor)
+        assertEquals(1, store.writes.size)
+
+        session.setHighlightColor(HighlightColor.Cyan)
+        session.setHighlightColor(HighlightColor.Magenta)
+        assertEquals(1, store.writes.size)
+        store.completeWrite(0)
+        assertEquals(2, store.writes.size)
+        assertEquals("typed before load", store.writes[1].first.manualQuery)
+        assertEquals(HighlightColor.Magenta, store.writes[1].first.highlightColor)
+        assertEquals(listOf("foo"), store.writes[1].first.lists.single().terms)
+
+        store.completeWrite(1, Result.failure(IllegalStateException("disk full")))
+        session.retry()
+        assertEquals(3, store.writes.size)
+        assertEquals(HighlightColor.Magenta, store.writes[2].first.highlightColor)
+        store.completeWrite(2)
+        assertNull(session.state.value.error)
+    }
+
+    @Test
     fun lateLoadKeepsQueryTypingAndExplicitClearAndDoesNotWriteBeforeLoad() {
         val store = ControlledStore()
         val session = SearchSessionController(store)
