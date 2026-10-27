@@ -1,5 +1,15 @@
 # Validation
 
+## Material theme and main controls — 2026-10-27
+
+Implemented design scopes 1–2: one shared light/dark theme with Android 12+ dynamic colour and older-Android/iOS fallbacks, shared spacing and Material shapes/typography. The main query/control region is grouped on one tonal surface with aligned active-search context and stronger Freeze/Resume emphasis. Existing actions, inset ownership, keyboard/list/compact preview hiding, actual preview measurements, OCR palette/geometry and source behaviour are preserved. Lists/editor and status redesign remain separate work.
+
+Final checks passed in 23s: Android compilation, iOS simulator shared compilation, **198 host tests with zero failures/errors/skips**, and lint with **zero errors, 13 warnings**. All 193 previous tests and their 31 source files remain unchanged. New tests exercise Android dynamic/fallback resolution, used fallback role contrast, query/list/capture semantics and enabled states, 48dp actual touch bounds, nonoverlap, weighted remaining preview height, long-context wrapping and short-landscape scroll reachability. Early blank captures, fixture compile errors and failed harness assertions were corrected; those attempts are not passing evidence.
+
+Root and independent reviewer inspected native host renders of production controls in light/dark 360×800, enlarged-text 360×520 and short-landscape 600×240 fixtures. They use a placeholder camera and omit unchanged status/footer; they do not prove full App or device behaviour. Independent review required correction of the semantics lookup and additional constrained-layout evidence. Correction verification: **PASS WITH LIMITATIONS**, no remaining actionable findings.
+
+Scoped manual Kotlin inspection, limited added-line style audit and scoped whitespace checks passed; no configured Kotlin formatter exists. The user's pre-existing AGENTS.md edit is unchanged and excluded from staging; its trailing blank-line warning is outside the agent target. All 41 historical evidence hashes are preserved. No dependencies, schema, APK, device run or external share were added. Pixel 10 camera contrast, TalkBack, real wallpaper dynamic colours and full-device visual behaviour remain deferred user checks. Raw logs, generated PNGs and per-run reports stay outside Git.
+
 ## Adjustable live search area — 2026-10-27
 
 Android live mode now offers an ephemeral normalized area with labelled percentage sliders, atomic Apply, Cancel and Full frame, plus a dashed labelled preview border. Only occurrences with every raw projected participant fully inside the selected area qualify. Default Full frame preserves legacy matching, including counts without geometry; Custom suppresses counts while its fresh, exact preview mapping is unavailable. Area edits and invalid mapping clear retention/smoothing, and revision checks suppress stale drawing. Background/disposal and starting Freeze/Import reset the area; frozen/imported/shared images remain full-source.

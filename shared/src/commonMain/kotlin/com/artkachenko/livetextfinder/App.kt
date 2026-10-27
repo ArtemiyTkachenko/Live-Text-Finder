@@ -83,13 +83,16 @@ import com.artkachenko.livetextfinder.search.projectHighlights
 import com.artkachenko.livetextfinder.search.projectImportedHighlights
 import com.artkachenko.livetextfinder.search.searchRecognizedContent
 import com.artkachenko.livetextfinder.search.searchRecognizedText
+import com.artkachenko.livetextfinder.ui.FinderSearchControls
+import com.artkachenko.livetextfinder.ui.FinderSpacing
+import com.artkachenko.livetextfinder.ui.LiveTextFinderTheme
 import com.artkachenko.livetextfinder.utils.MonotonicClock
 import kotlinx.coroutines.delay
 
 /** Main live text search screen. */
 @Composable
 fun App(session: SearchSessionController = remember { inMemorySearchSessionController() }) {
-    MaterialTheme {
+    LiveTextFinderTheme {
         Surface(Modifier.fillMaxSize()) {
             var state by remember { mutableStateOf(OcrUiState()) }
             val importedOwner = rememberImportedImageOwner()
@@ -228,6 +231,41 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
             // This is the only IME inset owner. The weighted preview receives the remaining
             // height directly, so OCR status changes do not recalculate its available space.
             val shouldShowViews = isContentVisible()
+            val hasLiveCaptureControls = importedState.phase == ImportedImagePhase.Live ||
+                importedState.phase == ImportedImagePhase.Error
+            val captureLabel = if (!hasLiveCaptureControls) {
+                null
+            } else {
+                when (freezeState.mode) {
+                    FreezeMode.Live -> "Freeze frame"
+                    FreezeMode.Freezing -> null
+                    FreezeMode.Frozen -> "Resume live"
+                }
+            }
+            val pendingCaptureLabel = if (
+                hasLiveCaptureControls && freezeState.mode == FreezeMode.Freezing
+            ) {
+                "Cancel freeze"
+            } else {
+                null
+            }
+            val liveAreaLabel = if (
+                hasLiveCaptureControls && freezeState.mode == FreezeMode.Live &&
+                liveSearchAreaAvailable()
+            ) {
+                if (areaState == null) "Live area: Full frame" else "Live area: Custom"
+            } else {
+                null
+            }
+            val secondaryActionLabel = when (importedState.phase) {
+                ImportedImagePhase.Unsupported -> null
+                ImportedImagePhase.Imported -> "Return to camera"
+                ImportedImagePhase.Picking,
+                ImportedImagePhase.Reading,
+                ImportedImagePhase.Recognizing -> "Cancel import"
+                ImportedImagePhase.Live,
+                ImportedImagePhase.Error -> "Import image"
+            }
             AppContentColumn(
                 scrollState = contentScrollState,
                 scrollable = !shouldShowViews,
@@ -237,152 +275,82 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                     .onSizeChanged { rootSize = it },
             ) {
                 Column(
-                    Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    Modifier.fillMaxWidth().padding(
+                        horizontal = FinderSpacing.small,
+                        vertical = FinderSpacing.extraSmall,
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(FinderSpacing.extraSmall),
                 ) {
-
-                    if (shouldShowViews) {
-                        Text(
-                            "Live Text Finder",
-                            style = MaterialTheme.typography.titleLarge,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                    OutlinedTextField(
-                        value = query,
-                        onValueChange = session::setManualQuery,
-                        label = { Text("Find in recognized text") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        TextButton(onClick = {
+                    FinderSearchControls(
+                        showTitle = shouldShowViews,
+                        query = query,
+                        onQueryChange = session::setManualQuery,
+                        searchListsLabel = if (managerOpen) "Close lists" else "Search lists",
+                        onSearchLists = {
                             managerOpen = !managerOpen
                             editor = editor.close()
-                        }) {
-                            Text(if (managerOpen) "Close lists" else "Search lists")
-                        }
-                        if (selectedList != null) {
-                            Text(
-                                "${selectedList.name} · ${selectedList.terms.size} terms",
-                                modifier = Modifier.weight(1f).padding(top = 12.dp),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        } else {
-                            Text(
-                                "Manual search",
-                                modifier = Modifier.weight(1f).padding(top = 12.dp),
-                                maxLines = 1,
-                            )
-                        }
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        TextButton(
-                            onClick = { colorDialogOpen = true },
-                            enabled = sessionState.loaded && !sessionState.recoveryRequired,
-                            modifier = Modifier.weight(1f),
-                        ) {
-                            Text(
-                                "Highlight color: " +
-                                    sessionState.persisted.highlightColor.displayName,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                        TextButton(onClick = { helpDialogOpen = true }) {
-                            Text("Help")
-                        }
-                    }
-                    if (importedState.phase == ImportedImagePhase.Live ||
-                        importedState.phase == ImportedImagePhase.Error
-                    ) {
-                        when (freezeState.mode) {
-                            FreezeMode.Live -> Row(
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            ) {
-                                TextButton(
-                                    onClick = {
-                                        resetLiveArea()
-                                        frozenOwner.freeze(
-                                            cameraReady = state.status == OcrStatus.Scanning ||
-                                                state.status == OcrStatus.TextRecognized,
-                                        )
-                                    },
-                                    modifier = Modifier.weight(1f),
-                                    enabled = state.status == OcrStatus.Scanning ||
-                                        state.status == OcrStatus.TextRecognized,
-                                ) {
-                                    Text("Freeze frame")
+                        },
+                        searchContext = selectedList?.let {
+                            "${it.name} · ${it.terms.size} terms"
+                        } ?: "Manual search",
+                        highlightLabel =
+                            "Highlight color: ${sessionState.persisted.highlightColor.displayName}",
+                        highlightEnabled = sessionState.loaded && !sessionState.recoveryRequired,
+                        onHighlight = {
+                            colorDialogOpen = true
+                        },
+                        onHelp = {
+                            helpDialogOpen = true
+                        },
+                        captureLabel = captureLabel,
+                        captureEnabled = freezeState.mode != FreezeMode.Live ||
+                            state.status == OcrStatus.Scanning ||
+                            state.status == OcrStatus.TextRecognized,
+                        onCapture = {
+                            when (freezeState.mode) {
+                                FreezeMode.Live -> {
+                                    resetLiveArea()
+                                    frozenOwner.freeze(
+                                        cameraReady = state.status == OcrStatus.Scanning ||
+                                            state.status == OcrStatus.TextRecognized,
+                                    )
                                 }
-                                if (liveSearchAreaAvailable()) {
-                                    TextButton(
-                                        onClick = {
-                                            areaDialogOpen = true
-                                        },
-                                        modifier = Modifier.weight(1f),
-                                    ) {
-                                        Text(
-                                            if (areaState == null) "Live area: Full frame"
-                                            else "Live area: Custom",
-                                        )
-                                    }
-                                }
-                            }
-                            FreezeMode.Freezing -> TextButton(onClick = frozenOwner::cancel) {
-                                Text("Cancel freeze")
-                            }
-                            FreezeMode.Frozen -> TextButton(
-                                onClick = {
+                                FreezeMode.Frozen -> {
                                     resetLiveArea()
                                     frozenOwner.resume()
-                                },
-                            ) {
-                                Text("Resume live")
+                                }
+                                FreezeMode.Freezing -> Unit
                             }
-                        }
-                    }
-                    when (importedState.phase) {
-                        ImportedImagePhase.Unsupported -> Unit
-                        ImportedImagePhase.Imported -> {
-                            TextButton(
-                                onClick = {
+                        },
+                        pendingCaptureLabel = pendingCaptureLabel,
+                        onCancelCapture = frozenOwner::cancel,
+                        liveAreaLabel = liveAreaLabel,
+                        onLiveArea = {
+                            areaDialogOpen = true
+                        },
+                        secondaryActionLabel = secondaryActionLabel,
+                        onSecondaryAction = {
+                            when (importedState.phase) {
+                                ImportedImagePhase.Unsupported -> Unit
+                                ImportedImagePhase.Imported -> {
                                     resetLiveArea()
                                     importedOwner.cancel()
-                                },
-                            ) {
-                                Text("Return to camera")
-                            }
-                        }
-                        ImportedImagePhase.Picking,
-                        ImportedImagePhase.Reading,
-                        ImportedImagePhase.Recognizing -> {
-                            TextButton(onClick = importedOwner::cancel) {
-                                Text("Cancel import")
-                            }
-                        }
-                        ImportedImagePhase.Live,
-                        ImportedImagePhase.Error -> {
-                            TextButton(onClick = {
-                                resetLiveArea()
-                                if (freezeState.mode == FreezeMode.Freezing) {
-                                    frozenOwner.cancel()
                                 }
-                                frozenOwner.resume()
-                                importedOwner.beginPicker()
-                            }) {
-                                Text("Import image")
+                                ImportedImagePhase.Picking,
+                                ImportedImagePhase.Reading,
+                                ImportedImagePhase.Recognizing -> importedOwner.cancel()
+                                ImportedImagePhase.Live,
+                                ImportedImagePhase.Error -> {
+                                    resetLiveArea()
+                                    if (freezeState.mode == FreezeMode.Freezing) {
+                                        frozenOwner.cancel()
+                                    }
+                                    frozenOwner.resume()
+                                    importedOwner.beginPicker()
+                                }
                             }
-                        }
-                    }
+                        },
+                    )
                     if (freezeState.error != null) {
                         Text(freezeState.error, color = MaterialTheme.colorScheme.error)
                     }
