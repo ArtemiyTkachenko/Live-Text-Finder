@@ -45,6 +45,26 @@ import com.artkachenko.livetextfinder.ocr.OcrStatus
 import com.artkachenko.livetextfinder.ocr.OcrUiState
 
 @Composable
+internal actual fun LiveSearchAreaLifecycle(onReset: () -> Unit) {
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val latestReset = rememberUpdatedState(onReset)
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) {
+                latestReset.value()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            latestReset.value()
+        }
+    }
+}
+
+internal actual fun liveSearchAreaAvailable(): Boolean = true
+
+@Composable
 internal actual fun CameraPreview(
     modifier: Modifier,
     owner: FrozenFrameOwner,

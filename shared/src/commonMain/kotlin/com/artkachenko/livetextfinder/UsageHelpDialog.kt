@@ -12,6 +12,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.artkachenko.livetextfinder.camera.liveSearchAreaAvailable
 
 @Composable
 internal fun UsageHelpDialog(onDismissRequest: () -> Unit) {
@@ -47,7 +48,14 @@ internal fun UsageHelpDialog(onDismissRequest: () -> Unit) {
                         "Images and OCR stay in memory, are not saved, and are discarded " +
                         "when the app is backgrounded " +
                         "or the screen is recreated. An open photo picker can still complete " +
-                        "after you return.",
+                        "after you return." + if (liveSearchAreaAvailable()) {
+                            " The optional live area restricts live matches to fully contained " +
+                                "words and phrases; it does not crop capture. Frozen, imported, " +
+                                "and shared images use the whole source. Freeze, Import, " +
+                                "backgrounding, or recreation resets the area."
+                        } else {
+                            ""
+                        },
                 )
                 HelpSection(
                     title = "Colour and sharing on Android",

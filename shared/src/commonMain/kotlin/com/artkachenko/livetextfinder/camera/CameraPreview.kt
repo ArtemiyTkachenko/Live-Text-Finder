@@ -6,6 +6,11 @@ import androidx.compose.ui.Modifier
 import com.artkachenko.livetextfinder.ocr.OcrUiState
 
 @Composable
+internal expect fun LiveSearchAreaLifecycle(onReset: () -> Unit)
+
+internal expect fun liveSearchAreaAvailable(): Boolean
+
+@Composable
 internal expect fun rememberFrozenFrameOwner(): FrozenFrameOwner
 
 internal expect class FrozenFrameOwner() {

@@ -34,12 +34,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
@@ -52,6 +58,8 @@ import com.artkachenko.livetextfinder.camera.ImageShareStatus
 import com.artkachenko.livetextfinder.camera.ImportedImagePhase
 import com.artkachenko.livetextfinder.camera.ImportedImagePicker
 import com.artkachenko.livetextfinder.camera.ImportedImagePreview
+import com.artkachenko.livetextfinder.camera.LiveSearchAreaLifecycle
+import com.artkachenko.livetextfinder.camera.liveSearchAreaAvailable
 import com.artkachenko.livetextfinder.camera.rememberFrozenFrameOwner
 import com.artkachenko.livetextfinder.camera.rememberImageShareOwner
 import com.artkachenko.livetextfinder.camera.rememberImportedImageOwner
@@ -60,6 +68,8 @@ import com.artkachenko.livetextfinder.camera.shareImported
 import com.artkachenko.livetextfinder.ocr.OcrStatus
 import com.artkachenko.livetextfinder.ocr.OcrUiState
 import com.artkachenko.livetextfinder.search.HighlightColor
+import com.artkachenko.livetextfinder.search.LiveSearchAreaOwner
+import com.artkachenko.livetextfinder.search.NormalizedSearchArea
 import com.artkachenko.livetextfinder.search.SearchListEditorState
 import com.artkachenko.livetextfinder.search.SearchPresentationOwner
 import com.artkachenko.livetextfinder.search.SearchSessionController
@@ -67,6 +77,7 @@ import com.artkachenko.livetextfinder.search.drawHighlightOutlines
 import com.artkachenko.livetextfinder.search.drawableElementsForSession
 import com.artkachenko.livetextfinder.search.importedHighlightsForDraw
 import com.artkachenko.livetextfinder.search.inMemorySearchSessionController
+import com.artkachenko.livetextfinder.search.isPresentationCurrentAreaRevision
 import com.artkachenko.livetextfinder.search.projectFrozenHighlights
 import com.artkachenko.livetextfinder.search.projectHighlights
 import com.artkachenko.livetextfinder.search.projectImportedHighlights
@@ -93,6 +104,10 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
             var deleteId by remember { mutableStateOf<String?>(null) }
             var resetConfirm by remember { mutableStateOf(false) }
             var colorDialogOpen by remember { mutableStateOf(false) }
+            var areaDialogOpen by remember { mutableStateOf(false) }
+            val areaOwner = remember { LiveSearchAreaOwner() }
+            var areaState by remember { mutableStateOf<NormalizedSearchArea?>(null) }
+            var areaRevision by remember { mutableLongStateOf(areaOwner.revision) }
             var helpDialogOpen by remember { mutableStateOf(false) }
             var previewSize by remember { mutableStateOf(IntSize.Zero) }
             val rootSizeState = remember { mutableStateOf(IntSize.Zero) }
@@ -102,6 +117,13 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
             val frozenOwner = rememberFrozenFrameOwner()
             val shareOwner = rememberImageShareOwner()
             val freezeState = frozenOwner.state.value
+            fun resetLiveArea() {
+                areaOwner.reset()
+                areaState = null
+                areaRevision = areaOwner.revision
+                areaDialogOpen = false
+            }
+            LiveSearchAreaLifecycle(::resetLiveArea)
             val density = LocalDensity.current
             val imeInsets = WindowInsets.ime
             val isContentVisible = {
@@ -114,8 +136,23 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
             }
             val presentationOwner = remember { SearchPresentationOwner() }
             val activeSearch = sessionState.activeSearch
-            val presentation = remember(activeSearch, state, graceTimerRevision) {
-                presentationOwner.present(activeSearch, state, MonotonicClock.nowMillis())
+            val presentation = remember(
+                activeSearch,
+                state,
+                graceTimerRevision,
+                areaState,
+                areaRevision,
+                previewSize,
+            ) {
+                presentationOwner.present(
+                    activeSearch,
+                    state,
+                    MonotonicClock.nowMillis(),
+                    areaState,
+                    areaRevision,
+                    previewSize.width,
+                    previewSize.height,
+                )
             }
             val frozenFrame = freezeState.frame
             val frozenSearch = remember(activeSearch, frozenFrame) {
@@ -269,22 +306,46 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                         importedState.phase == ImportedImagePhase.Error
                     ) {
                         when (freezeState.mode) {
-                            FreezeMode.Live -> TextButton(
-                                onClick = {
-                                    frozenOwner.freeze(
-                                        cameraReady = state.status == OcrStatus.Scanning ||
-                                            state.status == OcrStatus.TextRecognized,
-                                    )
-                                },
-                                enabled = state.status == OcrStatus.Scanning ||
-                                    state.status == OcrStatus.TextRecognized,
+                            FreezeMode.Live -> Row(
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
                             ) {
-                                Text("Freeze frame")
+                                TextButton(
+                                    onClick = {
+                                        resetLiveArea()
+                                        frozenOwner.freeze(
+                                            cameraReady = state.status == OcrStatus.Scanning ||
+                                                state.status == OcrStatus.TextRecognized,
+                                        )
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    enabled = state.status == OcrStatus.Scanning ||
+                                        state.status == OcrStatus.TextRecognized,
+                                ) {
+                                    Text("Freeze frame")
+                                }
+                                if (liveSearchAreaAvailable()) {
+                                    TextButton(
+                                        onClick = {
+                                            areaDialogOpen = true
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                    ) {
+                                        Text(
+                                            if (areaState == null) "Live area: Full frame"
+                                            else "Live area: Custom",
+                                        )
+                                    }
+                                }
                             }
                             FreezeMode.Freezing -> TextButton(onClick = frozenOwner::cancel) {
                                 Text("Cancel freeze")
                             }
-                            FreezeMode.Frozen -> TextButton(onClick = frozenOwner::resume) {
+                            FreezeMode.Frozen -> TextButton(
+                                onClick = {
+                                    resetLiveArea()
+                                    frozenOwner.resume()
+                                },
+                            ) {
                                 Text("Resume live")
                             }
                         }
@@ -292,7 +353,12 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                     when (importedState.phase) {
                         ImportedImagePhase.Unsupported -> Unit
                         ImportedImagePhase.Imported -> {
-                            TextButton(onClick = importedOwner::cancel) {
+                            TextButton(
+                                onClick = {
+                                    resetLiveArea()
+                                    importedOwner.cancel()
+                                },
+                            ) {
                                 Text("Return to camera")
                             }
                         }
@@ -306,6 +372,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                         ImportedImagePhase.Live,
                         ImportedImagePhase.Error -> {
                             TextButton(onClick = {
+                                resetLiveArea()
                                 if (freezeState.mode == FreezeMode.Freezing) {
                                     frozenOwner.cancel()
                                 }
@@ -376,10 +443,14 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                                 }
                                 search.snapshot == null -> "Search paused · see camera status"
                                 search.query.isEmpty() -> "Enter text to search"
+                                areaState != null && !presentation.areaReady ->
+                                    "Waiting for live area mapping"
                                 search.occurrences.isEmpty() &&
                                     presentation.outlinedElements.isNotEmpty() ->
                                     "No current matches · retaining " +
                                         "${presentation.outlinedElements.size} outlines briefly"
+                                search.occurrences.isEmpty() && areaState != null ->
+                                    "No matches in the live area"
                                 search.occurrences.isEmpty() -> "No matches in recognized text"
                                 !highlights.ready -> {
                                     "Recognized matches: ${search.occurrences.size} · " +
@@ -562,7 +633,30 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                             val currentFreezeState = frozenOwner.state.value
                             val currentSearchIdentity = session.state.value.activeSearch.identity
                             val currentImportState = importedOwner.state.value
-                            val outlines = if (
+                            val areaIsCurrent =
+                                isPresentationCurrentAreaRevision(
+                                    presentation,
+                                    areaOwner.revision,
+                                ) &&
+                                areaRevision == presentation.areaRevision
+                            val liveAreaIsDisplayed = areaIsCurrent && areaState != null &&
+                                importedState.phase != ImportedImagePhase.Imported &&
+                                importedState.phase != ImportedImagePhase.Picking &&
+                                importedState.phase != ImportedImagePhase.Reading &&
+                                importedState.phase != ImportedImagePhase.Recognizing &&
+                                currentFreezeState.mode == FreezeMode.Live &&
+                                currentImportState.phase != ImportedImagePhase.Imported &&
+                                currentImportState.phase != ImportedImagePhase.Picking &&
+                                currentImportState.phase != ImportedImagePhase.Reading &&
+                                currentImportState.phase != ImportedImagePhase.Recognizing &&
+                                areaOwner.area == areaState &&
+                                isContentVisible() &&
+                                size.width == previewSize.width.toFloat() &&
+                                size.height == previewSize.height.toFloat() &&
+                                size.width > 0f && size.height > 0f
+                            val outlines = if (!areaIsCurrent) {
+                                emptyList()
+                            } else if (
                                 importedState.phase == ImportedImagePhase.Imported ||
                                 currentImportState.phase == ImportedImagePhase.Imported
                             ) {
@@ -614,9 +708,61 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                                     emptyList()
                                 }
                             }
-                            drawHighlightOutlines(
-                                outlines,
-                                session.state.value.persisted.highlightColor,
+                            if (liveAreaIsDisplayed) {
+                                val area = checkNotNull(areaState)
+                                clipRect(
+                                    left = area.left * size.width,
+                                    top = area.top * size.height,
+                                    right = area.right * size.width,
+                                    bottom = area.bottom * size.height,
+                                ) {
+                                    drawHighlightOutlines(
+                                        outlines,
+                                        session.state.value.persisted.highlightColor,
+                                    )
+                                }
+                            } else {
+                                drawHighlightOutlines(
+                                    outlines,
+                                    session.state.value.persisted.highlightColor,
+                                )
+                            }
+                            if (liveAreaIsDisplayed) {
+                                val area = checkNotNull(areaState)
+                                drawRect(
+                                    color = Color.White,
+                                    topLeft = Offset(
+                                        area.left * size.width,
+                                        area.top * size.height,
+                                    ),
+                                    size = Size(
+                                        (area.right - area.left) * size.width,
+                                        (area.bottom - area.top) * size.height,
+                                    ),
+                                    style = Stroke(
+                                        width = 3.dp.toPx(),
+                                        pathEffect = PathEffect.dashPathEffect(
+                                            floatArrayOf(10.dp.toPx(), 6.dp.toPx()),
+                                        ),
+                                    ),
+                                )
+                            }
+                        }
+                        if (areaState != null &&
+                            areaOwner.revision == presentation.areaRevision &&
+                            areaOwner.area == areaState &&
+                            importedState.phase != ImportedImagePhase.Imported &&
+                            importedOwner.state.value.phase != ImportedImagePhase.Imported &&
+                            frozenOwner.state.value.mode == FreezeMode.Live &&
+                            isContentVisible()
+                        ) {
+                            Text(
+                                "Live area",
+                                modifier = Modifier.align(Alignment.TopStart)
+                                    .padding(8.dp)
+                                    .background(Color.Black.copy(alpha = 0.7f))
+                                    .padding(horizontal = 6.dp, vertical = 3.dp),
+                                color = Color.White,
                             )
                         }
                     }
@@ -708,6 +854,18 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                     },
                     dismissButton = {
                         TextButton(onClick = { resetConfirm = false }) { Text("Cancel") }
+                    },
+                )
+            }
+            if (areaDialogOpen && liveSearchAreaAvailable()) {
+                LiveSearchAreaDialog(
+                    area = areaState,
+                    revision = areaRevision,
+                    owner = areaOwner,
+                    onDismiss = {
+                        areaState = areaOwner.area
+                        areaRevision = areaOwner.revision
+                        areaDialogOpen = false
                     },
                 )
             }

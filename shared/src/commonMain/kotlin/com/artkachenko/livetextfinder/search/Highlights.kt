@@ -232,7 +232,7 @@ internal class PixelTransform(private val values: List<Double>) {
     }
 }
 
-private fun elementPolygon(element: TextElement): List<PreviewPoint>? {
+internal fun elementPolygon(element: TextElement): List<PreviewPoint>? {
     val corners = element.corners.map { PreviewPoint(it.x.toFloat(), it.y.toFloat()) }
     if (validPolygon(corners)) return corners
     val bounds = element.bounds ?: return null
@@ -244,7 +244,7 @@ private fun elementPolygon(element: TextElement): List<PreviewPoint>? {
 }
 
 /** Requires an ordered convex quadrilateral; self-crossing/duplicate/collinear corners fall back. */
-private fun validPolygon(points: List<PreviewPoint>): Boolean {
+internal fun validPolygon(points: List<PreviewPoint>): Boolean {
     if (points.size != 4 || points.any { !it.x.isFinite() || !it.y.isFinite() }) return false
     val turns = points.indices.map { j ->
         val a = points[j]; val b = points[(j + 1) % 4]; val c = points[(j + 2) % 4]

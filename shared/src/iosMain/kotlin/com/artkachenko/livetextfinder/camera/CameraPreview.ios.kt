@@ -3,6 +3,7 @@ package com.artkachenko.livetextfinder.camera
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
@@ -12,6 +13,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import com.artkachenko.livetextfinder.ocr.OcrStatus
 import com.artkachenko.livetextfinder.ocr.OcrUiState
+
+@Composable
+internal actual fun LiveSearchAreaLifecycle(onReset: () -> Unit) {
+    DisposableEffect(Unit) {
+        onDispose {
+            onReset()
+        }
+    }
+}
+
+internal actual fun liveSearchAreaAvailable(): Boolean = false
 
 @Composable
 internal actual fun rememberFrozenFrameOwner(): FrozenFrameOwner = remember { FrozenFrameOwner() }
