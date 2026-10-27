@@ -48,3 +48,7 @@ The coordinator selected this bounded next prototype increment under the user's 
 ## Android single-image import — 2026-10-27
 
 The next bounded increment adds a system image picker, bounded JPEG/PNG/WebP decoding with EXIF orientation, recognition of the exact normalized image and searchable memory-only presentation. It preserves camera provenance and suspends camera work during import. Independent source review, corrections and compilation/host checks precede commit. Picker/provider behavior, native OCR, orientation and lifecycle UI acceptance remain pending user device checks. Export/sharing, persistent images/URIs, iOS import/OCR, preview shrinking and APK generation are excluded.
+
+## Android annotated still sharing — 2026-10-27
+
+The coordinator selected explicit sharing of one frozen/imported image with current highlights as the next bounded increment. It adds background upright rendering and capped PNG encoding, a private temporary cache, narrow FileProvider read access and the Android Sharesheet. Current-source/search validation and cancellation prevent late chooser launches; handed-off files survive lifecycle cleanup. Independent source-first review and actual renderer/encoder/provider/ownership tests precede commit. No gallery save, permanent history, iOS share, backend, APK or real external share is included in development checks; user device acceptance remains deferred.

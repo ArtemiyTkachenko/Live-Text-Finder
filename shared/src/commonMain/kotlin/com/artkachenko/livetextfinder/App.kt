@@ -40,11 +40,15 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.artkachenko.livetextfinder.camera.CameraPreview
 import com.artkachenko.livetextfinder.camera.FreezeMode
+import com.artkachenko.livetextfinder.camera.ImageShareStatus
 import com.artkachenko.livetextfinder.camera.ImportedImagePhase
 import com.artkachenko.livetextfinder.camera.ImportedImagePicker
 import com.artkachenko.livetextfinder.camera.ImportedImagePreview
 import com.artkachenko.livetextfinder.camera.rememberFrozenFrameOwner
+import com.artkachenko.livetextfinder.camera.rememberImageShareOwner
 import com.artkachenko.livetextfinder.camera.rememberImportedImageOwner
+import com.artkachenko.livetextfinder.camera.shareFrozen
+import com.artkachenko.livetextfinder.camera.shareImported
 import com.artkachenko.livetextfinder.ocr.OcrStatus
 import com.artkachenko.livetextfinder.ocr.OcrUiState
 import com.artkachenko.livetextfinder.search.SearchListEditorState
@@ -84,6 +88,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
             var rootSize by rootSizeState
             var graceTimerRevision by remember { mutableIntStateOf(0) }
             val frozenOwner = rememberFrozenFrameOwner()
+            val shareOwner = rememberImageShareOwner()
             val freezeState = frozenOwner.state.value
             val density = LocalDensity.current
             val imeInsets = WindowInsets.ime
@@ -116,6 +121,16 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                 }
             }
             val search = importedSearch ?: cameraSearch
+            val sourceIdentity = when {
+                importedState.phase == ImportedImagePhase.Imported ->
+                    "import:${importedState.snapshot?.sourceIdentity}"
+                freezeState.mode == FreezeMode.Frozen ->
+                    "frozen:${freezeState.frame?.identity}"
+                else -> null
+            }
+            LaunchedEffect(sourceIdentity, activeSearch.identity) {
+                shareOwner.updateCurrent(sourceIdentity, activeSearch.identity)
+            }
             LaunchedEffect(presentation.expiresAtMillis) {
                 val deadline = presentation.expiresAtMillis ?: return@LaunchedEffect
                 val wait = deadline - MonotonicClock.nowMillis()
@@ -336,6 +351,53 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.heightIn(min = 40.dp, max = 40.dp),
                         )
+                    }
+                    if (sourceIdentity != null) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(
+                                onClick = {
+                                    if (importedState.phase == ImportedImagePhase.Imported) {
+                                        shareOwner.shareImported(
+                                            importedOwner,
+                                            search,
+                                            currentSourceIdentity = {
+                                                importedOwner.state.value.snapshot?.let {
+                                                    "import:${it.sourceIdentity}"
+                                                }
+                                            },
+                                            currentSearchIdentity = {
+                                                session.state.value.activeSearch.identity
+                                            },
+                                        )
+                                    } else {
+                                        shareOwner.shareFrozen(
+                                            frozenOwner,
+                                            search,
+                                            currentSourceIdentity = {
+                                                frozenOwner.state.value.frame?.let {
+                                                    "frozen:${it.identity}"
+                                                }
+                                            },
+                                            currentSearchIdentity = {
+                                                session.state.value.activeSearch.identity
+                                            },
+                                        )
+                                    }
+                                },
+                                enabled = shareOwner.state.value.status !=
+                                    ImageShareStatus.Preparing,
+                            ) {
+                                Text(
+                                    if (shareOwner.state.value.status ==
+                                        ImageShareStatus.Preparing
+                                    ) "Preparing image…" else "Share image",
+                                )
+                            }
+                            if (shareOwner.state.value.status == ImageShareStatus.Preparing) {
+                                TextButton(onClick = shareOwner::cancel) { Text("Cancel") }
+                            }
+                        }
+                        shareOwner.state.value.message?.let { message -> Text(message) }
                     }
                 }
                 if (managerOpen) {

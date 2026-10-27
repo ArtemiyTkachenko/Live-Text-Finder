@@ -1,5 +1,15 @@
 # Validation
 
+## Android annotated still sharing — 2026-10-27
+
+The bounded increment prepares one upright, highlighted PNG from a retained frozen/imported source and opens Android's chooser through a narrow FileProvider read grant. Only explicit sharing creates a temporary derivative; retained source images and OCR remain memory-only. No APK, device run or real external share was performed.
+
+The final corrected implementation passed Android/iOS compilation, all **153 host tests with zero failures/errors/skips**, and lint with **zero errors, 13 warnings** in 10s. Production rendering/PNG encoding and real FileProvider URI reads exercise asymmetric pixels, all frozen rotations, zero/multiple matches, fallback/clipping/deduplication and merged manifest/path metadata. Other tests cover search/source invalidation, failure cleanup/retry, intent grants and cache expiry/quota/reservation/encoded-size bounds. Robolectric provider setup attaches the real provider to each test context to reset AndroidX's static path cache; it does not replace the provider or bypass URI access.
+
+Initial independent review identified allocation failure escaping main publication and missing ownership/capture coverage. The worker now retains cleanup ownership through a main-thread completion signal, catches launch allocation failure and releases the gate after safe cleanup. After the ordinary correction cycle, a planner reassessment closed three remaining evidence gaps without changing production scope: pending owner disposal/recreation, independent frozen-source resume/replacement and actual manual/list mutation before rendering. Real PNG pixels preserve captured geometry while stale handoff is rejected. Final independent verification: **PASS WITH LIMITATIONS**, no remaining material findings. All 133 pre-sharing tests remain, with 20 sharing boundary tests. No configured Kotlin formatter exists; scoped manual review and a limited static audit found no remaining introduced issues. Earlier failed test setup/landmark attempts are not passing evidence.
+
+Pending device acceptance: chooser appearance/cancellation, recipient access, image orientation/outlines, background/return behavior, preparation responsiveness and memory use. A successful chooser launch does not establish recipient delivery or saving. Temporary cache files are eligible for cleanup after 24 hours during initialization or subsequent preparation; handed-off files survive chooser return and ordinary owner disposal. Raw logs, generated stage reports and coordinator state stay local and untracked.
+
 ## Android single-image import — 2026-10-27
 
 Import uses the system single-image picker, a bounded JPEG/PNG/WebP decoder with all EXIF orientations, bundled on-device OCR and a separate normalized imported snapshot. The imported bitmap remains memory-only and is searchable with manual queries or named lists. No APK or device run was performed.
