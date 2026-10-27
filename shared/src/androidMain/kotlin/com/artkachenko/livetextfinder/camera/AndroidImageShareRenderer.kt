@@ -44,27 +44,31 @@ internal object AndroidImageShareRenderer {
         val output = source.copy(Bitmap.Config.ARGB_8888, true)
         try {
             val canvas = Canvas(output)
-            outlines.forEach { outline ->
-                val path = android.graphics.Path().apply {
-                    outline.points.forEachIndexed { index, point ->
-                        if (index == 0) {
-                            moveTo(point.x, point.y)
-                        } else {
-                            lineTo(point.x, point.y)
-                        }
+            val paths = outlines.mapNotNull { outline ->
+                val first = outline.points.firstOrNull() ?: return@mapNotNull null
+                android.graphics.Path().apply {
+                    moveTo(first.x, first.y)
+                    outline.points.drop(1).forEach { point ->
+                        lineTo(point.x, point.y)
                     }
                     close()
                 }
-                canvas.drawPath(path, Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = Color.BLACK
-                    style = Paint.Style.STROKE
-                    strokeWidth = 6f
-                })
-                canvas.drawPath(path, Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = highlightColor.argb.toInt()
-                    style = Paint.Style.STROKE
-                    strokeWidth = 3f
-                })
+            }
+            val blackPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.BLACK
+                style = Paint.Style.STROKE
+                strokeWidth = 6f
+            }
+            val highlightPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = highlightColor.argb.toInt()
+                style = Paint.Style.STROKE
+                strokeWidth = 3f
+            }
+            paths.forEach { path ->
+                canvas.drawPath(path, blackPaint)
+            }
+            paths.forEach { path ->
+                canvas.drawPath(path, highlightPaint)
             }
             return output
         } catch (error: Throwable) {

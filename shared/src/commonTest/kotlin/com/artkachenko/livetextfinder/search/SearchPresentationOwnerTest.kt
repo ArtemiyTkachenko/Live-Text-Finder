@@ -6,6 +6,12 @@ import com.artkachenko.livetextfinder.ocr.OcrUiState
 import com.artkachenko.livetextfinder.ocr.TextBounds
 import com.artkachenko.livetextfinder.ocr.TextElement
 import com.artkachenko.livetextfinder.ocr.TextLine
+import com.artkachenko.livetextfinder.ocr.TextPoint
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.hypot
+import kotlin.math.roundToInt
+import kotlin.math.sin
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -20,7 +26,14 @@ class SearchPresentationOwnerTest {
     private val frameIdentity = FrameIdentity(7, 3)
     private val owner = SearchPresentationOwner()
 
-    private data class Box(val text: String, val left: Int, val top: Int = 20, val right: Int = left + 40, val bottom: Int = 50)
+    private data class Box(
+        val text: String,
+        val left: Int,
+        val top: Int = 20,
+        val right: Int = left + 40,
+        val bottom: Int = 50,
+        val corners: List<TextPoint> = emptyList(),
+    )
 
     private fun state(
         boxes: List<Box>,
@@ -31,7 +44,11 @@ class SearchPresentationOwnerTest {
         previewTarget: PreviewTarget = target,
     ): OcrUiState {
         val elements = boxes.map { box ->
-            TextElement(box.text, TextBounds(box.left, box.top, box.right, box.bottom), emptyList())
+            TextElement(
+                box.text,
+                TextBounds(box.left, box.top, box.right, box.bottom),
+                box.corners,
+            )
         }
         val text = boxes.joinToString(" ") { it.text }
         val snapshot = com.artkachenko.livetextfinder.ocr.OcrSnapshot(
@@ -53,6 +70,31 @@ class SearchPresentationOwnerTest {
         state: OcrUiState,
         now: Long,
     ) = owner.present(spec, state, now)
+
+    private fun rotatedSquare(
+        degrees: Double,
+        timestamp: Long,
+        receipt: Long,
+        reverse: Boolean = false,
+    ): OcrUiState {
+        val radians = degrees * PI / 180.0
+        val cosine = cos(radians)
+        val sine = sin(radians)
+        val corners = listOf(10 to 10, 90 to 10, 90 to 90, 10 to 90).map { (x, y) ->
+            val deltaX = x - 50
+            val deltaY = y - 50
+            TextPoint(
+                (50 + deltaX * cosine - deltaY * sine).roundToInt(),
+                (50 + deltaX * sine + deltaY * cosine).roundToInt(),
+            )
+        }.let { points -> if (reverse) points.reversed() else points }
+        return state(
+            listOf(Box("alpha", 10, 10, 90, 90, corners)),
+            timestamp,
+            receipt,
+        )
+    }
+
     private fun byLeft(presentation: SearchPresentation, left: Float) =
         presentation.occurrences.first { it.boundsLeft() == left }
     private fun PresentedOccurrence.boundsLeft() = outlines.flatMap { it.points }.minOf { it.x }
@@ -75,6 +117,386 @@ class SearchPresentationOwnerTest {
         assertEquals(100L, heldB.firstMissingAtMillis)
         assertEquals(400L, heldB.expiresAtMillis)
         assertSame(initial.occurrences[1].snapshot, heldB.snapshot)
+    }
+
+    @Test
+    fun displayOutlineScaffoldingDefaultsToExactRawGeometry() {
+        val source = state(listOf(Box("alpha", 10)), 1, 0)
+        val presentation = present("alpha", source, 0)
+
+        assertEquals(1, presentation.outlinedElements.size)
+        val element = presentation.outlinedElements.single()
+        assertSame(element.outline, element.displayOutline)
+        assertSame(source.snapshot, element.snapshot)
+        assertSame(source.snapshot, element.group.snapshot)
+    }
+
+    @Test
+    fun uniquelyMatchedLiveDisplayReducesSmallTranslationWhileRawGeometryStaysCurrent() {
+        val firstState = state(listOf(Box("alpha", 10)), 1, 0)
+        present("alpha", firstState, 0)
+        val currentState = state(listOf(Box("alpha", 12)), 2, 100)
+
+        val presentation = present("alpha", currentState, 100)
+
+        val element = presentation.outlinedElements.single()
+        val rawLeft = element.outline.points.minOf { it.x }
+        val displayLeft = element.displayOutline.points.minOf { it.x }
+        assertEquals(12f, rawLeft)
+        assertSame(currentState.snapshot, element.snapshot)
+        assertSame(currentState.snapshot, element.group.snapshot)
+        assertTrue(displayLeft > 10f && displayLeft < rawLeft)
+        assertTrue(rawLeft - displayLeft <= 3f)
+    }
+
+    @Test
+    fun eligibleLiveDrawableCarriesThePairedDisplayOutlineAndCurrentRawOutline() {
+        val firstState = state(listOf(Box("alpha", 10)), 1, 0)
+        present("alpha", firstState, 0)
+        val currentState = state(listOf(Box("alpha", 12)), 2, 100)
+        val presentation = present("alpha", currentState, 100)
+
+        val drawable = drawableElements(
+            "alpha",
+            "alpha",
+            presentation,
+            currentState,
+            100,
+            400f,
+            200f,
+        ).single()
+
+        assertEquals(12f, drawable.outline.points.minOf { it.x })
+        assertTrue(drawable.displayOutline.points.minOf { it.x } in 10.1f..11.9f)
+        assertSame(currentState.snapshot, drawable.snapshot)
+    }
+
+    @Test
+    fun alternatingTwoAxisLiveJitterStaysWithinThreePixelsAndReducesDisplayedMotion() {
+        val localOwner = SearchPresentationOwner()
+        val base = Box("alpha", 100, top = 60, right = 140, bottom = 90)
+        val firstState = state(listOf(base), 1, 0)
+        val first = localOwner.present("alpha", firstState, 0).outlinedElements.single()
+        var previousRaw = first.outline.points
+        var previousDisplay = first.displayOutline.points
+        val shifts = listOf(2 to 2, -2 to -2, 2 to -2, -2 to 2, 2 to 2, -2 to -2)
+
+        shifts.forEachIndexed { index, (shiftX, shiftY) ->
+            val current = state(
+                listOf(
+                    base.copy(
+                        left = base.left + shiftX,
+                        top = base.top + shiftY,
+                        right = base.right + shiftX,
+                        bottom = base.bottom + shiftY,
+                    ),
+                ),
+                timestamp = index + 2L,
+                receipt = (index + 1) * 100L,
+            )
+            val presentation = localOwner.present("alpha", current, (index + 1) * 100L)
+            val drawable = drawableElements(
+                "alpha",
+                "alpha",
+                presentation,
+                current,
+                (index + 1) * 100L,
+                400f,
+                200f,
+            ).single()
+            val expectedRaw = listOf(
+                PreviewPoint(100f + shiftX, 60f + shiftY),
+                PreviewPoint(140f + shiftX, 60f + shiftY),
+                PreviewPoint(140f + shiftX, 90f + shiftY),
+                PreviewPoint(100f + shiftX, 90f + shiftY),
+            )
+            val rawStep = hypot(
+                (drawable.outline.points.first().x - previousRaw.first().x).toDouble(),
+                (drawable.outline.points.first().y - previousRaw.first().y).toDouble(),
+            )
+            val displayStep = hypot(
+                (drawable.displayOutline.points.first().x - previousDisplay.first().x).toDouble(),
+                (drawable.displayOutline.points.first().y - previousDisplay.first().y).toDouble(),
+            )
+
+            assertEquals(expectedRaw, drawable.outline.points)
+            assertSame(current.snapshot, drawable.snapshot)
+            assertSame(current.snapshot, drawable.projection.snapshot)
+            drawable.outline.points.zip(drawable.displayOutline.points).forEach { (raw, display) ->
+                val error = hypot(
+                    (raw.x - display.x).toDouble(),
+                    (raw.y - display.y).toDouble(),
+                )
+                assertTrue(error <= 3.0)
+            }
+            assertTrue(displayStep < rawStep)
+            previousRaw = drawable.outline.points
+            previousDisplay = drawable.displayOutline.points
+        }
+    }
+
+    @Test
+    fun staleLatestReceiptCannotExposeSmoothedDisplayGeometry() {
+        val firstState = state(listOf(Box("alpha", 10)), 1, 0)
+        present("alpha", firstState, 0)
+        val currentState = state(listOf(Box("alpha", 12)), 2, 100)
+        val presentation = present("alpha", currentState, 100)
+
+        assertTrue(
+            drawableElements(
+                "alpha",
+                "alpha",
+                presentation,
+                currentState.copy(receivedAtMillis = 101),
+                100,
+                400f,
+                200f,
+            ).isEmpty(),
+        )
+    }
+
+    @Test
+    fun constantInputConvergesAndTimerRecompositionDoesNotBlendAgain() {
+        val localOwner = SearchPresentationOwner()
+        val first = state(listOf(Box("alpha", 10)), 1, 0)
+        localOwner.present("alpha", first, 0)
+        val frames = (1..5).map { index ->
+            state(listOf(Box("alpha", 12)), index + 1L, index * 100L)
+        }
+
+        val displayed = frames.mapIndexed { index, frame ->
+            localOwner.present("alpha", frame, (index + 1) * 100L)
+                .outlinedElements.single().displayOutline.points.minOf { it.x }
+        }
+        val repeated = localOwner.present("alpha", frames.last(), 700)
+
+        assertEquals(listOf(11f, 11.5f, 11.75f, 12f, 12f), displayed)
+        assertEquals(12f, repeated.outlinedElements.single().displayOutline.points.minOf { it.x })
+        assertEquals(12f, repeated.outlinedElements.single().outline.points.minOf { it.x })
+    }
+
+    @Test
+    fun firstDetectionLargeMovementAndReappearingOccurrenceUseRawGeometryImmediately() {
+        val localOwner = SearchPresentationOwner()
+        val first = state(listOf(Box("alpha", 10)), 1, 0)
+        assertEquals(
+            10f,
+            localOwner.present("alpha", first, 0).outlinedElements.single()
+                .displayOutline.points.minOf { it.x },
+        )
+
+        val jittered = state(listOf(Box("alpha", 12)), 2, 100)
+        localOwner.present("alpha", jittered, 100)
+        val missing = state(emptyList(), 3, 200)
+        val held = localOwner.present("alpha", missing, 200)
+        assertEquals(11f, held.outlinedElements.single().displayOutline.points.minOf { it.x })
+
+        val returned = state(listOf(Box("alpha", 14)), 4, 300)
+        val reappeared = localOwner.present("alpha", returned, 300).outlinedElements.single()
+        assertEquals(14f, reappeared.outline.points.minOf { it.x })
+        assertEquals(14f, reappeared.displayOutline.points.minOf { it.x })
+
+        val displaced = state(listOf(Box("alpha", 300)), 5, 400)
+        val moved = localOwner.present("alpha", displaced, 400).outlinedElements.single()
+        assertEquals(300f, moved.outline.points.minOf { it.x })
+        assertEquals(300f, moved.displayOutline.points.minOf { it.x })
+    }
+
+    @Test
+    fun stabilizationAcceptsTenPercentSizeBoundaryAndRejectsLargerShapeChange() {
+        val localOwner = SearchPresentationOwner()
+        localOwner.present("alpha", state(listOf(Box("alpha", 10)), 1, 0), 0)
+        val exactBoundary = state(listOf(Box("alpha", 10, right = 54)), 2, 100)
+        val blended = localOwner.present("alpha", exactBoundary, 100).outlinedElements.single()
+
+        assertEquals(54f, blended.outline.points.maxOf { it.x })
+        assertTrue(blended.displayOutline.points.maxOf { it.x } < 54f)
+
+        val outsideBoundary = state(listOf(Box("alpha", 10, right = 59)), 3, 200)
+        val raw = localOwner.present("alpha", outsideBoundary, 200).outlinedElements.single()
+        assertEquals(raw.outline.points, raw.displayOutline.points)
+    }
+
+    @Test
+    fun sixPixelVertexStepBlendsButLargerStepUsesRawGeometry() {
+        val boundaryOwner = SearchPresentationOwner()
+        boundaryOwner.present("alpha", state(listOf(Box("alpha", 10)), 1, 0), 0)
+        val sixPixel = boundaryOwner.present(
+            "alpha",
+            state(listOf(Box("alpha", 16)), 2, 100),
+            100,
+        ).outlinedElements.single()
+        assertEquals(16f, sixPixel.outline.points.minOf { it.x })
+        assertEquals(13f, sixPixel.displayOutline.points.minOf { it.x })
+
+        val beyondBoundaryOwner = SearchPresentationOwner()
+        beyondBoundaryOwner.present("alpha", state(listOf(Box("alpha", 10)), 1, 0), 0)
+        val sevenPixel = beyondBoundaryOwner.present(
+            "alpha",
+            state(listOf(Box("alpha", 17)), 2, 100),
+            100,
+        ).outlinedElements.single()
+        assertEquals(sevenPixel.outline.points, sevenPixel.displayOutline.points)
+    }
+
+    @Test
+    fun edgeAngleAndWindingChangesBeyondFiveDegreesResetDisplayToRaw() {
+        val localOwner = SearchPresentationOwner()
+        localOwner.present("alpha", rotatedSquare(0.0, 1, 0), 0)
+        val withinAngle = localOwner.present("alpha", rotatedSquare(4.0, 2, 100), 100)
+            .outlinedElements.single()
+        assertTrue(withinAngle.displayOutline.points != withinAngle.outline.points)
+
+        val beyondAngle = localOwner.present("alpha", rotatedSquare(10.0, 3, 200), 200)
+            .outlinedElements.single()
+        assertEquals(beyondAngle.outline.points, beyondAngle.displayOutline.points)
+
+        val reversed = rotatedSquare(10.0, 4, 300, reverse = true)
+        val changedWinding = localOwner.present("alpha", reversed, 300).outlinedElements.single()
+        assertEquals(changedWinding.outline.points, changedWinding.displayOutline.points)
+    }
+
+    @Test
+    fun reorderedElementCorrespondenceAndChangedSearchIdentityDoNotReuseDisplayGeometry() {
+        val localOwner = SearchPresentationOwner()
+        localOwner.present(
+            "echo",
+            state(listOf(Box("echo", 10), Box("echo", 150)), 1, 0),
+            0,
+        )
+        val shifted = state(listOf(Box("echo", 12), Box("echo", 152)), 2, 100)
+        localOwner.present("echo", shifted, 100)
+        val reordered = state(listOf(Box("echo", 154), Box("echo", 14)), 3, 200)
+        val reorderedPresentation = localOwner.present("echo", reordered, 200)
+
+        assertTrue(reorderedPresentation.outlinedElements.all {
+            it.outline.points == it.displayOutline.points
+        })
+        val changedQuery = state(listOf(Box("echo", 16)), 4, 300)
+        val changedSearch = localOwner.present("echo ", changedQuery, 300)
+        assertEquals(
+            changedSearch.outlinedElements.single().outline.points,
+            changedSearch.outlinedElements.single().displayOutline.points,
+        )
+    }
+
+    @Test
+    fun ambiguousRepeatedTokensUseRawGeometryForEveryCurrentOccurrence() {
+        val localOwner = SearchPresentationOwner()
+        val sameLocation = listOf(Box("echo", 30), Box("echo", 30))
+        localOwner.present("echo", state(sameLocation, 1, 0), 0)
+        val current = state(listOf(Box("echo", 32), Box("echo", 32)), 2, 100)
+
+        val presentation = localOwner.present("echo", current, 100)
+
+        assertEquals(2, presentation.outlinedElements.size)
+        assertTrue(presentation.outlinedElements.all {
+            it.outline.points == it.displayOutline.points
+        })
+    }
+
+    @Test
+    fun repeatedTokensInsideOnePhraseUseRawGeometryAfterMotion() {
+        val localOwner = SearchPresentationOwner()
+        localOwner.present(
+            "echo echo",
+            state(listOf(Box("echo", 10), Box("echo", 55)), 1, 0),
+            0,
+        )
+        val current = state(listOf(Box("echo", 12), Box("echo", 57)), 2, 100)
+
+        val presentation = localOwner.present("echo echo", current, 100)
+
+        assertEquals(1, presentation.occurrences.size)
+        assertEquals(2, presentation.occurrences.single().outlines.size)
+        assertEquals(
+            presentation.occurrences.single().outlines,
+            presentation.occurrences.single().displayOutlines,
+        )
+    }
+
+    @Test
+    fun drawableGuardRejectsDisplayOutlinePairedWithAnotherRawElement() {
+        val localOwner = SearchPresentationOwner()
+        localOwner.present(
+            "alpha beta",
+            state(listOf(Box("alpha", 10), Box("beta", 60)), 1, 0),
+            0,
+        )
+        val current = state(listOf(Box("alpha", 12), Box("beta", 62)), 2, 100)
+        val presentation = localOwner.present("alpha beta", current, 100)
+        val elements = presentation.outlinedElements
+        assertEquals(2, elements.size)
+
+        val mismatched = presentation.copy(
+            outlinedElements = listOf(
+                elements[0].copy(displayOutline = elements[1].displayOutline),
+                elements[1],
+            ),
+        )
+
+        val drawable = drawableElements(
+            "alpha beta",
+            "alpha beta",
+            mismatched,
+            current,
+            100,
+            400f,
+            200f,
+        )
+        assertEquals(1, drawable.size)
+        assertEquals(elements[1].outline, drawable.single().outline)
+    }
+
+    @Test
+    fun sessionTargetAndSearchIdentityChangesStartFromRawGeometry() {
+        val localOwner = SearchPresentationOwner()
+        localOwner.present("alpha", state(listOf(Box("alpha", 10)), 1, 0), 0)
+        localOwner.present("alpha", state(listOf(Box("alpha", 12)), 2, 100), 100)
+
+        val newSession = state(
+            listOf(Box("alpha", 14)),
+            3,
+            200,
+            identity = frameIdentity.copy(generation = frameIdentity.generation + 1),
+        )
+        val sessionReset = localOwner.present("alpha", newSession, 200).outlinedElements.single()
+        assertEquals(sessionReset.outline.points, sessionReset.displayOutline.points)
+
+        val shiftedTarget = target.copy(sensorToView = listOf(
+            1f, 0f, 1f, 0f, 1f, 0f, 0f, 0f, 1f,
+        ))
+        val targetResetState = state(
+            listOf(Box("alpha", 16)),
+            4,
+            300,
+            identity = frameIdentity.copy(generation = frameIdentity.generation + 2),
+            previewTarget = shiftedTarget,
+        )
+        val targetReset = localOwner.present(
+            "alpha",
+            targetResetState,
+            300,
+        ).outlinedElements.single()
+        assertEquals(targetReset.outline.points, targetReset.displayOutline.points)
+
+        val newSearch = ActiveSearchSpec(
+            identity = "changed-search",
+            displayName = "Alpha",
+            terms = listOf(SearchTerm("alpha", "alpha")),
+        )
+        val searchReset = localOwner.present(
+            newSearch,
+            state(
+                listOf(Box("alpha", 18)),
+                5,
+                400,
+                identity = checkNotNull(targetResetState.projection).identity,
+                previewTarget = shiftedTarget,
+            ),
+            400,
+        ).outlinedElements.single()
+        assertEquals(searchReset.outline.points, searchReset.displayOutline.points)
     }
 
     @Test fun independentMissingDeadlinesDoNotRenewWhenOtherOccurrenceKeepsUpdating() {

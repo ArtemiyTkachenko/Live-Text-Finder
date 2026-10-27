@@ -7,7 +7,7 @@ import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
 
-/** Owns per-occurrence presentation and never combines geometry from different OCR snapshots. */
+/** Owns per-occurrence raw provenance and separate bounded live display geometry. */
 internal class SearchPresentationOwner {
     private var searchIdentity: String? = null
     private var contextIdentity: FrameIdentity? = null
@@ -160,6 +160,14 @@ internal class SearchPresentationOwner {
         val freshForOld = matching.pairs.associate { it.oldIndex to it.newIndex }
         val oldForFresh = matching.pairs.associate { it.newIndex to it.oldIndex }
         val ambiguousOld = matching.ambiguousOld
+        val displayedFresh = fresh.mapIndexed { newIndex, current ->
+            val previousIndex = matching.pairs.singleOrNull { it.newIndex == newIndex }?.oldIndex
+            val previousGroup = previousIndex?.let { eligiblePrevious[it] }
+            val displayOutlines = previousGroup?.let { previous ->
+                stabilizeLiveOutlines(previous, current)
+            } ?: current.outlines
+            current.copy(displayOutlines = displayOutlines)
+        }
 
         val retained = eligiblePrevious.mapIndexedNotNull { oldIndex, old ->
             if (oldIndex in freshForOld || oldIndex in ambiguousOld) return@mapIndexedNotNull null
@@ -184,8 +192,8 @@ internal class SearchPresentationOwner {
                 expiresAtMillis = expiry,
             )
         }
-        // Every fresh group becomes visible immediately with its own exact source frame.
-        return fresh + retained
+        // Fresh groups retain current raw frame provenance; display geometry is separately bounded.
+        return displayedFresh + retained
     }
 
     private fun associate(
@@ -237,14 +245,20 @@ internal class SearchPresentationOwner {
         val projection = state.projection?.takeIf { it.snapshot === search.snapshot }
         val elements = mutableListOf<PresentedElement>()
         groups.forEach { group ->
-            group.outlines.forEach { outline ->
+            group.outlines.forEachIndexed { outlineIndex, outline ->
                 val duplicate = elements.any { existing ->
                     existing.snapshot === group.snapshot &&
                         existing.outline.lineIndex == outline.lineIndex &&
                         existing.outline.elementIndex == outline.elementIndex
                 }
                 if (!duplicate) {
-                    elements += PresentedElement(group.snapshot, group.projection, outline, group)
+                    elements += PresentedElement(
+                        snapshot = group.snapshot,
+                        projection = group.projection,
+                        outline = outline,
+                        group = group,
+                        displayOutline = group.displayOutlines.getOrNull(outlineIndex) ?: outline,
+                    )
                 }
             }
         }
@@ -284,6 +298,7 @@ internal data class PresentedOccurrence(
     val projection: FrameProjection,
     val occurrence: TextOccurrence,
     val outlines: List<ElementOutline>,
+    val displayOutlines: List<ElementOutline> = outlines,
     val receiptAtMillis: Long,
     val lastSeenAtMillis: Long,
     val firstMissingAtMillis: Long?,
@@ -307,6 +322,7 @@ internal data class PresentedElement(
     val projection: FrameProjection,
     val outline: ElementOutline,
     val group: PresentedOccurrence,
+    val displayOutline: ElementOutline = outline,
 )
 
 /** Filters entries against the latest callback at draw time and preserves per-source expiry. */
@@ -364,8 +380,11 @@ internal fun drawableElementsForSearch(
         } else {
             group.expiresAtMillis?.let { nowMillis < it } == true
         }
+        val outlineIndex = group.outlines.indexOf(element.outline)
+        val displayPairIsCurrent = outlineIndex >= 0 &&
+            group.displayOutlines.getOrNull(outlineIndex) == element.displayOutline
         element.snapshot === group.snapshot && group.projection.snapshot === group.snapshot &&
-            element.outline in group.outlines && sourceAgeIsValid && targetIsCurrent &&
+            displayPairIsCurrent && sourceAgeIsValid && targetIsCurrent &&
             sourceIsEligible &&
             overlayWidth == group.projection.target.width.toFloat() &&
             overlayHeight == group.projection.target.height.toFloat()

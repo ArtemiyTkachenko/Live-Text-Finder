@@ -33,14 +33,18 @@ internal fun DrawScope.drawHighlightOutlines(
     highlightColor: HighlightColor = HighlightColor.Yellow,
 ) {
     clipRect {
-        outlines.forEach { outline ->
-            val first = outline.points.firstOrNull() ?: return@forEach
-            val path = Path().apply {
+        val paths = outlines.mapNotNull { outline ->
+            val first = outline.points.firstOrNull() ?: return@mapNotNull null
+            Path().apply {
                 moveTo(first.x, first.y)
                 outline.points.drop(1).forEach { lineTo(it.x, it.y) }
                 close()
             }
+        }
+        paths.forEach { path ->
             drawPath(path, Color.Black, style = Stroke(6.dp.toPx()))
+        }
+        paths.forEach { path ->
             drawPath(path, highlightColor.composeColor, style = Stroke(3.dp.toPx()))
         }
     }

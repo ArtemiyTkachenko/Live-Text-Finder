@@ -609,7 +609,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                                         MonotonicClock.nowMillis(),
                                         size.width,
                                         size.height,
-                                    ).map { it.outline }
+                                    ).map { it.displayOutline }
                                 } else {
                                     emptyList()
                                 }

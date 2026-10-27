@@ -1,5 +1,21 @@
 # Validation
 
+## Live jitter and foreground-edge correction — 2026-10-27
+
+Live display geometry is now separate from exact raw OCR/projection data. A conservative, uniquely associated small-motion filter bounds every displayed vertex within 3 preview pixels of its current raw vertex, converges to constant input and resets on larger/ambiguous/context changes. First detections remain immediate; raw counts, source guards and existing retention deadlines are unchanged. Preview and PNG renderers now draw every black under-stroke before foreground edges, preventing neighbouring black borders from erasing coloured sides. Viewport clipping remains intentional; still-image geometry remains raw.
+
+The genuine red checkpoint ran against default-to-raw display API scaffolding before either correction: **22 tests, 3 expected assertion failures** in 26s. Native Canvas and actual rendered/encoded/decoded PNG overlap pixels were black instead of foreground, and the small-translation display still followed raw motion exactly. Isolated four-side rendering passed. The native test file and exact red jitter-test body are preserved unchanged in the final target. A later fixture incorrectly reused a retired generation; correcting that fixture preserved the production stale-generation guard.
+
+Final checks passed in 34s: Android compilation, iOS simulator shared compilation, **183 host tests with zero failures/errors/skips**, and Android lint with **zero errors, 13 warnings**. All 165 previous tests remain. Evidence covers all palette colours and higher-density preview strokes, constant-input convergence, thresholds/shape/correspondence resets, source/target/search invalidation, omission/reappearance, paired display eligibility and unchanged grace/expiry. Initial independent review required one missing alternating-jitter regression. That test now drives the production owner and draw guard across six alternating x/y frames, verifies exact current raw quads/snapshots, checks every displayed vertex's Euclidean error and confirms reduced motion. Independent correction verification: **PASS WITH LIMITATIONS**, no remaining material findings.
+
+Scoped manual Kotlin inspection, limited added-line static audit and whitespace checks passed; no configured Kotlin formatter exists. No new dependency, APK, agent device run or real external share. Physical jitter quality, responsiveness, clipping and an isolated missing side still need user retesting; host evidence proves the overlap mechanism, not attribution of every device symptom. Raw logs/reports remain outside commits and all 41 historical evidence files are unchanged.
+
+## Latest user device feedback — 2026-10-27
+
+The user confirms review checks 1–3 passed: keyboard/list action reachability, small-layout checks and state preservation. The saved-list complaint was withdrawn after clarifying that entries go one per line; commas remain literal. This is user-reported acceptance, not an agent device run or an exhaustive accessibility result.
+
+The user reports improved but remaining live highlighting problems: boxes are mostly correctly positioned, stay solid without flicker, but shift slightly even while held still; some outlines appear to lack sides. No device geometry trace or latency measurement is available. The issue-only investigation targets positional jitter and complete foreground strokes; off-viewport sides must remain clipped.
+
 ## Constrained editor reachability — correction, 2026-10-27
 
 Source audit identified a short-height failure path: the non-scrolling controls could consume the entire post-IME viewport before the weighted list editor. Hidden-preview mode now scrolls the controls and editor together, with finite viewport measurement and system/IME insets outside scrolling. Normal visible camera layout and the user's preview-hiding policy remain unchanged. No further defect in highlight timing, retention or coordinate admission was established by this audit; device observations remain necessary for those behaviours.
