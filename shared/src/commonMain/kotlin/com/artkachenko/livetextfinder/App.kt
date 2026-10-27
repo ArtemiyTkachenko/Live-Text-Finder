@@ -1,10 +1,12 @@
 package com.artkachenko.livetextfinder
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -94,6 +96,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
             var helpDialogOpen by remember { mutableStateOf(false) }
             var previewSize by remember { mutableStateOf(IntSize.Zero) }
             val rootSizeState = remember { mutableStateOf(IntSize.Zero) }
+            val contentScrollState = rememberScrollState()
             var rootSize by rootSizeState
             var graceTimerRevision by remember { mutableIntStateOf(0) }
             val frozenOwner = rememberFrozenFrameOwner()
@@ -187,13 +190,15 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
             }
             // This is the only IME inset owner. The weighted preview receives the remaining
             // height directly, so OCR status changes do not recalculate its available space.
-            Column(
-                Modifier.fillMaxSize()
+            val shouldShowViews = isContentVisible()
+            AppContentColumn(
+                scrollState = contentScrollState,
+                scrollable = !shouldShowViews,
+                modifier = Modifier.fillMaxSize()
                     .safeDrawingPadding()
                     .imePadding()
                     .onSizeChanged { rootSize = it },
             ) {
-                val shouldShowViews = isContentVisible()
                 Column(
                     Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -455,10 +460,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                 }
                 if (managerOpen) {
                     Column(
-                        Modifier.fillMaxWidth()
-                            .weight(1f)
-                            .verticalScroll(rememberScrollState())
-                            .padding(12.dp),
+                        Modifier.fillMaxWidth().padding(12.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         Text("Search lists", style = MaterialTheme.typography.titleMedium)
@@ -755,4 +757,19 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
             }
         }
     }
+}
+
+@Composable
+internal fun AppContentColumn(
+    scrollState: ScrollState,
+    scrollable: Boolean,
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column(
+        modifier = modifier.then(
+            if (scrollable) Modifier.verticalScroll(scrollState) else Modifier,
+        ),
+        content = content,
+    )
 }

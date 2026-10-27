@@ -115,3 +115,7 @@ Read the current colour at preview draw time. Sharing captures colour immutably 
 A manual Help action opens a dismissible, scrollable common dialog without changing the query, selected list, colour, source ownership or stored preferences. It remains available during preference loading/recovery and when the current keyboard/compact/list policy hides the preview. No automatic onboarding or persisted help state is added.
 
 Explain manual per-line case-insensitive search, simultaneous independent list entries, existing preview hiding, freeze/import memory-only retention, global colour and explicit temporary highlighted sharing. State Android camera/import/share support and iOS in-memory preferences, recognized-text limitations and that opening the share sheet does not confirm delivery/saving. Keep technical storage details out of the flow. Physical device layout, large-font, keyboard and accessibility checks remain pending.
+
+## Constrained editor reachability — correction, 2026-10-27
+
+When the existing keyboard/compact/list-manager policy hides the preview, controls and the list editor share one bounded scroll viewport. A fixed header must not consume all space ahead of a zero-height editor. Query, list fields, Save/Cancel, errors and recovery controls remain reachable by scrolling. Safe/IME insets and compact-mode observation measure the finite viewport outside scrolling. The normal visible-preview layout retains its bounded camera space and diagnostic footer. No preview shrinking, input reset or source/OCR changes are included.

@@ -1,5 +1,13 @@
 # Validation
 
+## Constrained editor reachability — correction, 2026-10-27
+
+Source audit identified a short-height failure path: the non-scrolling controls could consume the entire post-IME viewport before the weighted list editor. Hidden-preview mode now scrolls the controls and editor together, with finite viewport measurement and system/IME insets outside scrolling. Normal visible camera layout and the user's preview-hiding policy remain unchanged. No further defect in highlight timing, retention or coordinate admission was established by this audit; device observations remain necessary for those behaviours.
+
+Final checks passed in 21s: Android compilation, iOS simulator shared compilation, **165 host tests with zero failures/errors/skips**, and lint with **zero errors, 13 warnings**. The two added regressions measure the actual production Compose container in a real ComposeView: Save/Cancel scroll fully into a 160dp viewport, scrolling back reaches the query, and normal mode preserves the weighted preview's exact remaining height. They use Compose's existing synchronous test-layout API after real scroll/snapshot updates, reading live coordinates without manually substituting scroll offsets. Earlier failed fixture/compiler/scheduling attempts are not passing regression evidence. No dependencies were added.
+
+Fresh independent source-first review: **PASS WITH LIMITATIONS**, no actionable findings. Scoped manual Kotlin inspection, limited static audit and whitespace checks passed; no configured Kotlin formatter exists. The fixture does not exercise the full App editor fields, mode transitions, large-font/error content or focus. Physical-device keyboard, landscape, large-font and accessibility checks remain pending. No APK/device/external share was performed. Raw logs and generated reports are excluded from commits; historical evidence remains unchanged.
+
 ## Manual in-app guidance — 2026-10-27
 
 The reopenable Help dialog explains existing search/list matching, hidden preview, frozen/imported image retention, global colour, sharing and platform limits. Opening/dismissing it changes only ephemeral UI state. No first-run flag, new dependency or persistence change was added. The related reset teaser now mentions Yellow.
