@@ -14,6 +14,8 @@ Use **Share image** on a frozen/imported image to prepare an upright PNG with th
 
 Use **Highlight color** to choose Yellow, Cyan, Magenta or White. Android remembers the global choice alongside saved searches; iOS keeps it in memory. Preview outlines update immediately, and new shared images use the selected colour. Changing colour cancels a share that is still being prepared.
 
+Use **Help** beside the colour action for search/list instructions, preview visibility, still-image sharing and platform limitations. The dialog is manual and can be reopened without changing your search.
+
 ## Structure
 
 - `androidApp`: Activity and Android manifest.

@@ -91,6 +91,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
             var deleteId by remember { mutableStateOf<String?>(null) }
             var resetConfirm by remember { mutableStateOf(false) }
             var colorDialogOpen by remember { mutableStateOf(false) }
+            var helpDialogOpen by remember { mutableStateOf(false) }
             var previewSize by remember { mutableStateOf(IntSize.Zero) }
             val rootSizeState = remember { mutableStateOf(IntSize.Zero) }
             var rootSize by rootSizeState
@@ -238,14 +239,26 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                             )
                         }
                     }
-                    TextButton(
-                        onClick = { colorDialogOpen = true },
-                        enabled = sessionState.loaded && !sessionState.recoveryRequired,
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(
-                            "Highlight color: " +
-                                sessionState.persisted.highlightColor.displayName,
-                        )
+                        TextButton(
+                            onClick = { colorDialogOpen = true },
+                            enabled = sessionState.loaded && !sessionState.recoveryRequired,
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text(
+                                "Highlight color: " +
+                                    sessionState.persisted.highlightColor.displayName,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        TextButton(onClick = { helpDialogOpen = true }) {
+                            Text("Help")
+                        }
                     }
                     if (importedState.phase == ImportedImagePhase.Live ||
                         importedState.phase == ImportedImagePhase.Error
@@ -309,7 +322,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                             TextButton(onClick = { resetConfirm = true }) {
                                 Text("Reset saved data")
                             }
-                            Text("Reset clears saved lists and the saved query.")
+                            Text("Reset clears saved lists, the saved query, and colour to Yellow.")
                         }
                     } else if (sessionState.error != null) {
                         Text(
@@ -736,6 +749,9 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                         TextButton(onClick = { colorDialogOpen = false }) { Text("Done") }
                     },
                 )
+            }
+            if (helpDialogOpen) {
+                UsageHelpDialog(onDismissRequest = { helpDialogOpen = false })
             }
         }
     }

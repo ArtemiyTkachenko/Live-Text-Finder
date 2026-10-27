@@ -1,5 +1,13 @@
 # Validation
 
+## Manual in-app guidance — 2026-10-27
+
+The reopenable Help dialog explains existing search/list matching, hidden preview, frozen/imported image retention, global colour, sharing and platform limits. Opening/dismissing it changes only ephemeral UI state. No first-run flag, new dependency or persistence change was added. The related reset teaser now mentions Yellow.
+
+Checks passed in 22s: Android compilation, iOS simulator shared compilation, **163 host tests with zero failures/errors/skips**, and lint with **zero errors, 13 warnings**. Fresh source-first independent review: **PASS WITH LIMITATIONS**, no actionable findings. Source inspection traces help statements to matching, source/lifecycle and platform implementations, and verifies scrollable content and separate dismissal wiring. Static copy did not require a new test framework or mirrored string tests. Scoped manual Kotlin inspection, a limited static audit and whitespace checks passed; no configured Kotlin formatter exists.
+
+Device layout, large-font scrolling, screen-reader behaviour, keyboard preservation and Back/outside dismissal remain unobserved. No APK, device run or external sharing was performed. Logs and per-run reports remain outside the committed tree; historical evidence is unchanged.
+
 ## Global highlight appearance — 2026-10-27
 
 Yellow, Cyan, Magenta and White are global highlight choices across live, frozen and imported previews and newly shared PNGs. Android schema v1 preferences load as Yellow without an eager rewrite; schema v2 persists the choice. Invalid preferences remain protected by the existing recovery flow. Colour changes preserve matching identity and cancel pending sharing before handoff.

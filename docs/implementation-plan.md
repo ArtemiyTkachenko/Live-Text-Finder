@@ -56,3 +56,7 @@ The coordinator selected explicit sharing of one frozen/imported image with curr
 ## Global highlight appearance — 2026-10-27
 
 Add a four-colour global palette with Yellow default, a compact accessible selection dialog, backward-compatible Android preference storage and consistent preview/share rendering. Keep colour separate from matching identity and invalidate pending sharing on an appearance change. Actual storage migration, native draw/PNG pixels and owner cancellation tests plus fresh independent review precede commit; device UI/accessibility and live appearance checks remain deferred. No geometry/OCR, per-list style, new dependency, preview shrinking or APK generation.
+
+## Manual usage guidance — 2026-10-27
+
+Add a reopenable, scrollable Help dialog beside the existing colour action, explaining actual search/list, preview, retained-image, sharing and platform behaviour. Preserve all session/source semantics and persistence; add no first-run flag or dependencies. Source-first independent review and existing compilation/test/lint checks precede commit. Device layout/accessibility remains deferred.
