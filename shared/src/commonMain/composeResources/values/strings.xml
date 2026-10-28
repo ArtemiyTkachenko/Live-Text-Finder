@@ -1,0 +1,20 @@
+<resources>
+    <string name="search_lists_heading">Search lists</string>
+    <string name="search_lists_new">New list</string>
+    <string name="search_list_edit_heading">Edit list</string>
+    <string name="search_list_new_heading">New list</string>
+    <string name="search_list_selected">Selected</string>
+    <string name="search_list_edit">Edit</string>
+    <string name="search_list_delete">Delete</string>
+    <string name="search_list_select_accessibility">Select %1$s</string>
+    <string name="search_list_edit_accessibility">Edit %1$s</string>
+    <string name="search_list_delete_accessibility">Delete %1$s</string>
+    <string name="search_list_name_label">List name</string>
+    <string name="search_list_terms_label">Terms or phrases · one per line</string>
+    <string name="search_list_save">Save list</string>
+    <string name="search_list_cancel">Cancel</string>
+    <plurals name="search_list_term_count">
+        <item quantity="one">%1$d term</item>
+        <item quantity="other">%1$d terms</item>
+    </plurals>
+</resources>

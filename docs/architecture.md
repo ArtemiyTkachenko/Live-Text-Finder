@@ -83,3 +83,9 @@ The common control uses a cancellable draft and labelled sliders. Background/sou
 A small shared `LiveTextFinderTheme` supplies fallback light/dark colour schemes, Material typography/shapes and shared spacing. A narrow platform colour provider uses Android 12+ dynamic colours and fallback schemes on older Android and iOS. Android context and dynamic-colour APIs remain in Android sources. OCR palette values, camera backgrounds/scrims, projection and exported-image colours remain independent of theme personalisation.
 
 The main search/control region uses one restrained tonal surface, consistent content alignment and supporting typography for the active search. Freeze/Resume use a stronger tonal action while secondary actions stay directly available. The existing inset owner, conditional preview policy, actual measured preview bounds and source callbacks remain in place. List-manager and status redesign are separate increments.
+
+## Search-list presentation
+
+The list manager is a shared stateless presentation component. It receives saved-list, selected-ID and editor snapshots plus callbacks; App retains controller calls, draft ownership and delete-confirmation state. Selection targets, Edit/Delete actions and the tonal editor are separate interaction regions. The existing AppContentColumn owns whole-page scrolling, so manager visibility continues to hide the preview without introducing nested section scrolling.
+
+Scoped shared string resources provide list/editor labels, list-specific accessible action labels and term-count plurals. This presentation layer does not change validation, persistence, list activation, search semantics or source ownership.

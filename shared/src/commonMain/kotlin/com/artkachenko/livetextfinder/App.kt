@@ -25,7 +25,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -84,6 +83,7 @@ import com.artkachenko.livetextfinder.search.projectImportedHighlights
 import com.artkachenko.livetextfinder.search.searchRecognizedContent
 import com.artkachenko.livetextfinder.search.searchRecognizedText
 import com.artkachenko.livetextfinder.ui.FinderSearchControls
+import com.artkachenko.livetextfinder.ui.FinderSearchLists
 import com.artkachenko.livetextfinder.ui.FinderSpacing
 import com.artkachenko.livetextfinder.ui.LiveTextFinderTheme
 import com.artkachenko.livetextfinder.utils.MonotonicClock
@@ -498,82 +498,31 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                     }
                 }
                 if (managerOpen) {
-                    Column(
-                        Modifier.fillMaxWidth().padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Text("Search lists", style = MaterialTheme.typography.titleMedium)
-                        Button(
-                            onClick = { editor = editor.startNew() },
-                            enabled = sessionState.loaded && !sessionState.recoveryRequired,
-                        ) {
-                            Text("New list")
-                        }
-                        sessionState.persisted.lists.forEach { list ->
-                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                TextButton(
-                                    onClick = { session.selectList(list.id) },
-                                    modifier = Modifier.weight(1f),
-                                ) {
-                                    Text(
-                                        if (sessionState.persisted.activeListId == list.id) {
-                                            "✓ ${list.name}"
-                                        } else {
-                                            list.name
-                                        },
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                }
-                                TextButton(onClick = { editor = editor.edit(list) }) {
-                                    Text("Edit")
-                                }
-                                TextButton(onClick = { deleteId = list.id }) {
-                                    Text("Delete")
-                                }
-                            }
-                        }
-                        if (editor.isOpen) {
-                            OutlinedTextField(
-                                value = editor.name,
-                                onValueChange = { editor = editor.copy(name = it) },
-                                label = { Text("List name") },
-                                singleLine = true,
-                                modifier = Modifier.fillMaxWidth(),
+                    FinderSearchLists(
+                        lists = sessionState.persisted.lists,
+                        activeListId = sessionState.persisted.activeListId,
+                        editor = editor,
+                        canSave = sessionState.loaded && !sessionState.recoveryRequired,
+                        onNew = { editor = editor.startNew() },
+                        onSelect = session::selectList,
+                        onEdit = { list -> editor = editor.edit(list) },
+                        onDelete = { list -> deleteId = list.id },
+                        onNameChange = { editor = editor.copy(name = it) },
+                        onTermsChange = { editor = editor.copy(terms = it) },
+                        onSave = {
+                            val error = session.saveList(
+                                editor.editingId,
+                                editor.name,
+                                editor.terms,
                             )
-                            OutlinedTextField(
-                                value = editor.terms,
-                                onValueChange = { editor = editor.copy(terms = it) },
-                                label = { Text("Terms or phrases · one per line") },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(min = 120.dp),
-                            )
-                            editor.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Button(
-                                    onClick = {
-                                        val error = session.saveList(
-                                            editor.editingId,
-                                            editor.name,
-                                            editor.terms,
-                                        )
-                                        editor = if (error == null) {
-                                            editor.close()
-                                        } else {
-                                            editor.copy(error = error)
-                                        }
-                                    },
-                                    enabled = sessionState.loaded && !sessionState.recoveryRequired,
-                                ) {
-                                    Text("Save list")
-                                }
-                                TextButton(onClick = { editor = editor.close() }) {
-                                    Text("Cancel")
-                                }
+                            editor = if (error == null) {
+                                editor.close()
+                            } else {
+                                editor.copy(error = error)
                             }
-                        }
-                    }
+                        },
+                        onCancel = { editor = editor.close() },
+                    )
                 }
                 if (shouldShowViews) {
                     Box(

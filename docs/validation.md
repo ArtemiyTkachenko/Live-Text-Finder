@@ -1,5 +1,17 @@
 # Validation
 
+## Search-list selection and editor — 2026-10-28
+
+Completed design scope 3: saved lists have wrapping names, pluralized term counts, a visible and semantic selected state, and separate Edit/Delete actions. The tonal New/Edit region groups labelled inputs, validation and Save/Cancel. App retains controller, draft and deletion-confirmation ownership; existing persistence gates, one-per-line terms, whole-page scrolling and hidden-preview behaviour are preserved.
+
+Final checks passed in 40s: Android compilation, iOS simulator shared compilation, **203 host tests with zero failures/errors/skips**, and lint with **zero errors, 14 warnings**. All 198 prior tests and their 32 source files remain unchanged. Five native host tests exercise real resources/plurals, exact callback payloads/counts, disabled New/Save, controller/draft integration, density-aware 48dp touch bounds, nonoverlap, long-name wrapping and actual short-landscape scrolling. Unclipped layout bounds establish full viewport visibility of Save/Cancel, the returned query/Close lists controls and the enlarged-font selected group.
+
+Root and independent reviewer inspected six native host renders covering light/dark, populated/new/error states, enlarged text and combined controls/manager scrolling with 50 lists. Component fixtures and combined manager-open fixtures are not full-device camera evidence. Initial independent review required stronger callback/gating and viewport assertions plus scoped brace corrections. One correction cycle resolved all findings; independent verification: **PASS WITH LIMITATIONS**, no remaining material finding.
+
+Added only Compose Multiplatform resources 1.12.1, matching the existing Compose version, for scoped manager/editor strings and pluralization. Actual Android host resource resolution and iOS shared compilation pass. The installed Compose plugin connects resource synchronization to the existing Xcode embed/sign task, but iOS application resource packaging/runtime was not executed. The additional lint warning is a newer-version notice for this dependency; no version upgrade or suppression was introduced.
+
+Scoped manual Kotlin inspection, limited added-line style audit and whitespace checks passed; no configured Kotlin formatter exists. AGENTS.md and all 41 historical evidence files remain unchanged. No APK, device run or external share was performed. Real IME/focus, TalkBack, touchscreen and iOS application resource/runtime checks remain deferred. Generated logs, PNGs and per-run reports stay outside Git; only durable documentation, source/resources, dependency declarations and meaningful tests are versioned.
+
 ## Material theme and main controls — 2026-10-27
 
 Implemented design scopes 1–2: one shared light/dark theme with Android 12+ dynamic colour and older-Android/iOS fallbacks, shared spacing and Material shapes/typography. The main query/control region is grouped on one tonal surface with aligned active-search context and stronger Freeze/Resume emphasis. Existing actions, inset ownership, keyboard/list/compact preview hiding, actual preview measurements, OCR palette/geometry and source behaviour are preserved. Lists/editor and status redesign remain separate work.

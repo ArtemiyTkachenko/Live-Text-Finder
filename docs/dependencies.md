@@ -6,6 +6,7 @@ Checked 2026-10-25 against official documentation and publisher Maven artifacts.
 | --- | --- | --- |
 | Kotlin / Compose compiler | 2.4.20 | Retain the existing stable template toolchain; both plugins use the same version. |
 | Compose Multiplatform | 1.12.1 | Retain the existing stable template. |
+| Compose Resources | 1.12.1 | Shared list-manager/editor strings, accessible action labels and correctly formatted term-count plurals; matches the existing Compose version. |
 | Material 3 Multiplatform | 1.9.0 | Latest non-prerelease in publisher Maven metadata; replace template 1.12.0-alpha03. Material 3 has an independent release track. |
 | Android Gradle Plugin | 9.1.1 | Retain official KMP Android library plugin and separate Android application shell. Supports API 37. |
 | Gradle wrapper | 9.5.1 | Retain existing checked-in wrapper/checksum. |
@@ -48,3 +49,9 @@ Fresh `:androidApp:dependencies --configuration releaseRuntimeClasspath` succeed
 ## Image import orientation — 2026-10-27
 
 Explicitly declare the existing `androidx.exifinterface:exifinterface:1.4.2` runtime artifact for uniform image orientation handling on the supported minimum SDK. The pre-change debug dependency-insight report already resolved 1.4.2, and the updated release runtime graph resolves the same version. This promotes an existing runtime dependency to direct compile access without adding or upgrading a runtime library. No media-storage permission, picker dependency or cloud service is added.
+
+## Search-list presentation resources — 2026-10-28
+
+The redesigned shared list manager/editor uses `org.jetbrains.compose.components:components-resources:1.12.1` for its scoped UI copy and term-count plurals, as required by the project design guidelines. The existing Compose plugin handles generation; the runtime is declared through the version catalog in commonMain. This is a narrowly justified resource dependency, with no toolchain upgrade, custom reader, public resource API, new locale or application-wide string migration. Existing controller-returned validation messages are preserved.
+
+Official [resource setup](https://kotlinlang.org/docs/multiplatform/compose-multiplatform-resources-setup.html) and [string/plural usage](https://kotlinlang.org/docs/multiplatform/compose-multiplatform-resources-usage.html) were checked for this scope. Android and iOS compilation plus actual host resource-backed UI execution are required; compilation alone does not prove iOS application resource packaging or device behaviour.
