@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
@@ -23,8 +22,6 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -48,7 +45,6 @@ import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.artkachenko.livetextfinder.camera.CameraPreview
@@ -82,12 +78,18 @@ import com.artkachenko.livetextfinder.search.projectHighlights
 import com.artkachenko.livetextfinder.search.projectImportedHighlights
 import com.artkachenko.livetextfinder.search.searchRecognizedContent
 import com.artkachenko.livetextfinder.search.searchRecognizedText
+import com.artkachenko.livetextfinder.ui.ContextMessage
 import com.artkachenko.livetextfinder.ui.FinderSearchControls
 import com.artkachenko.livetextfinder.ui.FinderSearchLists
 import com.artkachenko.livetextfinder.ui.FinderSpacing
 import com.artkachenko.livetextfinder.ui.LiveTextFinderTheme
 import com.artkachenko.livetextfinder.utils.MonotonicClock
 import kotlinx.coroutines.delay
+import livetextfinder.shared.generated.resources.Res
+import livetextfinder.shared.generated.resources.status_cancel
+import livetextfinder.shared.generated.resources.status_share_image
+import livetextfinder.shared.generated.resources.status_share_preparing
+import org.jetbrains.compose.resources.stringResource
 
 /** Main live text search screen. */
 @Composable
@@ -351,98 +353,19 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                             }
                         },
                     )
-                    if (freezeState.error != null) {
-                        Text(freezeState.error, color = MaterialTheme.colorScheme.error)
-                    }
-                    if (sessionState.recoveryRequired) {
-                        Text(
-                            sessionState.error ?: "Saved search data needs recovery.",
-                        )
-                        Row {
-                            TextButton(onClick = { resetConfirm = true }) {
-                                Text("Reset saved data")
-                            }
-                            Text("Reset clears saved lists, the saved query, and colour to Yellow.")
-                        }
-                    } else if (sessionState.error != null) {
-                        Text(
-                            "${sessionState.error}${if (sessionState.saving) " · saving" else ""}",
-                        )
-                        TextButton(onClick = session::retry) { Text("Retry") }
-                    } else if (!sessionState.loaded) {
-                        Text("Loading saved searches…")
-                    } else if (sessionState.saving) {
-                        Text("Saving…")
-                    }
-                    if (importedState.phase == ImportedImagePhase.Imported) {
-                        Text(
-                            "Imported matches: ${search.occurrences.size} · " +
-                                "outlined elements: ${highlights.outlines.size}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.heightIn(min = 40.dp, max = 40.dp),
-                        )
-                    } else if (importedState.phase == ImportedImagePhase.Picking ||
-                        importedState.phase == ImportedImagePhase.Reading ||
-                        importedState.phase == ImportedImagePhase.Recognizing
-                    ) {
-                        Text(
-                            when (importedState.phase) {
-                                ImportedImagePhase.Picking -> "Choosing image…"
-                                ImportedImagePhase.Reading -> "Reading image…"
-                                else -> "Recognizing text…"
-                            },
-                        )
-                    } else if (importedState.phase == ImportedImagePhase.Error) {
-                        Text(
-                            importedState.message.orEmpty(),
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                    } else if (shouldShowViews) {
-                        Text(
-                            when {
-                                freezeState.mode == FreezeMode.Frozen -> {
-                                    "Frozen matches: ${search.occurrences.size} · " +
-                                        "outlined elements: ${highlights.outlines.size}"
-                                }
-                                search.snapshot == null && state.status == OcrStatus.Scanning -> {
-                                    "Waiting for fresh recognized text"
-                                }
-                                search.snapshot == null -> "Search paused · see camera status"
-                                search.query.isEmpty() -> "Enter text to search"
-                                areaState != null && !presentation.areaReady ->
-                                    "Waiting for live area mapping"
-                                search.occurrences.isEmpty() &&
-                                    presentation.outlinedElements.isNotEmpty() ->
-                                    "No current matches · retaining " +
-                                        "${presentation.outlinedElements.size} outlines briefly"
-                                search.occurrences.isEmpty() && areaState != null ->
-                                    "No matches in the live area"
-                                search.occurrences.isEmpty() -> "No matches in recognized text"
-                                !highlights.ready -> {
-                                    "Recognized matches: ${search.occurrences.size} · " +
-                                        "Highlights waiting for preview"
-                                }
-                                presentation.occurrences.any {
-                                    it.firstMissingAtMillis != null
-                                } -> {
-                                    "Recognized matches: ${search.occurrences.size} · " +
-                                        "outlined elements: " +
-                                        "${presentation.outlinedElements.size} " +
-                                        "(some briefly retained)"
-                                }
-                                else ->
-                                    "Recognized matches: ${search.occurrences.size} · " +
-                                        "outlined elements: " +
-                                        presentation.outlinedElements.size
-                            },
-                            style = MaterialTheme.typography.bodyMedium,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.heightIn(min = 40.dp, max = 40.dp),
-                        )
-                    }
+                    FinderStatusRegion(
+                        state = state,
+                        importedState = importedState,
+                        freezeState = freezeState,
+                        sessionState = sessionState,
+                        search = search,
+                        presentation = presentation,
+                        highlights = highlights,
+                        areaSelected = areaState != null,
+                        shouldShowViews = shouldShowViews,
+                        onRetrySavedData = session::retry,
+                        onRequestReset = { resetConfirm = true },
+                    )
                     if (sourceIdentity != null) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             TextButton(
@@ -487,14 +410,22 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                                 Text(
                                     if (shareOwner.state.value.status ==
                                         ImageShareStatus.Preparing
-                                    ) "Preparing image…" else "Share image",
+                                    ) {
+                                        stringResource(Res.string.status_share_preparing)
+                                    } else {
+                                        stringResource(Res.string.status_share_image)
+                                    },
                                 )
                             }
                             if (shareOwner.state.value.status == ImageShareStatus.Preparing) {
-                                TextButton(onClick = shareOwner::cancel) { Text("Cancel") }
+                                TextButton(onClick = shareOwner::cancel) {
+                                    Text(stringResource(Res.string.status_cancel))
+                                }
                             }
                         }
-                        shareOwner.state.value.message?.let { message -> Text(message) }
+                        shareOwner.state.value.message?.let { message ->
+                            ContextMessage(message = message)
+                        }
                     }
                 }
                 if (managerOpen) {
@@ -681,45 +612,6 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                                     .padding(horizontal = 6.dp, vertical = 3.dp),
                                 color = Color.White,
                             )
-                        }
-                    }
-                }
-                if (shouldShowViews) {
-                    Column(
-                        Modifier.fillMaxWidth()
-                            .height(88.dp)
-                            .verticalScroll(rememberScrollState())
-                            .padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        Text(
-                            "OCR: ${state.status.name} · Latin script",
-                            style = MaterialTheme.typography.labelLarge,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            state.message,
-                            style = MaterialTheme.typography.bodyMedium,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text("Recognized lines: ${state.snapshot?.lines?.size ?: 0}", maxLines = 1)
-                        state.snapshot?.let { snapshot ->
-                            Text(
-                                "${snapshot.frame.uprightWidth} × " +
-                                    "${snapshot.frame.uprightHeight} · rotation " +
-                                    "${snapshot.frame.rotationDegrees}°",
-                                style = MaterialTheme.typography.labelSmall,
-                                maxLines = 1,
-                            )
-                            if (snapshot.text.isNotBlank()) {
-                                Text(
-                                    snapshot.text.take(240),
-                                    maxLines = 3,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
                         }
                     }
                 }

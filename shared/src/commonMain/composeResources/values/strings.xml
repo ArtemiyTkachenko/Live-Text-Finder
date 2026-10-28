@@ -17,4 +17,56 @@
         <item quantity="one">%1$d term</item>
         <item quantity="other">%1$d terms</item>
     </plurals>
+    <string name="status_details">Details</string>
+    <string name="status_details_close">Close</string>
+    <string name="status_details_title">Recognition details</string>
+    <string name="status_import_choosing">Choosing image…</string>
+    <string name="status_import_reading">Reading image…</string>
+    <string name="status_import_recognizing">Recognizing text…</string>
+    <string name="status_imported">Imported image</string>
+    <string name="status_frozen">Scanning paused · frozen frame</string>
+    <string name="status_freezing">Freezing frame…</string>
+    <string name="status_waiting_fresh">Waiting for fresh text</string>
+    <string name="status_enter_query">Enter text to search</string>
+    <string name="status_area_waiting">Waiting for live area mapping</string>
+    <string name="status_no_readable_text">No readable text detected</string>
+    <string name="status_no_matches">No matches in recognized text</string>
+    <string name="status_no_area_matches">No matches in live area</string>
+    <string name="status_highlights_waiting">Highlights waiting for preview</string>
+    <string name="status_retained_outlines">Some outlines are retained briefly</string>
+    <string name="status_permission">Allow camera access to scan printed Latin text</string>
+    <string name="status_starting">Starting camera and text recognition</string>
+    <string name="status_scanning">Scanning for Latin text</string>
+    <string name="status_paused">Scanning paused</string>
+    <string name="status_unavailable">Live camera recognition is unavailable</string>
+    <string name="status_camera_error_recovery">Camera recognition failed. Check camera access and retry the camera.</string>
+    <string name="status_lines">Recognized lines: %1$d</string>
+    <string name="status_source_imported">Source: imported image</string>
+    <string name="status_source_frozen">Source: frozen frame</string>
+    <string name="status_source_live">Source: live camera</string>
+    <string name="status_empty_content">Recognized text: unavailable</string>
+    <string name="status_latin_boundary">Recognition supports printed Latin text.</string>
+    <string name="status_retention">Older outlines may remain briefly; counts use the latest result.</string>
+    <string name="status_dimensions">Image: %1$d × %2$d pixels</string>
+    <string name="status_dimensions_rotation">Frame: %1$d × %2$d pixels · rotation %3$d°</string>
+    <string name="status_text_sample">Text sample: %1$s</string>
+    <string name="status_no_text_sample">No recognized text sample is available.</string>
+    <string name="status_import_error">Image import failed</string>
+    <string name="status_recovery">Saved search data needs recovery.</string>
+    <string name="status_reset_saved_data">Reset saved data</string>
+    <string name="status_reset_explanation">Reset clears saved lists, the saved query, and colour.</string>
+    <string name="status_retry">Retry</string>
+    <string name="status_loading_searches">Loading saved searches…</string>
+    <string name="status_saving">Saving…</string>
+    <string name="status_share_preparing">Preparing image…</string>
+    <string name="status_share_image">Share image</string>
+    <string name="status_cancel">Cancel</string>
+    <plurals name="status_match_count">
+        <item quantity="one">%1$d match</item>
+        <item quantity="other">%1$d matches</item>
+    </plurals>
+    <plurals name="status_outlined_count">
+        <item quantity="one">%1$d outlined element</item>
+        <item quantity="other">%1$d outlined elements</item>
+    </plurals>
 </resources>
