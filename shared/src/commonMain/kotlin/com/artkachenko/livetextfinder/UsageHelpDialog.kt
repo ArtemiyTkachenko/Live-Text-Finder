@@ -15,6 +15,8 @@ import androidx.compose.ui.unit.dp
 import com.artkachenko.livetextfinder.camera.liveSearchAreaAvailable
 import livetextfinder.shared.generated.resources.Res
 import livetextfinder.shared.generated.resources.help_options_location
+import livetextfinder.shared.generated.resources.help_still_body
+import livetextfinder.shared.generated.resources.help_still_title
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
@@ -59,6 +61,10 @@ internal fun UsageHelpDialog(onDismissRequest: () -> Unit) {
                         } else {
                             ""
                         },
+                )
+                HelpSection(
+                    title = stringResource(Res.string.help_still_title),
+                    body = stringResource(Res.string.help_still_body),
                 )
                 HelpSection(
                     title = "Colour and sharing on Android",

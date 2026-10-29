@@ -101,3 +101,9 @@ An explicit Details dialog holds source-specific recognition diagnostics and the
 App retains source-action and dialog ownership. Main controls expose search, list context and capture/cancellation, while a Material Options sheet routes secondary actions through existing callbacks. The sheet closes before another action is invoked; it does not own a camera session or saved preference. Existing compact/keyboard/list hiding and page scrolling remain unchanged.
 
 List draft presentation uses the existing recognized-text normalization to count and preview nonblank entries in order. It retains duplicates and reports blank lines; the controller continues validating every raw line before saving. Preview output is limited to five entries and a remaining count, with no second scroll viewport or new persisted draft.
+
+## Retained-image inspection
+
+A presentation-only still transform applies zoom and bounded pan once to the complete retained-image/outline subtree inside a fixed viewport clip. Existing bitmap fits, raw geometry, draw-time source/visibility guards and full-source PNG sharing remain unchanged. Inspection state is keyed by the retained source/request and viewport; it is independent of query and colour. Source controls participate in the same page layout rather than overlaying the search header.
+
+Matching and copy-row projection share the normalized element-line builder, so occurrence offsets resolve against exactly the text used by literal matching. Each row retains its occurrence identity and index; copying resolves its actual substring and revalidates current source/content reference, search and selection at the write boundary. A small shared clipboard-entry factory bridges the modern Compose clipboard API to Android/iOS. Images/OCR remain owned by their existing in-memory platform owners; inspection creates no new store or image cache.

@@ -93,6 +93,16 @@
     <string name="status_share_preparing">Preparing image…</string>
     <string name="status_share_image">Share image</string>
     <string name="status_cancel">Cancel</string>
+    <string name="help_still_title">Inspect an image</string>
+    <string name="help_still_body">On a frozen or imported image, pinch to zoom and drag to pan, or use Zoom in, Zoom out and Reset view. Open Matches, select a result and choose Copy matched text. Sharing still uses the whole image.</string>
+    <string name="still_zoom_in">Zoom in</string>
+    <string name="still_zoom_out">Zoom out</string>
+    <string name="still_reset_view">Reset view</string>
+    <string name="still_matches">Matches (%1$d)</string>
+    <string name="still_matches_title">Matches in this image</string>
+    <string name="still_copy_match">Copy matched text</string>
+    <string name="still_match_copied">Matched text copied</string>
+    <string name="still_match_copy_failed">Could not copy this match. Select it again.</string>
     <plurals name="status_match_count">
         <item quantity="one">%1$d match</item>
         <item quantity="other">%1$d matches</item>

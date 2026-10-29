@@ -4,7 +4,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -28,8 +27,10 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -38,17 +39,23 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.artkachenko.livetextfinder.camera.CameraPreview
 import com.artkachenko.livetextfinder.camera.FreezeMode
+import com.artkachenko.livetextfinder.camera.FrozenFrameFit
 import com.artkachenko.livetextfinder.camera.ImageShareStatus
 import com.artkachenko.livetextfinder.camera.ImportedImagePhase
 import com.artkachenko.livetextfinder.camera.ImportedImagePicker
 import com.artkachenko.livetextfinder.camera.ImportedImagePreview
 import com.artkachenko.livetextfinder.camera.LiveSearchAreaLifecycle
+import com.artkachenko.livetextfinder.camera.StillViewTransform
 import com.artkachenko.livetextfinder.camera.liveSearchAreaAvailable
+import com.artkachenko.livetextfinder.camera.plainTextClipEntry
 import com.artkachenko.livetextfinder.camera.rememberFrozenFrameOwner
 import com.artkachenko.livetextfinder.camera.rememberImageShareOwner
 import com.artkachenko.livetextfinder.camera.rememberImportedImageOwner
@@ -58,6 +65,7 @@ import com.artkachenko.livetextfinder.ocr.OcrStatus
 import com.artkachenko.livetextfinder.ocr.OcrUiState
 import com.artkachenko.livetextfinder.search.LiveSearchAreaOwner
 import com.artkachenko.livetextfinder.search.NormalizedSearchArea
+import com.artkachenko.livetextfinder.search.PreviewPoint
 import com.artkachenko.livetextfinder.search.SearchListEditorState
 import com.artkachenko.livetextfinder.search.SearchPresentationOwner
 import com.artkachenko.livetextfinder.search.SearchSessionController
@@ -71,6 +79,7 @@ import com.artkachenko.livetextfinder.search.projectHighlights
 import com.artkachenko.livetextfinder.search.projectImportedHighlights
 import com.artkachenko.livetextfinder.search.searchRecognizedContent
 import com.artkachenko.livetextfinder.search.searchRecognizedText
+import com.artkachenko.livetextfinder.search.stillMatchRows
 import com.artkachenko.livetextfinder.ui.ContextMessage
 import com.artkachenko.livetextfinder.ui.FinderOptionsSheet
 import com.artkachenko.livetextfinder.ui.FinderSearchControls
@@ -78,16 +87,24 @@ import com.artkachenko.livetextfinder.ui.FinderSearchLists
 import com.artkachenko.livetextfinder.ui.FinderSpacing
 import com.artkachenko.livetextfinder.ui.HighlightColorDialog
 import com.artkachenko.livetextfinder.ui.LiveTextFinderTheme
+import com.artkachenko.livetextfinder.ui.StillInspectionControls
+import com.artkachenko.livetextfinder.ui.StillInspectionViewport
+import com.artkachenko.livetextfinder.ui.StillMatchesDialog
+import com.artkachenko.livetextfinder.ui.rememberStillViewTransform
 import com.artkachenko.livetextfinder.utils.MonotonicClock
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import livetextfinder.shared.generated.resources.Res
 import livetextfinder.shared.generated.resources.finder_options_highlight
 import livetextfinder.shared.generated.resources.status_cancel
 import livetextfinder.shared.generated.resources.status_share_image
 import livetextfinder.shared.generated.resources.status_share_preparing
+import livetextfinder.shared.generated.resources.still_match_copied
+import livetextfinder.shared.generated.resources.still_match_copy_failed
 import org.jetbrains.compose.resources.stringResource
 
 /** Main live text search screen. */
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun App(session: SearchSessionController = remember { inMemorySearchSessionController() }) {
     LiveTextFinderTheme {
@@ -178,6 +195,60 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                 freezeState.mode == FreezeMode.Frozen ->
                     "frozen:${freezeState.frame?.identity}"
                 else -> null
+            }
+            val inspectionIdentity = when {
+                importedState.phase == ImportedImagePhase.Imported -> sourceIdentity
+                freezeState.mode == FreezeMode.Frozen ->
+                    "${sourceIdentity}:${freezeState.frame?.requestId}"
+                else -> null
+            }
+            val stillSnapshot = when {
+                importedState.phase == ImportedImagePhase.Imported -> importedState.snapshot
+                freezeState.mode == FreezeMode.Frozen -> freezeState.frame?.snapshot
+                else -> null
+            }
+            val stillFit = stillSnapshot?.let { snapshot ->
+                if (snapshot is com.artkachenko.livetextfinder.ocr.ImportedTextSnapshot) {
+                    FrozenFrameFit(
+                        snapshot.width,
+                        snapshot.height,
+                        0,
+                        previewSize.width.toFloat(),
+                        previewSize.height.toFloat(),
+                    )
+                } else {
+                    val frame = (snapshot as com.artkachenko.livetextfinder.ocr.OcrSnapshot).frame
+                    FrozenFrameFit(
+                        frame.bufferWidth,
+                        frame.bufferHeight,
+                        frame.rotationDegrees,
+                        previewSize.width.toFloat(),
+                        previewSize.height.toFloat(),
+                    )
+                }
+            }
+            var stillTransform by rememberStillViewTransform(inspectionIdentity, previewSize)
+            val matchRows = remember(search, inspectionIdentity) {
+                if (inspectionIdentity != null) stillMatchRows(search) else emptyList()
+            }
+            var matchesDialogOpen by remember(inspectionIdentity, activeSearch.identity) {
+                mutableStateOf(false)
+            }
+            var selectedMatch by remember(inspectionIdentity, activeSearch.identity) {
+                mutableStateOf<Int?>(null)
+            }
+            var copyMessage by remember(inspectionIdentity, activeSearch.identity) {
+                mutableStateOf<String?>(null)
+            }
+            val clipboard = LocalClipboard.current
+            val coroutineScope = rememberCoroutineScope()
+            LaunchedEffect(sourceIdentity, activeSearch.identity, freezeState.mode) {
+                if (sourceIdentity == null || freezeState.mode != FreezeMode.Frozen &&
+                    importedState.phase != ImportedImagePhase.Imported
+                ) {
+                    matchesDialogOpen = false
+                    selectedMatch = null
+                }
             }
             LaunchedEffect(
                 sourceIdentity,
@@ -404,6 +475,45 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                         shareOwner.state.value.message?.let { message ->
                             ContextMessage(message = message)
                         }
+                        val focusManager = LocalFocusManager.current
+                        val keyboardController = LocalSoftwareKeyboardController.current
+                        StillInspectionControls(
+                            matchCount = matchRows.size,
+                            zoom = stillTransform.zoom,
+                            canZoom = shouldShowViews && stillFit?.isValid == true,
+                            onZoomIn = {
+                                stillTransform = stillTransform.zoomBy(
+                                    1.25f,
+                                    PreviewPoint(
+                                        previewSize.width / 2f,
+                                        previewSize.height / 2f,
+                                    ),
+                                    previewSize.width.toFloat(),
+                                    previewSize.height.toFloat(),
+                                    checkNotNull(stillFit),
+                                )
+                            },
+                            onZoomOut = {
+                                stillTransform = stillTransform.zoomBy(
+                                    0.8f,
+                                    PreviewPoint(
+                                        previewSize.width / 2f,
+                                        previewSize.height / 2f,
+                                    ),
+                                    previewSize.width.toFloat(),
+                                    previewSize.height.toFloat(),
+                                    checkNotNull(stillFit),
+                                )
+                            },
+                            onReset = { stillTransform = StillViewTransform() },
+                            onMatches = {
+                                focusManager.clearFocus()
+                                keyboardController?.hide()
+                                selectedMatch = null
+                                matchesDialogOpen = true
+                            },
+                        )
+                        copyMessage?.let { message -> ContextMessage(message = message) }
                     }
                 }
                 if (managerOpen) {
@@ -434,7 +544,12 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                     )
                 }
                 if (shouldShowViews) {
-                    Box(
+                    StillInspectionViewport(
+                        sourceIdentity = inspectionIdentity,
+                        fit = stillFit,
+                        viewportSize = previewSize,
+                        transform = stillTransform,
+                        onTransformChange = { stillTransform = it },
                         modifier = Modifier.weight(1f)
                             .fillMaxWidth()
                             .background(Color.Black)
@@ -593,6 +708,66 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                         }
                     }
                 }
+            }
+            if (matchesDialogOpen && sourceIdentity != null) {
+                val copyFailedMessage = stringResource(Res.string.still_match_copy_failed)
+                val copiedMessage = stringResource(Res.string.still_match_copied)
+                StillMatchesDialog(
+                    rows = matchRows,
+                    selectedIndex = selectedMatch,
+                    copyMessage = copyMessage,
+                    onSelect = { selectedMatch = it },
+                    onDismiss = { matchesDialogOpen = false },
+                    onCopy = {
+                        val selectedIndex = selectedMatch
+                        val row = matchRows.firstOrNull { it.index == selectedIndex }
+                        val expectedOwnerToken = if (
+                            importedOwner.state.value.phase == ImportedImagePhase.Imported
+                        ) {
+                            importedOwner.state.value.snapshot
+                        } else {
+                            frozenOwner.state.value.frame
+                        }
+                        if (selectedIndex == null || row == null || expectedOwnerToken == null) {
+                            copyMessage = copyFailedMessage
+                        } else {
+                            coroutineScope.launch {
+                                try {
+                                    val outcome = StillMatchCopyCoordinator(
+                                        importedOwner = importedOwner,
+                                        frozenOwner = frozenOwner,
+                                        session = session,
+                                        selectedIndex = { selectedMatch },
+                                        writeText = { text ->
+                                            clipboard.setClipEntry(plainTextClipEntry(text))
+                                        },
+                                    ).copy(
+                                        row,
+                                        search,
+                                        sourceIdentity,
+                                        activeSearch.identity,
+                                        selectedIndex,
+                                        expectedOwnerToken,
+                                    )
+                                    when (outcome) {
+                                        StillMatchCopyOutcome.Copied -> {
+                                            copyMessage = copiedMessage
+                                            matchesDialogOpen = false
+                                        }
+                                        StillMatchCopyOutcome.Stale,
+                                        StillMatchCopyOutcome.Failed -> {
+                                            copyMessage = copyFailedMessage
+                                        }
+                                    }
+                                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                                    throw cancelled
+                                } catch (error: Exception) {
+                                    copyMessage = copyFailedMessage
+                                }
+                            }
+                        }
+                    },
+                )
             }
             deleteId?.let { id ->
                 val name = sessionState.persisted.lists.firstOrNull { list -> list.id == id }

@@ -4,6 +4,7 @@ import com.artkachenko.livetextfinder.ocr.OcrSnapshot
 import com.artkachenko.livetextfinder.ocr.OcrStatus
 import com.artkachenko.livetextfinder.ocr.OcrUiState
 import com.artkachenko.livetextfinder.ocr.RecognizedTextContent
+import com.artkachenko.livetextfinder.ocr.TextLine
 
 /** Offsets refer to the normalized line, not character boxes or preview coordinates. */
 internal data class TextOccurrence(
@@ -12,6 +13,20 @@ internal data class TextOccurrence(
     val endExclusive: Int,
     val elementIndices: List<Int>,
     val termId: String = MANUAL_TERM_ID,
+)
+
+/** One occurrence and its normalized source line for still-image inspection. */
+internal data class StillMatchRow(
+    val index: Int,
+    val occurrence: TextOccurrence,
+    val matchedText: String,
+    val lineContext: String,
+)
+
+/** A normalized OCR line assembled from the same element sequence used during matching. */
+internal data class NormalizedElementLine(
+    val text: String,
+    val spans: List<ElementSpan>,
 )
 
 internal const val MANUAL_TERM_ID = "manual"
@@ -67,27 +82,16 @@ internal fun searchRecognizedContent(
     }
     val occurrences = buildList {
         content.lines.forEachIndexed { lineIndex, line ->
-            val content = StringBuilder()
-            val spans = buildList {
-                line.elements.forEachIndexed { index, element ->
-                    val text = normalizeWhitespace(element.text)
-                    if (text.isNotEmpty()) {
-                        if (content.isNotEmpty()) content.append(' ')
-                        val start = content.length
-                        content.append(text)
-                        add(ElementSpan(index, start, content.length))
-                    }
-                }
-            }
+            val normalizedLine = normalizedElementLine(line)
             normalizedTerms.forEach { term ->
                 var from = 0
-                while (from <= content.length - term.text.length) {
-                    val start = content.indexOf(term.text, from, ignoreCase = true)
+                while (from <= normalizedLine.text.length - term.text.length) {
+                    val start = normalizedLine.text.indexOf(term.text, from, ignoreCase = true)
                     if (start < 0) {
                         break
                     }
                     val end = start + term.text.length
-                    add(TextOccurrence(lineIndex, start, end, spans.filter {
+                    add(TextOccurrence(lineIndex, start, end, normalizedLine.spans.filter {
                         it.start < end && it.endExclusive > start
                     }.map { it.elementIndex }, term.id))
                     from = end
@@ -98,7 +102,65 @@ internal fun searchRecognizedContent(
     return TextSearchResult(displayQuery, content, occurrences, spec)
 }
 
-private data class ElementSpan(val elementIndex: Int, val start: Int, val endExclusive: Int)
+internal fun stillMatchRows(result: TextSearchResult): List<StillMatchRow> {
+    val content = result.content ?: return emptyList()
+    val normalizedLines = mutableMapOf<Int, NormalizedElementLine>()
+    return result.occurrences.mapIndexedNotNull { index, occurrence ->
+        val line = content.lines.getOrNull(occurrence.lineIndex) ?: return@mapIndexedNotNull null
+        val normalized = normalizedLines.getOrPut(occurrence.lineIndex) {
+            normalizedElementLine(line)
+        }
+        if (occurrence.start < 0 || occurrence.endExclusive > normalized.text.length ||
+            occurrence.start >= occurrence.endExclusive
+        ) {
+            null
+        } else {
+            StillMatchRow(
+                index = index,
+                occurrence = occurrence,
+                matchedText = normalized.text.substring(occurrence.start, occurrence.endExclusive),
+                lineContext = normalized.text,
+            )
+        }
+    }
+}
+
+internal fun stillMatchText(row: StillMatchRow, result: TextSearchResult): String? {
+    if (result.content == null || row.index !in result.occurrences.indices ||
+        result.occurrences[row.index] != row.occurrence
+    ) {
+        return null
+    }
+    val line = result.content.lines.getOrNull(row.occurrence.lineIndex) ?: return null
+    val normalized = normalizedElementLine(line).text
+    val occurrence = row.occurrence
+    if (occurrence.start < 0 || occurrence.endExclusive > normalized.length ||
+        occurrence.start >= occurrence.endExclusive
+    ) {
+        return null
+    }
+    val matchedText = normalized.substring(occurrence.start, occurrence.endExclusive)
+    if (row.matchedText != matchedText) return null
+    return matchedText
+}
+
+internal fun normalizedElementLine(line: TextLine): NormalizedElementLine {
+    val text = StringBuilder()
+    val spans = buildList {
+        line.elements.forEachIndexed { index, element ->
+            val elementText = normalizeWhitespace(element.text)
+            if (elementText.isNotEmpty()) {
+                if (text.isNotEmpty()) text.append(' ')
+                val start = text.length
+                text.append(elementText)
+                add(ElementSpan(index, start, text.length))
+            }
+        }
+    }
+    return NormalizedElementLine(text.toString(), spans)
+}
+
+internal data class ElementSpan(val elementIndex: Int, val start: Int, val endExclusive: Int)
 
 /** Collapse Kotlin whitespace without case folding/expansion or altering other characters. */
 internal fun normalizeRecognizedText(text: String): String = buildString {
