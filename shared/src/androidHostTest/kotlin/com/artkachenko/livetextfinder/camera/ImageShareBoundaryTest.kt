@@ -73,7 +73,8 @@ class ImageShareBoundaryTest {
 
     @Test
     fun everyPaletteColorSurvivesProductionRendererPngAndProviderDecode() {
-        HighlightColor.entries.forEach { highlightColor ->
+        val colors = HighlightColor.entries + HighlightColor.fromRgb(18, 171, 239)
+        colors.forEach { highlightColor ->
             val source = asymmetricBitmap(40, 24)
             val originalSourcePixels = IntArray(source.width * source.height)
             source.getPixels(
@@ -166,6 +167,7 @@ class ImageShareBoundaryTest {
         val release = CountDownLatch(1)
         val encodedColor = AtomicInteger()
         val launches = AtomicInteger()
+        val customColor = HighlightColor.fromRgb(18, 171, 239)
         shareOwner.updateCurrent(sourceIdentity, search.spec.identity, HighlightColor.Yellow)
         shareOwner.dispatchWorkerForTest = { worker -> heldWorker.set(worker) }
         shareOwner.beforeHandoffForTest = {
@@ -190,7 +192,7 @@ class ImageShareBoundaryTest {
             ShareWorkGate.executor.execute(worker)
             assertTrue(entered.await(5, TimeUnit.SECONDS))
             assertEquals(HighlightColor.Yellow.argb.toInt(), encodedColor.get())
-            session.setHighlightColor(HighlightColor.Cyan)
+            session.setHighlightColor(customColor)
         } finally {
             release.countDown()
             waitForGate()
@@ -219,6 +221,7 @@ class ImageShareBoundaryTest {
         val release = CountDownLatch(1)
         val encodedColor = AtomicInteger()
         val launches = AtomicInteger()
+        val customColor = HighlightColor.fromRgb(18, 171, 239)
         shareOwner.updateCurrent(sourceIdentity, search.spec.identity, HighlightColor.Yellow)
         shareOwner.dispatchWorkerForTest = { worker -> heldWorker.set(worker) }
         shareOwner.beforeHandoffForTest = {
@@ -238,7 +241,7 @@ class ImageShareBoundaryTest {
             currentHighlightColor = { session.state.value.persisted.highlightColor },
         )
         val worker = checkNotNull(heldWorker.get())
-        session.setHighlightColor(HighlightColor.Cyan)
+        session.setHighlightColor(customColor)
 
         try {
             ShareWorkGate.executor.execute(worker)
@@ -274,6 +277,7 @@ class ImageShareBoundaryTest {
         val shareOwner = startedShareOwner(context)
         val heldWorker = AtomicReference<Runnable?>()
         var launchCount = 0
+        val customColor = HighlightColor.fromRgb(18, 171, 239)
         shareOwner.updateCurrent(sourceIdentity, search.spec.identity, HighlightColor.Yellow)
         shareOwner.dispatchWorkerForTest = { worker -> heldWorker.set(worker) }
         shareOwner.shareLauncherForTest = { launchCount++ }
@@ -285,8 +289,8 @@ class ImageShareBoundaryTest {
             currentHighlightColor = { session.state.value.persisted.highlightColor },
         )
 
-        session.setHighlightColor(HighlightColor.Cyan)
-        shareOwner.updateCurrent(sourceIdentity, search.spec.identity, HighlightColor.Cyan)
+        session.setHighlightColor(customColor)
+        shareOwner.updateCurrent(sourceIdentity, search.spec.identity, customColor)
         ShareWorkGate.executor.execute(checkNotNull(heldWorker.get()))
         waitForGate()
         shadowOf(Looper.getMainLooper()).idle()
@@ -312,7 +316,7 @@ class ImageShareBoundaryTest {
                 file,
             ),
         )!!.use { stream -> BitmapFactory.decodeStream(stream) }
-        assertEquals(HighlightColor.Cyan.argb.toInt(), decoded.getPixel(9, 6))
+        assertEquals(customColor.argb.toInt(), decoded.getPixel(9, 6))
         assertEquals(Color.BLACK, decoded.getPixel(5, 10))
         decoded.recycle()
         shareFiles(context.cacheDir).forEach(File::delete)

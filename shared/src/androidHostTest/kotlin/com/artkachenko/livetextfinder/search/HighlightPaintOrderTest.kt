@@ -29,7 +29,8 @@ class HighlightPaintOrderTest {
 
     @Test
     fun nativeCanvasKeepsForegroundEdgesVisibleAcrossAllPaletteColorsAtHigherDensity() {
-        HighlightColor.entries.forEach { highlightColor ->
+        val colors = HighlightColor.entries + HighlightColor.fromRgb(18, 171, 239)
+        colors.forEach { highlightColor ->
             val bitmap = Bitmap.createBitmap(120, 100, Bitmap.Config.ARGB_8888)
             CanvasDrawScope().draw(
                 density = Density(2f),
@@ -48,7 +49,8 @@ class HighlightPaintOrderTest {
 
     @Test
     fun encodedPngKeepsForegroundEdgesVisibleAcrossAllPaletteColors() {
-        HighlightColor.entries.forEach { highlightColor ->
+        val colors = HighlightColor.entries + HighlightColor.fromRgb(18, 171, 239)
+        colors.forEach { highlightColor ->
             val source = Bitmap.createBitmap(120, 100, Bitmap.Config.ARGB_8888)
             source.eraseColor(AndroidColor.RED)
             val rendered = AndroidImageShareRenderer.renderImported(

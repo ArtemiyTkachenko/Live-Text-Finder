@@ -145,13 +145,20 @@ private class AndroidSearchSessionStore(context: Context) : SearchSessionStore {
                 add(SavedSearchList(id, name, terms))
             }
         }
-        val highlightColor = if (version == 1) {
-            HighlightColor.Yellow
-        } else {
-            val key = root.get("highlightColor") as? String
-                ?: error("Saved highlight colour has an invalid type.")
-            HighlightColor.fromStorageKey(key)
-                ?: error("Saved highlight colour is unknown.")
+        val highlightColor = when (version) {
+            1 -> HighlightColor.Yellow
+            2 -> {
+                val key = root.get("highlightColor") as? String
+                    ?: error("Saved highlight colour has an invalid type.")
+                HighlightColor.entries.firstOrNull { it.storageKey == key }
+                    ?: error("Saved highlight colour is unknown.")
+            }
+            else -> {
+                val key = root.get("highlightColor") as? String
+                    ?: error("Saved highlight colour has an invalid type.")
+                HighlightColor.fromStorageKey(key)
+                    ?: error("Saved highlight colour is unknown.")
+            }
         }
         val value = PersistedSearchState(manualQuery, lists, activeListId, highlightColor)
         val validationError = validatePersistedSearchState(value)
@@ -162,7 +169,7 @@ private class AndroidSearchSessionStore(context: Context) : SearchSessionStore {
     }
 
     private companion object {
-        const val VERSION = 2
+        const val VERSION = 3
         const val MIN_VERSION = 1
         const val V1_ROOT_FIELD_COUNT = 4
         const val ROOT_FIELD_COUNT = 5

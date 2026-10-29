@@ -39,6 +39,12 @@ class AndroidSearchSessionStoreTest {
                 await { androidSearchSessionStore(context).load(it) }.getOrThrow(),
             )
         }
+        val custom = initial.copy(highlightColor = HighlightColor.fromRgb(18, 171, 239))
+        assertTrue(await { first.save(custom, it) }.isSuccess)
+        val customJson = JSONObject(File(context.filesDir, "saved-searches.json").readText())
+        assertEquals(3, customJson.getInt("version"))
+        assertEquals("custom:#12ABEF", customJson.getString("highlightColor"))
+        assertEquals(custom, await { androidSearchSessionStore(context).load(it) }.getOrThrow())
 
         val updated = initial.copy(manualQuery = "", lists = emptyList(), activeListId = null)
         assertTrue(await { androidSearchSessionStore(context).save(updated, it) }.isSuccess)
@@ -55,7 +61,7 @@ class AndroidSearchSessionStoreTest {
     }
 
     @Test
-    fun versionOneFileLoadsYellowPreservesSearchAndNextEditWritesVersionTwo() {
+    fun versionOneFileLoadsYellowPreservesSearchAndNextEditWritesVersionThree() {
         val file = File(context.filesDir, "saved-searches.json")
         val versionOne = JSONObject()
             .put("version", 1)
@@ -89,9 +95,62 @@ class AndroidSearchSessionStoreTest {
         val updated = checkNotNull(loaded).copy(highlightColor = HighlightColor.Cyan)
         assertTrue(await { store.save(updated, it) }.isSuccess)
         val written = JSONObject(file.readText())
-        assertEquals(2, written.getInt("version"))
+        assertEquals(3, written.getInt("version"))
         assertEquals("cyan", written.getString("highlightColor"))
         assertEquals(updated, await { androidSearchSessionStore(context).load(it) }.getOrThrow())
+    }
+
+    @Test
+    fun versionTwoKeepsPresetOnlyDecodingAndDoesNotRewriteDuringLoad() {
+        val file = File(context.filesDir, "saved-searches.json")
+        val versionTwo = JSONObject()
+            .put("version", 2)
+            .put("manualQuery", "manual")
+            .put("activeListId", JSONObject.NULL)
+            .put("lists", JSONArray())
+            .put("highlightColor", "cyan")
+            .toString()
+        file.writeText(versionTwo)
+
+        val store = androidSearchSessionStore(context)
+        val loaded = await { store.load(it) }.getOrThrow()
+        assertEquals(HighlightColor.Cyan, loaded?.highlightColor)
+        assertEquals(versionTwo, file.readText())
+
+        assertTrue(
+            await { store.save(checkNotNull(loaded).copy(manualQuery = "updated"), it) }.isSuccess,
+        )
+        assertEquals(3, JSONObject(file.readText()).getInt("version"))
+
+        val customVersionTwo = versionTwo.replace("\"cyan\"", "\"custom:#12ABEF\"")
+        file.writeText(customVersionTwo)
+        assertTrue(await { androidSearchSessionStore(context).load(it) }.isFailure)
+        assertEquals(customVersionTwo, file.readText())
+    }
+
+    @Test
+    fun versionThreeRejectsNoncanonicalCustomKeysWithoutOverwritingSourceBytes() {
+        val file = File(context.filesDir, "saved-searches.json")
+        val valid = JSONObject()
+            .put("version", 3)
+            .put("manualQuery", "kept")
+            .put("activeListId", JSONObject.NULL)
+            .put("lists", JSONArray())
+            .put("highlightColor", "custom:#12ABEF")
+            .toString()
+        val invalidValues = listOf(
+            valid.replace("custom:#12ABEF", "custom:#12abef"),
+            valid.replace("custom:#12ABEF", "custom:#12ABEF00"),
+            valid.replace("custom:#12ABEF", "custom:#12ABEG"),
+            valid.replace("custom:#12ABEF", "custom:#12ABEF "),
+            valid.replace("\"custom:#12ABEF\"", "17"),
+            valid.replace("\"custom:#12ABEF\"", "null"),
+        )
+        invalidValues.forEach { bytes ->
+            file.writeText(bytes)
+            assertTrue(await { androidSearchSessionStore(context).load(it) }.isFailure)
+            assertEquals(bytes, file.readText())
+        }
     }
 
     @Test

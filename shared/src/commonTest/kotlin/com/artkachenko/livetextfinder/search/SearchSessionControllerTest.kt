@@ -73,8 +73,9 @@ class SearchSessionControllerTest {
     fun highlightColorIsBlockedDuringRecoveryAndResetReturnsToYellow() {
         val store = ControlledStore()
         val session = SearchSessionController(store)
+        val customColor = HighlightColor.fromRgb(18, 171, 239)
         store.failLoad("unsupported version")
-        session.setHighlightColor(HighlightColor.White)
+        session.setHighlightColor(customColor)
 
         assertEquals(HighlightColor.Yellow, session.state.value.persisted.highlightColor)
         assertTrue(store.writes.isEmpty())
@@ -86,9 +87,36 @@ class SearchSessionControllerTest {
     }
 
     @Test
+    fun customHighlightColorPreservesSearchIdentityAndSameEffectiveColorIsNoOp() {
+        val store = ControlledStore()
+        val session = SearchSessionController(store)
+        val custom = HighlightColor.fromRgb(18, 171, 239)
+        session.setHighlightColor(custom)
+        assertEquals(HighlightColor.Yellow, session.state.value.persisted.highlightColor)
+        assertTrue(store.writes.isEmpty())
+        store.completeLoad(
+            PersistedSearchState(
+                "manual",
+                listOf(SavedSearchList("stable", "Parts", listOf("foo"))),
+                "stable",
+            ),
+        )
+        val identity = session.state.value.activeSearch.identity
+
+        session.setHighlightColor(custom)
+        session.setHighlightColor(HighlightColor(0xFF12ABEF))
+
+        assertEquals(custom, session.state.value.persisted.highlightColor)
+        assertEquals(identity, session.state.value.activeSearch.identity)
+        assertEquals(1, store.writes.size)
+        assertEquals(custom, store.writes.single().first.highlightColor)
+    }
+
+    @Test
     fun lateLoadMergesManualEditAndQueuedColorWritesKeepLatestValue() {
         val store = ControlledStore()
         val session = SearchSessionController(store)
+        val customColor = HighlightColor.fromRgb(18, 171, 239)
         session.setManualQuery("typed before load")
         session.setHighlightColor(HighlightColor.Cyan)
         store.completeLoad(
@@ -105,18 +133,18 @@ class SearchSessionControllerTest {
         assertEquals(1, store.writes.size)
 
         session.setHighlightColor(HighlightColor.Cyan)
-        session.setHighlightColor(HighlightColor.Magenta)
+        session.setHighlightColor(customColor)
         assertEquals(1, store.writes.size)
         store.completeWrite(0)
         assertEquals(2, store.writes.size)
         assertEquals("typed before load", store.writes[1].first.manualQuery)
-        assertEquals(HighlightColor.Magenta, store.writes[1].first.highlightColor)
+        assertEquals(customColor, store.writes[1].first.highlightColor)
         assertEquals(listOf("foo"), store.writes[1].first.lists.single().terms)
 
         store.completeWrite(1, Result.failure(IllegalStateException("disk full")))
         session.retry()
         assertEquals(3, store.writes.size)
-        assertEquals(HighlightColor.Magenta, store.writes[2].first.highlightColor)
+        assertEquals(customColor, store.writes[2].first.highlightColor)
         store.completeWrite(2)
         assertNull(session.state.value.error)
     }

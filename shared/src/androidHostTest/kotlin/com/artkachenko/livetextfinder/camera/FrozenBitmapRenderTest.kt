@@ -116,7 +116,8 @@ class FrozenBitmapRenderTest {
         val pixels = asymmetricBitmap()
         val owner = frozenOwner(pixels, 0, includeTarget = true)
         val frame = assertNotNull(owner.state.value.frame)
-        HighlightColor.entries.forEach { highlightColor ->
+        val colors = HighlightColor.entries + HighlightColor.fromRgb(18, 171, 239)
+        colors.forEach { highlightColor ->
             val preview = render(
                 owner,
                 frame,

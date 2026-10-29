@@ -5,6 +5,15 @@
     <string name="highlight_color_cyan">Cyan</string>
     <string name="highlight_color_magenta">Magenta</string>
     <string name="highlight_color_white">White</string>
+    <string name="highlight_color_custom">Custom color</string>
+    <string name="highlight_color_custom_selected">Custom color (%1$s)</string>
+    <string name="highlight_color_custom_description">Choose a color for live, frozen and imported highlights and annotated shares. A black outline stays underneath.</string>
+    <string name="highlight_color_preview">Color preview</string>
+    <string name="highlight_color_red">Red</string>
+    <string name="highlight_color_green">Green</string>
+    <string name="highlight_color_blue">Blue</string>
+    <string name="highlight_color_cancel">Cancel</string>
+    <string name="highlight_color_apply">Apply</string>
     <string name="search_lists_heading">Search lists</string>
     <string name="search_lists_new">New list</string>
     <string name="search_list_edit_heading">Edit list</string>

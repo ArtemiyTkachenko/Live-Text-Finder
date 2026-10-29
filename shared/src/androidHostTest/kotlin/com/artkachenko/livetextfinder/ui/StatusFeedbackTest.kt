@@ -282,6 +282,15 @@ class StatusFeedbackTest {
         measureCurrentComposition()
         assertTrue(selectedColors.isEmpty())
         assertEquals(HighlightColor.Yellow, selectedColor.value)
+        val customAction = nodeWithDescription(nodes, "Custom color")
+        assertTrue(customAction.config.contains(SemanticsProperties.Disabled))
+        assertTouchBounds(customAction, dialog.window?.decorView)
+        dispatchTouch(findComposeView(dialog.window?.decorView), customAction.touchBoundsInRoot)
+        measureCurrentComposition()
+        assertFalse(
+            semanticsNodes(findViewRoot(dialog.window?.decorView))
+                .any { it.textValues().contains("Apply") },
+        )
         val done = nodeWithText(nodes, "Done")
         assertTouchBounds(done, dialog.window?.decorView)
         click(done)
@@ -328,7 +337,12 @@ class StatusFeedbackTest {
         measureCurrentComposition()
         nodes = semanticsNodes(findViewRoot(decorView))
 
+        var viewport = scrollViewportNode(nodes)
+        scrollNodeIntoViewport(findViewRoot(decorView), "White")
+        nodes = semanticsNodes(findViewRoot(decorView))
+        viewport = scrollViewportNode(nodes)
         val white = nodeWithDescription(nodes, "White")
+        assertFullyVisibleInViewport(white, viewport)
         assertTouchBounds(white, decorView)
         val done = nodeWithText(nodes, "Done")
         assertTouchBounds(done, decorView)
@@ -338,6 +352,232 @@ class StatusFeedbackTest {
         assertEquals(listOf(HighlightColor.White), selectedColors)
         click(nodeWithText(semanticsNodes(findViewRoot(decorView)), "Done"))
         assertEquals(1, dismissCount)
+    }
+
+    @Test
+    fun productionCustomColorUsesAnUncommittedRgbDraftAndAppliesOnce() {
+        val selectedColor = mutableStateOf(HighlightColor.Yellow)
+        val selectedColors = mutableListOf<HighlightColor>()
+        val isOpen = mutableStateOf(true)
+        val enabled = mutableStateOf(true)
+        var dismissCount = 0
+        mount(widthDp = 360, heightDp = 320, fontScale = 1.3f) {
+            LiveTextFinderTheme(darkThemeOverride = false, dynamicColor = false) {
+                if (isOpen.value) {
+                    HighlightColorDialog(
+                        selectedColor = selectedColor.value,
+                        enabled = enabled.value,
+                        onSelectColor = { color ->
+                            selectedColors += color
+                            selectedColor.value = color
+                        },
+                        onDismissRequest = {
+                            dismissCount++
+                            isOpen.value = false
+                        },
+                    )
+                }
+            }
+        }
+        settleDialog()
+
+        var dialog = checkNotNull(ShadowDialog.getLatestDialog())
+        var decorView = checkNotNull(dialog.window?.decorView)
+        val density = checkNotNull(activity).resources.displayMetrics.density
+        dialog.window?.setLayout(
+            (360 * density).roundToInt(),
+            (320 * density).roundToInt(),
+        )
+        shadowOf(Looper.getMainLooper()).idle()
+        findViewRoot(decorView).measureAndLayoutForTest()
+        measureCurrentComposition()
+        assertEquals((320 * density).roundToInt(), decorView.height)
+        click(nodeWithDescription(semanticsNodes(findViewRoot(decorView)), "Custom color"))
+        var nodes = semanticsNodes(findViewRoot(decorView))
+        assertTrue(nodes.any { it.textValues().contains("#FFFF00") })
+        assertDialogRendered(
+            dialog,
+            "custom-highlight-editor-light-large-text.png",
+        )
+        val apply = nodeWithText(nodes, "Apply")
+        val cancel = nodeWithText(nodes, "Cancel")
+        assertFullyVisibleInDialog(apply, decorView)
+        assertFullyVisibleInDialog(cancel, decorView)
+        assertTouchBounds(apply, decorView)
+        assertTouchBounds(cancel, decorView)
+
+        val dialogRoot = findViewRoot(decorView)
+        for ((label, channel) in listOf("Red" to 0, "Green" to 1, "Blue" to 2)) {
+            scrollNodeIntoViewport(dialogRoot, label)
+            nodes = semanticsNodes(dialogRoot)
+            val viewport = scrollViewportNode(nodes)
+            val slider = nodeWithDescription(nodes, label)
+            assertFullyVisibleInViewport(slider, viewport)
+            assertTouchBounds(slider, decorView)
+            assertSliderLayoutHeight(slider, decorView)
+
+            var beforeTouch = previewColor(nodes)
+            dispatchTouchAt(
+                findComposeView(decorView),
+                slider.touchBoundsInRoot.left + slider.touchBoundsInRoot.width * 0.25f,
+                slider.touchBoundsInRoot.top + 1f,
+            )
+            measureCurrentComposition()
+            nodes = semanticsNodes(dialogRoot)
+            var afterTouch = previewColor(nodes)
+            assertChannelChangedOnly(beforeTouch, afterTouch, channel)
+            assertEquals(HighlightColor.Yellow, selectedColor.value)
+            assertTrue(selectedColors.isEmpty())
+
+            beforeTouch = afterTouch
+            dispatchTouchAt(
+                findComposeView(decorView),
+                slider.touchBoundsInRoot.left + slider.touchBoundsInRoot.width * 0.75f,
+                slider.touchBoundsInRoot.bottom - 1f,
+            )
+            measureCurrentComposition()
+            nodes = semanticsNodes(dialogRoot)
+            afterTouch = previewColor(nodes)
+            assertChannelChangedOnly(beforeTouch, afterTouch, channel)
+            assertEquals(HighlightColor.Yellow, selectedColor.value)
+            assertTrue(selectedColors.isEmpty())
+        }
+
+        enabled.value = false
+        measureCurrentComposition()
+        nodes = semanticsNodes(findViewRoot(decorView))
+        val disabledApply = nodeWithText(nodes, "Apply")
+        assertTrue(disabledApply.config.contains(SemanticsProperties.Disabled))
+        dispatchTouch(findComposeView(decorView), disabledApply.touchBoundsInRoot)
+        measureCurrentComposition()
+        assertEquals(HighlightColor.Yellow, selectedColor.value)
+        assertTrue(selectedColors.isEmpty())
+        enabled.value = true
+        measureCurrentComposition()
+        nodes = semanticsNodes(findViewRoot(decorView))
+
+        click(nodeWithText(nodes, "Cancel"))
+        nodes = semanticsNodes(findViewRoot(decorView))
+        click(nodeWithDescription(nodes, "Custom color"))
+        nodes = semanticsNodes(findViewRoot(decorView))
+        assertTrue(nodes.any { it.textValues().contains("#FFFF00") })
+        scrollNodeIntoViewport(findViewRoot(decorView), "Red")
+        nodes = semanticsNodes(findViewRoot(decorView))
+        val reopenedViewport = scrollViewportNode(nodes)
+        val reopenedRedSlider = nodeWithDescription(nodes, "Red")
+        assertFullyVisibleInViewport(reopenedRedSlider, reopenedViewport)
+        assertTouchBounds(reopenedRedSlider, decorView)
+        dispatchTouchAt(
+            findComposeView(decorView),
+            reopenedRedSlider.touchBoundsInRoot.left + 1f,
+            reopenedRedSlider.touchBoundsInRoot.center.y,
+        )
+        measureCurrentComposition()
+        nodes = semanticsNodes(findViewRoot(decorView))
+        assertTrue(nodes.any { it.textValues().contains("#00FF00") })
+
+        click(nodeWithText(nodes, "Apply"))
+        assertEquals(listOf(HighlightColor.fromRgb(0, 255, 0)), selectedColors)
+        assertEquals(HighlightColor.fromRgb(0, 255, 0), selectedColor.value)
+        assertEquals(1, dismissCount)
+
+        isOpen.value = true
+        measureCurrentComposition()
+        dialog = checkNotNull(ShadowDialog.getLatestDialog())
+        decorView = checkNotNull(dialog.window?.decorView)
+        nodes = semanticsNodes(findViewRoot(decorView))
+        val selectedCustomRow = nodeWithDescription(nodes, "Custom color (#00FF00)")
+        assertEquals(true, selectedCustomRow.config.getOrNull(SemanticsProperties.Selected))
+        click(selectedCustomRow)
+        nodes = semanticsNodes(findViewRoot(decorView))
+        assertTrue(nodes.any { it.textValues().contains("#00FF00") })
+        click(nodeWithText(nodes, "Cancel"))
+        nodes = semanticsNodes(findViewRoot(decorView))
+        assertTrue(nodes.any { it.textValues().contains("#00FF00") })
+        assertEquals(1, selectedColors.size)
+        assertEquals(1, dismissCount)
+    }
+
+    @Test
+    fun productionCustomEditorRendersSelectedColorInDarkThemeAtLargeText() {
+        val selectedColor = HighlightColor.fromRgb(18, 171, 239)
+        mount(widthDp = 360, heightDp = 640, fontScale = 1.3f) {
+            LiveTextFinderTheme(darkThemeOverride = true, dynamicColor = false) {
+                HighlightColorDialog(
+                    selectedColor = selectedColor,
+                    enabled = true,
+                    onSelectColor = { ignoreAction() },
+                    onDismissRequest = ::ignoreAction,
+                )
+            }
+        }
+        settleDialog()
+
+        val dialog = checkNotNull(ShadowDialog.getLatestDialog())
+        val decorView = checkNotNull(dialog.window?.decorView)
+        val nodes = semanticsNodes(findViewRoot(decorView))
+        val customRow = nodeWithDescription(nodes, "Custom color (#12ABEF)")
+        assertEquals(true, customRow.config.getOrNull(SemanticsProperties.Selected))
+        click(customRow)
+
+        val editorNodes = semanticsNodes(findViewRoot(decorView))
+        assertTrue(editorNodes.any { it.textValues().contains("#12ABEF") })
+        assertDialogRendered(dialog, "custom-highlight-editor-dark-large-text.png")
+    }
+
+    @Test
+    fun systemBackDismissesCustomDraftWithoutApplyingIt() {
+        val selectedColor = mutableStateOf(HighlightColor.Yellow)
+        val selectedColors = mutableListOf<HighlightColor>()
+        val isOpen = mutableStateOf(true)
+        var dismissCount = 0
+        mount(widthDp = 360, heightDp = 640) {
+            LiveTextFinderTheme(darkThemeOverride = false, dynamicColor = false) {
+                if (isOpen.value) {
+                    HighlightColorDialog(
+                        selectedColor = selectedColor.value,
+                        enabled = true,
+                        onSelectColor = { color ->
+                            selectedColors += color
+                            selectedColor.value = color
+                        },
+                        onDismissRequest = {
+                            dismissCount++
+                            isOpen.value = false
+                        },
+                    )
+                }
+            }
+        }
+        settleDialog()
+
+        val dialog = checkNotNull(ShadowDialog.getLatestDialog())
+        val decorView = checkNotNull(dialog.window?.decorView)
+        click(nodeWithDescription(semanticsNodes(findViewRoot(decorView)), "Custom color"))
+        var nodes = semanticsNodes(findViewRoot(decorView))
+        scrollNodeIntoViewport(findViewRoot(decorView), "Red")
+        nodes = semanticsNodes(findViewRoot(decorView))
+        val viewport = scrollViewportNode(nodes)
+        val redSlider = nodeWithDescription(nodes, "Red")
+        assertFullyVisibleInViewport(redSlider, viewport)
+        assertTouchBounds(redSlider, decorView)
+        dispatchTouchAt(
+            findComposeView(decorView),
+            redSlider.touchBoundsInRoot.left + 1f,
+            redSlider.touchBoundsInRoot.center.y,
+        )
+        measureCurrentComposition()
+        nodes = semanticsNodes(findViewRoot(decorView))
+        assertTrue(nodes.any { it.textValues().contains("#00FF00") })
+        assertEquals(HighlightColor.Yellow, selectedColor.value)
+
+        checkNotNull(dialog as? ComponentDialog).onBackPressedDispatcher.onBackPressed()
+        measureCurrentComposition()
+
+        assertEquals(0, selectedColors.size)
+        assertEquals(HighlightColor.Yellow, selectedColor.value)
+        assertEquals(1, dismissCount)
+        assertFalse(isOpen.value)
     }
 
     @Test
@@ -976,6 +1216,37 @@ class StatusFeedbackTest {
         }
     }
 
+    private fun dispatchTouchAt(view: View, x: Float, y: Float) {
+        val downTime = SystemClock.uptimeMillis()
+        val down = MotionEvent.obtain(
+            downTime,
+            downTime,
+            MotionEvent.ACTION_DOWN,
+            x,
+            y,
+            0,
+        )
+        try {
+            view.dispatchTouchEvent(down)
+        } finally {
+            down.recycle()
+        }
+
+        val up = MotionEvent.obtain(
+            downTime,
+            downTime + 1L,
+            MotionEvent.ACTION_UP,
+            x,
+            y,
+            0,
+        )
+        try {
+            view.dispatchTouchEvent(up)
+        } finally {
+            up.recycle()
+        }
+    }
+
     private fun nodeWithText(nodes: List<SemanticsNode>, text: String): SemanticsNode =
         checkNotNull(nodes.firstOrNull { it.textValues().contains(text) }) {
             "No semantics node with text '$text'"
@@ -1009,10 +1280,54 @@ class StatusFeedbackTest {
     private fun SemanticsNode.textValues(): List<String> =
         config.getOrNull(SemanticsProperties.Text).orEmpty().map { it.text }
 
+    private fun previewColor(nodes: List<SemanticsNode>): HighlightColor {
+        val hex = nodes.asSequence()
+            .flatMap { it.textValues().asSequence() }
+            .first { value -> value.matches(Regex("#[0-9A-F]{6}")) }
+        return HighlightColor.fromRgb(
+            hex.substring(1, 3).toInt(16),
+            hex.substring(3, 5).toInt(16),
+            hex.substring(5, 7).toInt(16),
+        )
+    }
+
+    private fun assertChannelChangedOnly(
+        before: HighlightColor,
+        after: HighlightColor,
+        channel: Int,
+    ) {
+        val channelsBefore = listOf(
+            before.argb shr 16 and 0xFF,
+            before.argb shr 8 and 0xFF,
+            before.argb and 0xFF,
+        )
+        val channelsAfter = listOf(
+            after.argb shr 16 and 0xFF,
+            after.argb shr 8 and 0xFF,
+            after.argb and 0xFF,
+        )
+        assertTrue(channelsBefore[channel] != channelsAfter[channel])
+        channelsBefore.indices.filter { it != channel }.forEach { otherChannel ->
+            assertEquals(channelsBefore[otherChannel], channelsAfter[otherChannel])
+        }
+    }
+
     private fun assertTouchBounds(node: SemanticsNode, view: View?) {
         val density = checkNotNull(view).resources.displayMetrics.density
         assertTrue(node.touchBoundsInRoot.width / density >= 48f)
-        assertTrue(node.touchBoundsInRoot.height / density >= 48f)
+        assertTrue(
+            node.touchBoundsInRoot.height / density >= 48f,
+            "Touch ${node.touchBoundsInRoot}; layout ${node.positionInRoot} ${node.size}; " +
+                "density $density",
+        )
+    }
+
+    private fun assertSliderLayoutHeight(node: SemanticsNode, view: View?) {
+        val density = checkNotNull(view).resources.displayMetrics.density
+        assertTrue(
+            node.size.height / density >= 48f,
+            "Slider layout ${node.size} is shorter than 48dp at density $density",
+        )
     }
 
     private fun Rect.intersects(other: Rect): Boolean =
@@ -1046,6 +1361,52 @@ class StatusFeedbackTest {
         assertTrue(position.x >= 0f && position.y >= 0f)
         assertTrue(position.x + node.size.width <= view.width)
         assertTrue(position.y + node.size.height <= view.height)
+    }
+
+    private fun scrollViewportNode(nodes: List<SemanticsNode>): SemanticsNode = checkNotNull(
+        nodes.firstOrNull { it.config.getOrNull(SemanticsActions.ScrollBy) != null },
+    )
+
+    private fun scrollNodeIntoViewport(
+        root: ViewRootForTest,
+        description: String,
+    ): SemanticsNode {
+        var nodes = semanticsNodes(root)
+        repeat(8) {
+            val target = nodeWithDescription(nodes, description)
+            val viewport = scrollViewportNode(nodes)
+            val viewportTop = viewport.positionInRoot.y
+            val viewportBottom = viewportTop + viewport.size.height
+            val targetTop = target.positionInRoot.y
+            val targetBottom = targetTop + target.size.height
+            if (targetTop >= viewportTop && targetBottom <= viewportBottom) {
+                return target
+            }
+            val delta = if (targetBottom > viewportBottom) {
+                targetBottom - viewportBottom
+            } else {
+                targetTop - viewportTop
+            }
+            checkNotNull(viewport.config.getOrNull(SemanticsActions.ScrollBy)?.action)
+                .invoke(0f, delta)
+            measureCurrentComposition()
+            nodes = semanticsNodes(root)
+        }
+        error("Could not scroll '$description' fully into the dialog viewport.")
+    }
+
+    private fun assertFullyVisibleInViewport(node: SemanticsNode, viewport: SemanticsNode) {
+        val viewportTop = viewport.positionInRoot.y
+        val viewportBottom = viewportTop + viewport.size.height
+        assertTrue(node.positionInRoot.y >= viewportTop)
+        assertTrue(node.positionInRoot.y + node.size.height <= viewportBottom)
+    }
+
+    private fun assertFullyVisibleInDialog(node: SemanticsNode, dialogView: View) {
+        assertTrue(node.positionInRoot.x >= 0f)
+        assertTrue(node.positionInRoot.y >= 0f)
+        assertTrue(node.positionInRoot.x + node.size.width <= dialogView.width)
+        assertTrue(node.positionInRoot.y + node.size.height <= dialogView.height)
     }
 
     private fun settleDialog() {

@@ -94,7 +94,8 @@ class ImportedImageRenderTest {
         val portrait = render(owner, search, 44L, decoded, 48, 80)
         assertEquals(Color.RED, portrait.getPixel(6, 32))
         assertEquals(Color.YELLOW, portrait.getPixel(24, 33))
-        HighlightColor.entries.forEach { highlightColor ->
+        val colors = HighlightColor.entries + HighlightColor.fromRgb(18, 171, 239)
+        colors.forEach { highlightColor ->
             val colored = render(owner, search, 44L, decoded, 80, 48, highlightColor)
             assertEquals(highlightColor.argb.toInt(), colored.getPixel(40, 12))
             assertEquals(Color.BLACK, colored.getPixel(17, 20))
