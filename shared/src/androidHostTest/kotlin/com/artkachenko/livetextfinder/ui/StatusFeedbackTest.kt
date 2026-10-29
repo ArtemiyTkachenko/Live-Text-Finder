@@ -25,9 +25,11 @@ import androidx.compose.runtime.BroadcastFrameClock
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Recomposer
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.MotionDurationScale
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
@@ -39,6 +41,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
 import com.artkachenko.livetextfinder.AppContentColumn
@@ -63,11 +66,16 @@ import com.artkachenko.livetextfinder.recognitionDetails
 import com.artkachenko.livetextfinder.search.FrameIdentity
 import com.artkachenko.livetextfinder.search.HighlightColor
 import com.artkachenko.livetextfinder.search.Highlights
+import com.artkachenko.livetextfinder.search.InMemorySearchSessionStore
+import com.artkachenko.livetextfinder.search.SavedSearchList
+import com.artkachenko.livetextfinder.search.SearchListEditorState
 import com.artkachenko.livetextfinder.search.SearchPresentationOwner
+import com.artkachenko.livetextfinder.search.SearchSessionController
 import com.artkachenko.livetextfinder.search.SearchSessionState
 import com.artkachenko.livetextfinder.search.searchRecognizedContent
 import com.artkachenko.livetextfinder.search.searchRecognizedText
 import com.artkachenko.livetextfinder.ui.FinderSearchControls
+import com.artkachenko.livetextfinder.ui.FinderSearchLists
 import com.artkachenko.livetextfinder.ui.HighlightColorDialog
 import com.artkachenko.livetextfinder.ui.sourceStatusMessage
 import java.io.File
@@ -94,6 +102,10 @@ import org.robolectric.shadows.ShadowDialog
 
 private const val MAX_RECOMPOSITION_FRAMES = 32
 
+private object ImmediateMotionDurationScale : MotionDurationScale {
+    override val scaleFactor: Float = 0f
+}
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -117,6 +129,415 @@ class StatusFeedbackTest {
         frameClock = null
         recomposer = null
         recomposerScope = null
+    }
+
+    @Test
+    fun optionsActionOpensScrollableSheetAndClosesBeforeInvokingSelection() {
+        val optionsOpen = mutableStateOf(false)
+        val highlightCalls = mutableIntStateOf(0)
+        val areaCalls = mutableIntStateOf(0)
+        val importCalls = mutableIntStateOf(0)
+        val helpCalls = mutableIntStateOf(0)
+        val dismissCalls = mutableIntStateOf(0)
+        val highlightEnabled = mutableStateOf(true)
+        val showImport = mutableStateOf(true)
+        mount(widthDp = 320, heightDp = 360, fontScale = 1.4f) {
+            LiveTextFinderTheme(darkThemeOverride = true, dynamicColor = false) {
+                Surface(Modifier.fillMaxSize()) {
+                    Column {
+                        FinderSearchControls(
+                            showTitle = false,
+                            query = "invoice",
+                            onQueryChange = ::ignoreText,
+                            searchListsLabel = "Search lists",
+                            onSearchLists = ::ignoreAction,
+                            searchContext = "Manual search",
+                            onOptions = { optionsOpen.value = true },
+                            captureLabel = null,
+                            captureEnabled = false,
+                            onCapture = ::ignoreAction,
+                            pendingCaptureLabel = null,
+                            onCancelCapture = ::ignoreAction,
+                            secondaryActionLabel = null,
+                            onSecondaryAction = ::ignoreAction,
+                        )
+                    }
+                }
+                if (optionsOpen.value) {
+                    FinderOptionsSheet(
+                        highlightLabel = "Highlight color: Yellow",
+                        highlightEnabled = highlightEnabled.value,
+                        liveAreaLabel = "Live area: Full frame",
+                        showImport = showImport.value,
+                        onHighlight = {
+                            optionsOpen.value = false
+                            highlightCalls.intValue++
+                        },
+                        onLiveArea = {
+                            optionsOpen.value = false
+                            areaCalls.intValue++
+                        },
+                        onImport = {
+                            optionsOpen.value = false
+                            importCalls.intValue++
+                        },
+                        onHelp = {
+                            optionsOpen.value = false
+                            helpCalls.intValue++
+                        },
+                        onDismissRequest = {
+                            optionsOpen.value = false
+                            dismissCalls.intValue++
+                        },
+                    )
+                }
+            }
+        }
+
+        openOptionsSheet()
+        var nodes = optionsDialogNodes()
+        assertTouchBounds(
+            nodeWithText(nodes, "Highlight color: Yellow", clickable = true),
+            optionsDialog().window?.decorView,
+        )
+        assertTrue(nodes.any { it.textValues().contains("Live area: Full frame") })
+        assertTrue(nodes.any { it.textValues().contains("Import image") })
+        assertTrue(nodes.any { it.textValues().contains("Help") })
+        assertTouchBounds(
+            nodeWithText(nodes, "Live area: Full frame", clickable = true),
+            optionsDialog().window?.decorView,
+        )
+        assertTouchBounds(
+            nodeWithText(nodes, "Import image", clickable = true),
+            optionsDialog().window?.decorView,
+        )
+        assertTouchBounds(
+            nodeWithText(nodes, "Help", clickable = true),
+            optionsDialog().window?.decorView,
+        )
+        val scrollViewport = nodes.firstOrNull {
+            it.config.getOrNull(SemanticsActions.ScrollBy) != null
+        }
+        assertTrue(scrollViewport != null)
+        val helpTopBeforeScroll =
+            nodeWithText(nodes, "Help", clickable = true).positionInRoot.y
+        val scrollBy = checkNotNull(
+            scrollViewport?.config?.getOrNull(SemanticsActions.ScrollBy)?.action,
+        )
+        assertTrue(scrollBy(0f, 120f))
+        measureCurrentComposition()
+        nodes = optionsDialogNodes()
+        val helpAfterScroll = nodeWithText(nodes, "Help", clickable = true)
+        assertTrue(helpAfterScroll.positionInRoot.y < helpTopBeforeScroll)
+        val firstDialog = optionsDialog()
+        val helpViewport = checkNotNull(scrollViewport)
+        assertFullyVisibleInViewport(helpAfterScroll, helpViewport)
+        val firstDialogView = checkNotNull(firstDialog.window?.decorView)
+        assertFullyVisibleInDialog(helpAfterScroll, firstDialogView)
+        assertTouchBounds(helpAfterScroll, firstDialog.window?.decorView)
+        assertDialogRendered(firstDialog, "options-sheet-dark-compact.png")
+
+        click(nodeWithText(nodes, "Live area: Full frame", clickable = true))
+        assertEquals(1, areaCalls.intValue)
+        assertEquals(0, importCalls.intValue)
+        assertEquals(0, helpCalls.intValue)
+        assertEquals(0, dismissCalls.intValue)
+        assertFalse(optionsOpen.value)
+        openOptionsSheet()
+        click(nodeWithText(optionsDialogNodes(), "Import image", clickable = true))
+        assertEquals(1, importCalls.intValue)
+        assertFalse(optionsOpen.value)
+        openOptionsSheet()
+        click(nodeWithText(optionsDialogNodes(), "Help", clickable = true))
+        assertEquals(1, helpCalls.intValue)
+        assertFalse(optionsOpen.value)
+        openOptionsSheet()
+        click(nodeWithText(optionsDialogNodes(), "Highlight color: Yellow", clickable = true))
+        assertEquals(1, highlightCalls.intValue)
+        assertEquals(false, optionsOpen.value)
+        nodes = semanticsNodes(composeView)
+        assertFalse(nodes.any { it.textValues().contains("Live area: Full frame") })
+        highlightEnabled.value = false
+        showImport.value = false
+        Snapshot.sendApplyNotifications()
+        measureCurrentComposition()
+        openOptionsSheet()
+        nodes = optionsDialogNodes()
+        assertTrue(
+            nodeWithText(nodes, "Highlight color: Yellow")
+                .config.contains(SemanticsProperties.Disabled),
+        )
+        assertFalse(nodes.any { it.textValues().contains("Import image") })
+        val disabledHighlight = nodeWithText(nodes, "Highlight color: Yellow")
+        dispatchTouch(
+            findComposeView(optionsDialog().window?.decorView),
+            disabledHighlight.touchBoundsInRoot,
+        )
+        measureCurrentComposition()
+        assertEquals(1, highlightCalls.intValue)
+        checkNotNull(optionsDialog() as? ComponentDialog)
+            .onBackPressedDispatcher.onBackPressed()
+        advanceFramesUntil { !optionsOpen.value }
+        assertEquals(1, dismissCalls.intValue)
+        assertEquals(1, highlightCalls.intValue)
+        assertFalse(optionsOpen.value)
+    }
+
+    @Test
+    fun lightOptionsSheetRendersInItsNativeWindowAndClosesOnHelp() {
+        val optionsOpen = mutableStateOf(false)
+        var helpCalls = 0
+        mount(widthDp = 360, heightDp = 640) {
+            LiveTextFinderTheme(darkThemeOverride = false, dynamicColor = false) {
+                Surface(Modifier.fillMaxSize()) {
+                    FinderSearchControls(
+                        showTitle = true,
+                        query = "invoice",
+                        onQueryChange = ::ignoreText,
+                        searchListsLabel = "Search lists",
+                        onSearchLists = ::ignoreAction,
+                        searchContext = "Manual search",
+                        onOptions = { optionsOpen.value = true },
+                        captureLabel = "Freeze frame",
+                        captureEnabled = true,
+                        onCapture = ::ignoreAction,
+                        pendingCaptureLabel = null,
+                        onCancelCapture = ::ignoreAction,
+                        secondaryActionLabel = null,
+                        onSecondaryAction = ::ignoreAction,
+                    )
+                }
+                if (optionsOpen.value) {
+                    FinderOptionsSheet(
+                        highlightLabel = "Highlight color: Yellow",
+                        highlightEnabled = true,
+                        liveAreaLabel = null,
+                        showImport = false,
+                        onHighlight = { optionsOpen.value = false },
+                        onLiveArea = ::ignoreAction,
+                        onImport = ::ignoreAction,
+                        onHelp = {
+                            helpCalls++
+                            optionsOpen.value = false
+                        },
+                        onDismissRequest = { optionsOpen.value = false },
+                    )
+                }
+            }
+        }
+
+        openOptionsSheet()
+        val dialog = optionsDialog()
+        val nodes = optionsDialogNodes()
+        assertTrue(nodes.any { it.textValues().contains("Highlight color: Yellow") })
+        assertTrue(nodes.any { it.textValues().contains("Help") })
+        assertFalse(nodes.any { it.textValues().contains("Import image") })
+        assertDialogRendered(dialog, "options-sheet-light.png")
+        click(nodeWithText(nodes, "Help", clickable = true))
+        assertEquals(1, helpCalls)
+        assertFalse(optionsOpen.value)
+    }
+
+    @Test
+    fun directFreezeAndImportedSourceActionsRemainVisibleAndInvokeOnce() {
+        val stage = mutableIntStateOf(0)
+        val calls = mutableListOf<String>()
+        mount(widthDp = 360, heightDp = 640) {
+            LiveTextFinderTheme(darkThemeOverride = false, dynamicColor = false) {
+                Surface(Modifier.fillMaxSize()) {
+                    FinderSearchControls(
+                        showTitle = true,
+                        query = "invoice",
+                        onQueryChange = ::ignoreText,
+                        searchListsLabel = "Search lists",
+                        onSearchLists = ::ignoreAction,
+                        searchContext = "Manual search",
+                        onOptions = ::ignoreAction,
+                        captureLabel = null,
+                        captureEnabled = false,
+                        onCapture = ::ignoreAction,
+                        pendingCaptureLabel = if (stage.intValue == 0) "Cancel freeze" else null,
+                        onCancelCapture = {
+                            calls += "freeze"
+                            stage.intValue = 1
+                        },
+                        secondaryActionLabel = when (stage.intValue) {
+                            1 -> "Cancel import"
+                            2 -> "Return to camera"
+                            else -> null
+                        },
+                        onSecondaryAction = {
+                            when (stage.intValue) {
+                                1 -> calls += "cancel import"
+                                2 -> calls += "return to camera"
+                            }
+                            stage.intValue++
+                        },
+                    )
+                }
+            }
+        }
+
+        var nodes = semanticsNodes(composeView)
+        val cancelFreeze = nodeWithText(nodes, "Cancel freeze", clickable = true)
+        assertTouchBounds(cancelFreeze, composeView)
+        click(cancelFreeze)
+        assertEquals(listOf("freeze"), calls)
+        nodes = semanticsNodes(composeView)
+        val cancelImport = nodeWithText(nodes, "Cancel import", clickable = true)
+        assertTouchBounds(cancelImport, composeView)
+        click(cancelImport)
+        assertEquals(listOf("freeze", "cancel import"), calls)
+        nodes = semanticsNodes(composeView)
+        val returnToCamera = nodeWithText(nodes, "Return to camera", clickable = true)
+        assertTouchBounds(returnToCamera, composeView)
+        click(returnToCamera)
+        assertEquals(listOf("freeze", "cancel import", "return to camera"), calls)
+    }
+
+    @Test
+    fun listEditorPreviewTracksDraftAndInvalidSaveThenCancelKeepsValidationAuthoritative() {
+        val session = SearchSessionController(InMemorySearchSessionStore())
+        val editor = mutableStateOf(
+            SearchListEditorState(
+                isOpen = true,
+                name = "Repeated terms",
+            ),
+        )
+        val editorScroll = ScrollState(0)
+        contentScrollState = editorScroll
+        var cancelCount = 0
+        mount(widthDp = 360, heightDp = 700, fontScale = 1.25f) {
+            LiveTextFinderTheme(darkThemeOverride = false, dynamicColor = false) {
+                Surface(Modifier.fillMaxSize()) {
+                    AppContentColumn(
+                        scrollState = editorScroll,
+                        scrollable = true,
+                        modifier = Modifier.fillMaxSize(),
+                    ) {
+                        FinderSearchLists(
+                            lists = emptyList(),
+                            activeListId = null,
+                            editor = editor.value,
+                            canSave = session.state.value.loaded,
+                            onNew = ::ignoreAction,
+                            onSelect = ::ignoreText,
+                            onEdit = ::ignoreList,
+                            onDelete = ::ignoreList,
+                            onNameChange = { editor.value = editor.value.copy(name = it) },
+                            onTermsChange = { editor.value = editor.value.copy(terms = it) },
+                            onSave = {
+                                val error = session.saveList(
+                                    null,
+                                    editor.value.name,
+                                    editor.value.terms,
+                                )
+                                editor.value = if (error == null) {
+                                    editor.value.close()
+                                } else {
+                                    editor.value.copy(error = error)
+                                }
+                            },
+                            onCancel = {
+                                cancelCount++
+                                editor.value = editor.value.close()
+                            },
+                        )
+                    }
+                }
+            }
+        }
+
+        var nodes = semanticsNodes(composeView)
+        assertTrue(nodes.any { it.textValues().contains("0 of 32 terms") })
+        assertTrue(
+            nodes.any {
+                it.textValues().contains("No terms yet. Enter one or more lines above.")
+            },
+        )
+        val emptyTerms = nodes.single {
+            it.config.getOrNull(SemanticsProperties.EditableText)?.text == ""
+        }
+        val setEmptyTerms = checkNotNull(
+            emptyTerms.config.getOrNull(SemanticsActions.SetText)?.action,
+        )
+        assertTrue(setEmptyTerms(AnnotatedString("invoice\ninvoice")))
+        Snapshot.sendApplyNotifications()
+        measureCurrentComposition()
+        nodes = semanticsNodes(composeView)
+        assertTrue(nodes.any { it.textValues().contains("2 of 32 terms") })
+        assertTrue(nodes.any { it.textValues().contains("1. invoice") })
+        assertTrue(nodes.any { it.textValues().contains("2. invoice") })
+        var save = scrollTextIntoViewport(semanticsNodes(composeView), "Save list")
+        assertTouchBounds(save, composeView)
+        click(save)
+        nodes = semanticsNodes(composeView)
+        assertTrue(nodes.any { it.textValues().contains("Terms must be unique, ignoring case.") })
+        assertTrue(
+            nodes.any {
+                it.config.getOrNull(SemanticsProperties.EditableText)?.text ==
+                    "invoice\ninvoice"
+            },
+        )
+
+        val termsField = nodes.single {
+            it.config.getOrNull(SemanticsProperties.EditableText)?.text == "invoice\ninvoice"
+        }
+        val setTerms = checkNotNull(termsField.config.getOrNull(SemanticsActions.SetText)?.action)
+        val longDraft = (1..7).joinToString("\n") {
+            "term $it"
+        }
+        assertTrue(setTerms(AnnotatedString(longDraft)))
+        Snapshot.sendApplyNotifications()
+        measureCurrentComposition()
+        nodes = semanticsNodes(composeView)
+        assertTrue(nodes.any { it.textValues().contains("7 of 32 terms") })
+        assertTrue(nodes.any { it.textValues().contains("1. term 1") })
+        assertTrue(nodes.any { it.textValues().contains("5. term 5") })
+        assertTrue(nodes.any { it.textValues().contains("and 2 more") })
+
+        val updatedTerms = nodes.single {
+            it.config.getOrNull(SemanticsProperties.EditableText)?.text == longDraft
+        }
+        val setBlankDraft = checkNotNull(
+            updatedTerms.config.getOrNull(SemanticsActions.SetText)?.action,
+        )
+        assertTrue(setBlankDraft(AnnotatedString("invoice\n\ninvoice")))
+        Snapshot.sendApplyNotifications()
+        measureCurrentComposition()
+        nodes = semanticsNodes(composeView)
+        assertTrue(
+            nodes.any {
+                it.textValues().contains("Blank lines cannot be saved. Remove them to continue.")
+            },
+        )
+        assertTrue(nodes.any { it.textValues().contains("2 of 32 terms") })
+
+        val cancel = scrollTextIntoViewport(nodes, "Cancel")
+        assertTouchBounds(cancel, composeView)
+        click(cancel)
+        assertEquals(1, cancelCount)
+        assertFalse(semanticsNodes(composeView).any { it.textValues().contains("Save list") })
+        assertTrue(session.state.value.persisted.lists.isEmpty())
+
+        editor.value = editor.value.startNew().copy(
+            name = "Normalized draft",
+            terms = "  red apple,  ripe  \ninvoice",
+        )
+        Snapshot.sendApplyNotifications()
+        measureCurrentComposition()
+        nodes = semanticsNodes(composeView)
+        assertTrue(nodes.any { it.textValues().contains("1. red apple, ripe") })
+        assertTrue(nodes.any { it.textValues().contains("2. invoice") })
+        nodes = semanticsNodes(composeView)
+        save = scrollTextIntoViewport(nodes, "Save list")
+        assertTouchBounds(save, composeView)
+        click(save)
+        assertEquals(
+            listOf("red apple, ripe", "invoice"),
+            session.state.value.activeList?.terms,
+        )
+        assertFalse(semanticsNodes(composeView).any { it.textValues().contains("Save list") })
     }
 
     @Test
@@ -902,18 +1323,13 @@ class StatusFeedbackTest {
                                 searchListsLabel = "Search lists",
                                 onSearchLists = ::ignoreAction,
                                 searchContext = "Manual search",
-                                highlightLabel = "Highlight color: Yellow",
-                                highlightEnabled = true,
-                                onHighlight = ::ignoreAction,
-                                onHelp = ::ignoreAction,
+                                onOptions = ::ignoreAction,
                                 captureLabel = "Freeze frame",
                                 captureEnabled = true,
                                 onCapture = ::ignoreAction,
                                 pendingCaptureLabel = null,
                                 onCancelCapture = ::ignoreAction,
-                                liveAreaLabel = null,
-                                onLiveArea = ::ignoreAction,
-                                secondaryActionLabel = "Import image",
+                                secondaryActionLabel = null,
                                 onSecondaryAction = ::ignoreAction,
                             )
                             TestFinderStatusRegion(
@@ -982,18 +1398,13 @@ class StatusFeedbackTest {
                             searchListsLabel = "Close lists",
                             onSearchLists = ::ignoreAction,
                             searchContext = "Manual search",
-                            highlightLabel = "Highlight color: Yellow",
-                            highlightEnabled = false,
-                            onHighlight = ::ignoreAction,
-                            onHelp = ::ignoreAction,
+                            onOptions = ::ignoreAction,
                             captureLabel = null,
                             captureEnabled = false,
                             onCapture = ::ignoreAction,
                             pendingCaptureLabel = null,
                             onCancelCapture = ::ignoreAction,
-                            liveAreaLabel = null,
-                            onLiveArea = ::ignoreAction,
-                            secondaryActionLabel = "Import image",
+                            secondaryActionLabel = null,
                             onSecondaryAction = ::ignoreAction,
                         )
                         repeat(4) { index -> Text("Earlier search setting $index") }
@@ -1037,7 +1448,8 @@ class StatusFeedbackTest {
         hostView.setLayerType(View.LAYER_TYPE_SOFTWARE, null)
         val testFrameClock = BroadcastFrameClock()
         val scope = CoroutineScope(
-            SupervisorJob() + Dispatchers.Unconfined + testFrameClock,
+            SupervisorJob() + Dispatchers.Unconfined + testFrameClock +
+                ImmediateMotionDurationScale,
         )
         val testRecomposer = Recomposer(scope.coroutineContext)
         scope.launch { testRecomposer.runRecomposeAndApplyChanges() }
@@ -1247,10 +1659,18 @@ class StatusFeedbackTest {
         }
     }
 
-    private fun nodeWithText(nodes: List<SemanticsNode>, text: String): SemanticsNode =
-        checkNotNull(nodes.firstOrNull { it.textValues().contains(text) }) {
-            "No semantics node with text '$text'"
-        }
+    private fun nodeWithText(
+        nodes: List<SemanticsNode>,
+        text: String,
+        clickable: Boolean = false,
+    ): SemanticsNode = checkNotNull(
+        nodes.firstOrNull { node ->
+            node.textValues().contains(text) &&
+                (!clickable || node.config.contains(SemanticsActions.OnClick))
+        },
+    ) {
+        "No semantics node with text '$text'"
+    }
 
     private fun nodeWithDescription(
         nodes: List<SemanticsNode>,
@@ -1312,7 +1732,7 @@ class StatusFeedbackTest {
         }
     }
 
-    private fun assertTouchBounds(node: SemanticsNode, view: View?) {
+    private fun assertTouchBounds(node: SemanticsNode, view: View? = composeView) {
         val density = checkNotNull(view).resources.displayMetrics.density
         assertTrue(node.touchBoundsInRoot.width / density >= 48f)
         assertTrue(
@@ -1395,6 +1815,34 @@ class StatusFeedbackTest {
         error("Could not scroll '$description' fully into the dialog viewport.")
     }
 
+    private fun scrollTextIntoViewport(
+        nodes: List<SemanticsNode>,
+        text: String,
+    ): SemanticsNode {
+        var currentNodes = nodes
+        repeat(8) {
+            val target = nodeWithText(currentNodes, text, clickable = true)
+            val viewport = scrollViewportNode(currentNodes)
+            val viewportTop = viewport.positionInRoot.y
+            val viewportBottom = viewportTop + viewport.size.height
+            val targetTop = target.positionInRoot.y
+            val targetBottom = targetTop + target.size.height
+            if (targetTop >= viewportTop && targetBottom <= viewportBottom) {
+                return target
+            }
+            val delta = if (targetBottom > viewportBottom) {
+                targetBottom - viewportBottom
+            } else {
+                targetTop - viewportTop
+            }
+            checkNotNull(viewport.config.getOrNull(SemanticsActions.ScrollBy)?.action)
+                .invoke(0f, delta)
+            measureCurrentComposition()
+            currentNodes = semanticsNodes(composeView)
+        }
+        error("Could not scroll '$text' fully into the editor viewport.")
+    }
+
     private fun assertFullyVisibleInViewport(node: SemanticsNode, viewport: SemanticsNode) {
         val viewportTop = viewport.positionInRoot.y
         val viewportBottom = viewportTop + viewport.size.height
@@ -1438,6 +1886,56 @@ class StatusFeedbackTest {
         } while (testRecomposer.currentState.value != Recomposer.State.Idle)
     }
 
+    private fun advanceFramesUntil(predicate: () -> Boolean) {
+        repeat(48) {
+            if (predicate()) {
+                return
+            }
+            checkNotNull(frameClock).sendFrame(nextFrameTimeNanos)
+            nextFrameTimeNanos += 16_000_000L
+            shadowOf(Looper.getMainLooper()).idle()
+            measureHostRoot()
+            ShadowDialog.getLatestDialog()?.takeIf { it.isShowing }?.window?.decorView?.let {
+                findViewRoot(it).measureAndLayoutForTest()
+            }
+        }
+        error("The expected native sheet semantics did not become visible within 48 frames.")
+    }
+
+    private fun optionsDialog(): android.app.Dialog = checkNotNull(
+        ShadowDialog.getLatestDialog()?.takeIf { it.isShowing },
+    )
+
+    private fun optionsDialogNodes(): List<SemanticsNode> =
+        semanticsNodes(findViewRoot(optionsDialog().window?.decorView))
+
+    private fun activeOptionsDialogNodes(): List<SemanticsNode> =
+        ShadowDialog.getLatestDialog()?.takeIf { it.isShowing }?.window?.decorView?.let { decor ->
+            runCatching { semanticsNodes(findViewRoot(decor)) }.getOrNull()
+        } ?: emptyList()
+
+    private fun openOptionsSheet() {
+        click(nodeWithText(semanticsNodes(composeView), "Options", clickable = true))
+        advanceFramesUntil {
+            activeOptionsDialogNodes().any { node ->
+                node.textValues().contains("Help") && node.size.width > 0 &&
+                    node.size.height > 0
+            }
+        }
+        val dialog = optionsDialog()
+        val decor = checkNotNull(dialog.window?.decorView)
+        val density = checkNotNull(activity).resources.displayMetrics.density
+        dialog.window?.setLayout(
+            (320 * density).roundToInt(),
+            (360 * density).roundToInt(),
+        )
+        shadowOf(Looper.getMainLooper()).idle()
+        findViewRoot(decor).measureAndLayoutForTest()
+        measureCurrentComposition()
+        assertEquals((320 * density).roundToInt(), decor.width)
+        assertEquals((360 * density).roundToInt(), decor.height)
+    }
+
     private fun measureHostRoot() {
         (checkNotNull(composeView).getChildAt(0) as ViewRootForTest).measureAndLayoutForTest()
     }
@@ -1471,6 +1969,8 @@ class StatusFeedbackTest {
     }
 
     private fun ignoreAction() = Unit
+
+    private fun ignoreList(value: SavedSearchList) = Unit
 
     private fun ignoreText(value: String) = Unit
 

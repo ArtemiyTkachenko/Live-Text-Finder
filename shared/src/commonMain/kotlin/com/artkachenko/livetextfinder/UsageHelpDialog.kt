@@ -13,6 +13,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.artkachenko.livetextfinder.camera.liveSearchAreaAvailable
+import livetextfinder.shared.generated.resources.Res
+import livetextfinder.shared.generated.resources.help_options_location
+import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal fun UsageHelpDialog(onDismissRequest: () -> Unit) {
@@ -59,7 +62,9 @@ internal fun UsageHelpDialog(onDismissRequest: () -> Unit) {
                 )
                 HelpSection(
                     title = "Colour and sharing on Android",
-                    body = "Highlight colour applies to all previews and newly shared images. " +
+                    body = stringResource(Res.string.help_options_location) + " " +
+                        "Highlight colour applies to all previews and newly " +
+                        "shared images. " +
                         "Android saves the query, lists, selection, and colour. Share image is " +
                         "available for frozen or imported images; it prepares a temporary " +
                         "highlighted PNG and opens the system share sheet. Opening it does not " +

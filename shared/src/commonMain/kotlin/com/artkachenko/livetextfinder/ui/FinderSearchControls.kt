@@ -2,7 +2,6 @@ package com.artkachenko.livetextfinder.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -15,6 +14,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
+import livetextfinder.shared.generated.resources.Res
+import livetextfinder.shared.generated.resources.finder_options
+import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal fun FinderSearchControls(
@@ -24,17 +26,12 @@ internal fun FinderSearchControls(
     searchListsLabel: String,
     onSearchLists: () -> Unit,
     searchContext: String,
-    highlightLabel: String,
-    highlightEnabled: Boolean,
-    onHighlight: () -> Unit,
-    onHelp: () -> Unit,
+    onOptions: () -> Unit,
     captureLabel: String?,
     captureEnabled: Boolean,
     onCapture: () -> Unit,
     pendingCaptureLabel: String?,
     onCancelCapture: () -> Unit,
-    liveAreaLabel: String?,
-    onLiveArea: () -> Unit,
     secondaryActionLabel: String?,
     onSecondaryAction: () -> Unit,
 ) {
@@ -83,51 +80,17 @@ internal fun FinderSearchControls(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            FlowRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(FinderSpacing.extraSmall),
-                verticalArrangement = Arrangement.spacedBy(FinderSpacing.extraSmall),
-                itemVerticalAlignment = Alignment.CenterVertically,
-            ) {
-                TextButton(
-                    onClick = onHighlight,
-                    enabled = highlightEnabled,
-                ) {
-                    Text(highlightLabel)
-                }
-                TextButton(onClick = onHelp) {
-                    Text("Help")
-                }
+            TextButton(onClick = onOptions) {
+                Text(stringResource(Res.string.finder_options))
             }
             when {
                 captureLabel != null -> {
-                    if (liveAreaLabel == null) {
-                        FinderPrimaryAction(
-                            label = captureLabel,
-                            enabled = captureEnabled,
-                            modifier = Modifier.fillMaxWidth(),
-                            onClick = onCapture,
-                        )
-                    } else {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(FinderSpacing.extraSmall),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            FinderPrimaryAction(
-                                label = captureLabel,
-                                enabled = captureEnabled,
-                                modifier = Modifier.weight(1f),
-                                onClick = onCapture,
-                            )
-                            TextButton(
-                                onClick = onLiveArea,
-                                modifier = Modifier.weight(1f),
-                            ) {
-                                Text(liveAreaLabel)
-                            }
-                        }
-                    }
+                    FinderPrimaryAction(
+                        label = captureLabel,
+                        enabled = captureEnabled,
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = onCapture,
+                    )
                 }
                 pendingCaptureLabel != null -> TextButton(onClick = onCancelCapture) {
                     Text(pendingCaptureLabel)

@@ -1,5 +1,15 @@
 # Validation
 
+## Compact controls and list-entry preview — 2026-10-29
+
+Main controls retain search, list context and Freeze/Resume while Options groups highlight colour, available live area, image import and Help. Source cancellation/Return remains directly available. List drafts now show one-entry-per-line guidance, an example, count against 32 terms, the first five normalized entries and any remaining count. Blank lines are flagged and duplicates stay visible; save validation and source/search ownership are preserved.
+
+Full checks passed in 41s: **235 host tests with zero failures/errors/skips across 36 suites**, Android compilation, iOS simulator shared compilation and lint with **zero errors/14 warnings**. The identical 360×700, font-scale-1.25 combined production-component fixture gives its weighted placeholder preview **170px instead of 118px**, recovering 52px without a forced preview minimum. These are host component fixtures, not full-device camera acceptance.
+
+Native tests open actual light/dark Options windows, constrain the compact dialog to 320×360, verify scrolling and 48dp Help bounds, callback counts/closure, disabled highlight pointer behavior and Back dismissal. Focused production controls test direct Cancel freeze/import and Return to camera. The editor tests use shared page scrolling and verify live empty/duplicate/overflow/blank previews, invalid-save draft retention, Cancel and normalized successful save. Pure cases cover CRLF, whitespace, commas as part of a phrase, duplicates and blank/trailing-line behavior.
+
+Initial review required repairing three test failures and adding light Options/direct-action coverage. The correction retains strict reachability, target-size and nonoverlap assertions. Owned test recomposition uses zero-duration motion for deterministic static-state checks; animation behavior is not accepted by these tests. Integration-only missing imports/helpers, exact-resource comparisons and live-position reference comparisons were corrected before the final passing run. Independent correction verification: **PASS WITH LIMITATIONS**, no remaining actionable finding. Scoped manual Kotlin inspection, limited added-line style audit and whitespace checks pass; no configured Kotlin formatter exists. AGENTS.md and all 41 historical evidence files remain unchanged. No dependencies, APK or device run were added. Physical touch/TalkBack/IME/camera transitions and iOS application runtime remain pending; logs/renders are outside Git.
+
 ## Custom highlight picker — 2026-10-29
 
 Implemented preset-compatible opaque RGB values, local slider drafts and strict Android schema v3 with legacy v1/v2 reads. Final local checks passed in 57s: **228 host tests with zero failures/errors/skips**, Android compilation, iOS simulator shared compilation and lint with **zero errors/14 warnings**. Fresh source-first independent review completed with **PASS WITH LIMITATIONS**, no actionable findings. The earlier interrupted review provided no verdict; it was not treated as acceptance.

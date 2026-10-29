@@ -95,3 +95,9 @@ Scoped shared string resources provide list/editor labels, list-specific accessi
 Shared presentation derives feedback from the displayed source: an imported image, a frozen frame, an import/freeze operation, or eligible live camera state. Current search occurrences remain separate from temporarily retained outlines. Missing recognition, unreadable content and a readable zero-match result have distinct meanings. This layer consumes existing immutable states without changing recognition, freshness, matching, projection or source ownership.
 
 An explicit Details dialog holds source-specific recognition diagnostics and the bounded text sample. It reads the selected source rather than falling back to a previous live camera snapshot. Diagnostic disclosure is secondary and follows the existing hidden-preview policy. Operational messages retain their existing recovery/cancel/reset callbacks and conditions; Android continues to own camera permission/settings and retry actions. No new persistence, image/text logging or automatic transitions are introduced.
+
+## Compact controls and list draft presentation
+
+App retains source-action and dialog ownership. Main controls expose search, list context and capture/cancellation, while a Material Options sheet routes secondary actions through existing callbacks. The sheet closes before another action is invoked; it does not own a camera session or saved preference. Existing compact/keyboard/list hiding and page scrolling remain unchanged.
+
+List draft presentation uses the existing recognized-text normalization to count and preview nonblank entries in order. It retains duplicates and reports blank lines; the controller continues validating every raw line before saving. Preview output is limited to five entries and a remaining count, with no second scroll viewport or new persisted draft.

@@ -52,6 +52,7 @@ import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -170,18 +171,13 @@ class LiveTextFinderThemeTest {
                             listButtonLabel.value = "Close lists"
                         },
                         searchContext = "Monthly review · 4 terms",
-                        highlightLabel = "Highlight color: Yellow",
-                        highlightEnabled = true,
-                        onHighlight = ::ignoreAction,
-                        onHelp = ::ignoreAction,
+                        onOptions = ::ignoreAction,
                         captureLabel = "Freeze frame",
                         captureEnabled = captureEnabled.value,
                         onCapture = { captureClicks.intValue++ },
                         pendingCaptureLabel = null,
                         onCancelCapture = ::ignoreAction,
-                        liveAreaLabel = "Live area: Full frame",
-                        onLiveArea = ::ignoreAction,
-                        secondaryActionLabel = "Import image",
+                        secondaryActionLabel = null,
                         onSecondaryAction = ::ignoreAction,
                     )
                 }
@@ -229,49 +225,37 @@ class LiveTextFinderThemeTest {
 
         val searchListsButton = nodeWithText(nodes, "Close lists", clickable = true)
         val contextText = nodeWithText(nodes, "Monthly review · 4 terms")
-        val highlightButton = nodeWithText(nodes, "Highlight color: Yellow", clickable = true)
-        val helpButton = nodeWithText(nodes, "Help", clickable = true)
-        val areaButton = nodeWithText(nodes, "Live area: Full frame", clickable = true)
-        val importButton = nodeWithText(nodes, "Import image", clickable = true)
+        val optionsButton = nodeWithText(nodes, "Options", clickable = true)
         val composeView = checkNotNull(this.composeView)
         val currentQueryNode = nodes.single {
             it.config.getOrNull(SemanticsProperties.EditableText)?.text == "updated invoice"
         }
-        val clickableBounds = listOf(
-            searchListsButton.touchBoundsInRoot,
-            highlightButton.touchBoundsInRoot,
-            helpButton.touchBoundsInRoot,
-            enabledCapture.touchBoundsInRoot,
-            areaButton.touchBoundsInRoot,
-            importButton.touchBoundsInRoot,
+        val controls = listOf(
+            searchListsButton,
+            optionsButton,
+            enabledCapture,
         )
-        val bounds = listOf(
+        controls.forEach { assertTouchBounds(it) }
+        val visibleBounds = listOf(
             currentQueryNode.unclippedBoundsInRoot(),
             searchListsButton.unclippedBoundsInRoot(),
             contextText.unclippedBoundsInRoot(),
-            highlightButton.unclippedBoundsInRoot(),
-            helpButton.unclippedBoundsInRoot(),
+            optionsButton.unclippedBoundsInRoot(),
             enabledCapture.unclippedBoundsInRoot(),
-            areaButton.unclippedBoundsInRoot(),
-            importButton.unclippedBoundsInRoot(),
         )
-        bounds.forEach { boundsInRoot ->
-            assertTrue(boundsInRoot.width > 0f && boundsInRoot.height > 0f)
-            assertTrue(boundsInRoot.left >= 0f && boundsInRoot.right <= composeView.width)
-            assertTrue(boundsInRoot.top >= 0f && boundsInRoot.bottom <= composeView.height)
+        visibleBounds.forEach { bounds ->
+            assertTrue(bounds.width > 0f && bounds.height > 0f)
+            assertTrue(bounds.left >= 0f && bounds.right <= composeView.width)
+            assertTrue(bounds.top >= 0f && bounds.bottom <= composeView.height)
         }
-        val density = composeView.resources.displayMetrics.density
-        assertTrue(clickableBounds.all {
-            it.height / density >= 48f && it.width / density >= 48f
-        })
-        for (firstIndex in clickableBounds.indices) {
-            for (secondIndex in firstIndex + 1 until clickableBounds.size) {
-                assertTrue(!intersects(clickableBounds[firstIndex], clickableBounds[secondIndex]))
-            }
-        }
-        for (firstIndex in bounds.indices) {
-            for (secondIndex in firstIndex + 1 until bounds.size) {
-                assertTrue(!intersects(bounds[firstIndex], bounds[secondIndex]))
+        for (firstIndex in controls.indices) {
+            for (secondIndex in firstIndex + 1 until controls.size) {
+                assertFalse(
+                    intersects(
+                        controls[firstIndex].touchBoundsInRoot,
+                        controls[secondIndex].touchBoundsInRoot,
+                    ),
+                )
             }
         }
     }
@@ -361,18 +345,13 @@ class LiveTextFinderThemeTest {
                                         searchListsLabel = "Search lists",
                                         onSearchLists = ::ignoreAction,
                                         searchContext = fixture.searchContext,
-                                        highlightLabel = "Highlight color: Yellow",
-                                        highlightEnabled = true,
-                                        onHighlight = ::ignoreAction,
-                                        onHelp = ::ignoreAction,
+                                        onOptions = ::ignoreAction,
                                         captureLabel = "Freeze frame",
                                         captureEnabled = true,
                                         onCapture = ::ignoreAction,
                                         pendingCaptureLabel = null,
                                         onCancelCapture = ::ignoreAction,
-                                        liveAreaLabel = "Live area: Full frame",
-                                        onLiveArea = ::ignoreAction,
-                                        secondaryActionLabel = "Import image",
+                                        secondaryActionLabel = null,
                                         onSecondaryAction = ::ignoreAction,
                                     )
                                 }
@@ -406,14 +385,10 @@ class LiveTextFinderThemeTest {
                     assertTrue(scrollState.maxValue > 0)
                 }
                 assertEquals(scrollState.maxValue, scrollState.value)
-                val visibleImportAction = nodeWithText(
-                    semanticsNodes(),
-                    "Import image",
-                    clickable = true,
-                )
-                val importBounds = visibleImportAction.unclippedBoundsInRoot()
-                assertTrue(importBounds.height > 0f)
-                assertTrue(importBounds.top >= 0f && importBounds.bottom <= composeView.height)
+                val options = nodeWithText(semanticsNodes(), "Options", clickable = true)
+                val optionsBounds = options.unclippedBoundsInRoot()
+                assertTrue(optionsBounds.height > 0f)
+                assertTrue(optionsBounds.top >= 0f && optionsBounds.bottom <= composeView.height)
             }
             assertTrue(controlsSize.value.height > 0)
             val renderedNodes = semanticsNodes()
@@ -426,14 +401,9 @@ class LiveTextFinderThemeTest {
                 nodeWithText(renderedNodes, "Search lists", clickable = true)
                     .unclippedBoundsInRoot(),
                 renderedContext.unclippedBoundsInRoot(),
-                nodeWithText(renderedNodes, "Highlight color: Yellow", clickable = true)
+                nodeWithText(renderedNodes, "Options", clickable = true)
                     .unclippedBoundsInRoot(),
-                nodeWithText(renderedNodes, "Help", clickable = true).unclippedBoundsInRoot(),
                 nodeWithText(renderedNodes, "Freeze frame", clickable = true)
-                    .unclippedBoundsInRoot(),
-                nodeWithText(renderedNodes, "Live area: Full frame", clickable = true)
-                    .unclippedBoundsInRoot(),
-                nodeWithText(renderedNodes, "Import image", clickable = true)
                     .unclippedBoundsInRoot(),
             )
             renderedControlBounds.forEach { bounds ->
@@ -560,6 +530,12 @@ class LiveTextFinderThemeTest {
         shadowOf(Looper.getMainLooper()).idleFor(16, TimeUnit.MILLISECONDS)
         val composeRoot = composeView.getChildAt(0) as ViewRootForTest
         composeRoot.measureAndLayoutForTest()
+    }
+
+    private fun assertTouchBounds(node: SemanticsNode) {
+        val density = checkNotNull(composeView).resources.displayMetrics.density
+        assertTrue(node.touchBoundsInRoot.width / density >= 48f)
+        assertTrue(node.touchBoundsInRoot.height / density >= 48f)
     }
 
     private fun intersects(first: Rect, second: Rect): Boolean =

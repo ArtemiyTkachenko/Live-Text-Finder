@@ -72,6 +72,7 @@ import com.artkachenko.livetextfinder.search.projectImportedHighlights
 import com.artkachenko.livetextfinder.search.searchRecognizedContent
 import com.artkachenko.livetextfinder.search.searchRecognizedText
 import com.artkachenko.livetextfinder.ui.ContextMessage
+import com.artkachenko.livetextfinder.ui.FinderOptionsSheet
 import com.artkachenko.livetextfinder.ui.FinderSearchControls
 import com.artkachenko.livetextfinder.ui.FinderSearchLists
 import com.artkachenko.livetextfinder.ui.FinderSpacing
@@ -80,6 +81,7 @@ import com.artkachenko.livetextfinder.ui.LiveTextFinderTheme
 import com.artkachenko.livetextfinder.utils.MonotonicClock
 import kotlinx.coroutines.delay
 import livetextfinder.shared.generated.resources.Res
+import livetextfinder.shared.generated.resources.finder_options_highlight
 import livetextfinder.shared.generated.resources.status_cancel
 import livetextfinder.shared.generated.resources.status_share_image
 import livetextfinder.shared.generated.resources.status_share_preparing
@@ -108,6 +110,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
             var areaState by remember { mutableStateOf<NormalizedSearchArea?>(null) }
             var areaRevision by remember { mutableLongStateOf(areaOwner.revision) }
             var helpDialogOpen by remember { mutableStateOf(false) }
+            var optionsOpen by remember { mutableStateOf(false) }
             var previewSize by remember { mutableStateOf(IntSize.Zero) }
             val rootSizeState = remember { mutableStateOf(IntSize.Zero) }
             val contentScrollState = rememberScrollState()
@@ -253,14 +256,14 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
             } else {
                 null
             }
-            val secondaryActionLabel = when (importedState.phase) {
-                ImportedImagePhase.Unsupported -> null
+            val directSecondaryActionLabel = when (importedState.phase) {
                 ImportedImagePhase.Imported -> "Return to camera"
                 ImportedImagePhase.Picking,
                 ImportedImagePhase.Reading,
                 ImportedImagePhase.Recognizing -> "Cancel import"
+                ImportedImagePhase.Unsupported,
                 ImportedImagePhase.Live,
-                ImportedImagePhase.Error -> "Import image"
+                ImportedImagePhase.Error -> null
             }
             AppContentColumn(
                 scrollState = contentScrollState,
@@ -289,15 +292,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                         searchContext = selectedList?.let {
                             "${it.name} · ${it.terms.size} terms"
                         } ?: "Manual search",
-                        highlightLabel =
-                            "Highlight color: ${sessionState.persisted.highlightColor.displayName}",
-                        highlightEnabled = sessionState.loaded && !sessionState.recoveryRequired,
-                        onHighlight = {
-                            colorDialogOpen = true
-                        },
-                        onHelp = {
-                            helpDialogOpen = true
-                        },
+                        onOptions = { optionsOpen = true },
                         captureLabel = captureLabel,
                         captureEnabled = freezeState.mode != FreezeMode.Live ||
                             state.status == OcrStatus.Scanning ||
@@ -320,11 +315,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                         },
                         pendingCaptureLabel = pendingCaptureLabel,
                         onCancelCapture = frozenOwner::cancel,
-                        liveAreaLabel = liveAreaLabel,
-                        onLiveArea = {
-                            areaDialogOpen = true
-                        },
-                        secondaryActionLabel = secondaryActionLabel,
+                        secondaryActionLabel = directSecondaryActionLabel,
                         onSecondaryAction = {
                             when (importedState.phase) {
                                 ImportedImagePhase.Unsupported -> Unit
@@ -336,14 +327,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                                 ImportedImagePhase.Reading,
                                 ImportedImagePhase.Recognizing -> importedOwner.cancel()
                                 ImportedImagePhase.Live,
-                                ImportedImagePhase.Error -> {
-                                    resetLiveArea()
-                                    if (freezeState.mode == FreezeMode.Freezing) {
-                                        frozenOwner.cancel()
-                                    }
-                                    frozenOwner.resume()
-                                    importedOwner.beginPicker()
-                                }
+                                ImportedImagePhase.Error -> Unit
                             }
                         },
                     )
@@ -682,6 +666,40 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
             }
             if (helpDialogOpen) {
                 UsageHelpDialog(onDismissRequest = { helpDialogOpen = false })
+            }
+            if (optionsOpen) {
+                FinderOptionsSheet(
+                    highlightLabel = stringResource(
+                        Res.string.finder_options_highlight,
+                        sessionState.persisted.highlightColor.displayName,
+                    ),
+                    highlightEnabled = sessionState.loaded && !sessionState.recoveryRequired,
+                    liveAreaLabel = liveAreaLabel,
+                    showImport = importedState.phase == ImportedImagePhase.Live ||
+                        importedState.phase == ImportedImagePhase.Error,
+                    onHighlight = {
+                        optionsOpen = false
+                        colorDialogOpen = true
+                    },
+                    onLiveArea = {
+                        optionsOpen = false
+                        areaDialogOpen = true
+                    },
+                    onImport = {
+                        optionsOpen = false
+                        resetLiveArea()
+                        if (freezeState.mode == FreezeMode.Freezing) {
+                            frozenOwner.cancel()
+                        }
+                        frozenOwner.resume()
+                        importedOwner.beginPicker()
+                    },
+                    onHelp = {
+                        optionsOpen = false
+                        helpDialogOpen = true
+                    },
+                    onDismissRequest = { optionsOpen = false },
+                )
             }
         }
     }

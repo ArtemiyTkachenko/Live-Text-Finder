@@ -10,6 +10,21 @@ internal const val MAX_TERMS_PER_LIST = 32
 internal const val MAX_TERM_LENGTH = 120
 internal const val MAX_TOTAL_TERM_CHARS = 3_000
 
+/** A presentation-only view of the exact normalized line parsing used when saving a list. */
+internal data class SearchListTermsPreview(
+    val terms: List<String>,
+    val blankLineCount: Int,
+)
+
+internal fun previewSearchListTerms(input: String): SearchListTermsPreview {
+    val lines = input.lines()
+    val terms = lines.map(::normalizeRecognizedText)
+    return SearchListTermsPreview(
+        terms = terms.filter(String::isNotEmpty),
+        blankLineCount = if (input.isEmpty()) 0 else terms.count(String::isEmpty),
+    )
+}
+
 /** A reusable named search containing independent literal terms or phrases. */
 data class SavedSearchList(val id: String, val name: String, val terms: List<String>)
 

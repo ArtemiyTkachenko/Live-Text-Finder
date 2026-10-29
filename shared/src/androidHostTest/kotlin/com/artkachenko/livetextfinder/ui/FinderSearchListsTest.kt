@@ -143,26 +143,34 @@ class FinderSearchListsTest {
                 error = "Enter a list name.",
             ),
         )
+        val editorScroll = ScrollState(0)
+        contentScrollState = editorScroll
         var changedName = ""
         var changedTerms = ""
         var cancelCount = 0
         mount(widthDp = 320, heightDp = 640, fontScale = 1.5f) {
             LiveTextFinderTheme(darkThemeOverride = true, dynamicColor = false) {
                 Surface(Modifier.fillMaxSize()) {
-                    FinderSearchLists(
-                        lists = emptyList(),
-                        activeListId = null,
-                        editor = editor.value,
-                        canSave = false,
-                        onNew = ::ignoreAction,
-                        onSelect = ::ignoreText,
-                        onEdit = ::ignoreList,
-                        onDelete = ::ignoreList,
-                        onNameChange = { changedName = it },
-                        onTermsChange = { changedTerms = it },
-                        onSave = ::ignoreAction,
-                        onCancel = { cancelCount++ },
-                    )
+                    AppContentColumn(
+                        scrollState = editorScroll,
+                        scrollable = true,
+                        modifier = Modifier.fillMaxSize(),
+                    ) {
+                        FinderSearchLists(
+                            lists = emptyList(),
+                            activeListId = null,
+                            editor = editor.value,
+                            canSave = false,
+                            onNew = ::ignoreAction,
+                            onSelect = ::ignoreText,
+                            onEdit = ::ignoreList,
+                            onDelete = ::ignoreList,
+                            onNameChange = { changedName = it },
+                            onTermsChange = { changedTerms = it },
+                            onSave = ::ignoreAction,
+                            onCancel = { cancelCount++ },
+                        )
+                    }
                 }
             }
         }
@@ -192,12 +200,17 @@ class FinderSearchListsTest {
         assertTrue(termsSetText(AnnotatedString("updated term")))
         assertEquals("Edited name", changedName)
         assertEquals("updated term", changedTerms)
-        val save = nodeWithText(semanticsNodes(), "Save list")
+        runBlockingScroll(editorScroll.maxValue)
+        assertTrue(editorScroll.maxValue > 0)
+        val visibleNodes = semanticsNodes()
+        val save = nodeWithText(visibleNodes, "Save list")
         assertTrue(save.config.contains(SemanticsProperties.Disabled))
         assertTouchBounds(save)
-        val cancel = nodeWithText(semanticsNodes(), "Cancel")
+        val cancel = nodeWithText(visibleNodes, "Cancel")
         assertFalse(cancel.config.contains(SemanticsProperties.Disabled))
         assertTouchBounds(cancel)
+        assertWithinViewport(save)
+        assertWithinViewport(cancel)
         assertFalse(intersects(save.touchBoundsInRoot, cancel.touchBoundsInRoot))
         assertRendered("lists-dark-editor-error.png")
         click(cancel)
@@ -219,17 +232,12 @@ class FinderSearchListsTest {
                                 searchListsLabel = "Search lists",
                                 onSearchLists = ::ignoreAction,
                                 searchContext = "Shopping list · 1 term",
-                                highlightLabel = "Highlight color: Yellow",
-                                highlightEnabled = true,
-                                onHighlight = ::ignoreAction,
-                                onHelp = ::ignoreAction,
+                                onOptions = ::ignoreAction,
                                 captureLabel = null,
                                 captureEnabled = false,
                                 onCapture = ::ignoreAction,
                                 pendingCaptureLabel = null,
                                 onCancelCapture = ::ignoreAction,
-                                liveAreaLabel = null,
-                                onLiveArea = ::ignoreAction,
                                 secondaryActionLabel = null,
                                 onSecondaryAction = ::ignoreAction,
                             )
@@ -303,18 +311,13 @@ class FinderSearchListsTest {
                             searchListsLabel = "Close lists",
                             onSearchLists = ::ignoreAction,
                             searchContext = "Monthly review · 2 terms",
-                            highlightLabel = "Highlight color: Yellow",
-                            highlightEnabled = true,
-                            onHighlight = ::ignoreAction,
-                            onHelp = ::ignoreAction,
+                            onOptions = ::ignoreAction,
                             captureLabel = null,
                             captureEnabled = false,
                             onCapture = ::ignoreAction,
                             pendingCaptureLabel = null,
                             onCancelCapture = ::ignoreAction,
-                            liveAreaLabel = null,
-                            onLiveArea = ::ignoreAction,
-                            secondaryActionLabel = "Import image",
+                            secondaryActionLabel = null,
                             onSecondaryAction = ::ignoreAction,
                         )
                         FinderSearchLists(
@@ -379,18 +382,13 @@ class FinderSearchListsTest {
                             searchListsLabel = "Close lists",
                             onSearchLists = ::ignoreAction,
                             searchContext = "Monthly review · 2 terms",
-                            highlightLabel = "Highlight color: Yellow",
-                            highlightEnabled = true,
-                            onHighlight = ::ignoreAction,
-                            onHelp = ::ignoreAction,
+                            onOptions = ::ignoreAction,
                             captureLabel = null,
                             captureEnabled = false,
                             onCapture = ::ignoreAction,
                             pendingCaptureLabel = null,
                             onCancelCapture = ::ignoreAction,
-                            liveAreaLabel = null,
-                            onLiveArea = ::ignoreAction,
-                            secondaryActionLabel = "Import image",
+                            secondaryActionLabel = null,
                             onSecondaryAction = ::ignoreAction,
                         )
                         FinderSearchLists(

@@ -26,11 +26,28 @@
     <string name="search_list_delete_accessibility">Delete %1$s</string>
     <string name="search_list_name_label">List name</string>
     <string name="search_list_terms_label">Terms or phrases · one per line</string>
+    <string name="search_list_terms_help">One term or phrase per line. Commas stay within a phrase.</string>
+    <string name="search_list_terms_example">Example:\nred apple\ninvoice</string>
+    <string name="search_list_terms_preview">Parsed preview</string>
+    <string name="search_list_terms_count">%1$d of %2$d terms</string>
+    <string name="search_list_terms_entry">%1$d. %2$s</string>
+    <string name="search_list_terms_empty">No terms yet. Enter one or more lines above.</string>
+    <string name="search_list_terms_blank_warning">Blank lines cannot be saved. Remove them to continue.</string>
     <string name="search_list_save">Save list</string>
     <string name="search_list_cancel">Cancel</string>
+    <string name="finder_options">Options</string>
+    <string name="finder_options_title">Options</string>
+    <string name="finder_options_highlight">Highlight color: %1$s</string>
+    <string name="finder_options_import">Import image</string>
+    <string name="finder_options_help">Help</string>
+    <string name="help_options_location">Open Options for highlight colour, the optional live area, image import, and Help.</string>
     <plurals name="search_list_term_count">
         <item quantity="one">%1$d term</item>
         <item quantity="other">%1$d terms</item>
+    </plurals>
+    <plurals name="search_list_terms_more">
+        <item quantity="one">and %1$d more</item>
+        <item quantity="other">and %1$d more</item>
     </plurals>
     <string name="status_details">Details</string>
     <string name="status_details_close">Close</string>

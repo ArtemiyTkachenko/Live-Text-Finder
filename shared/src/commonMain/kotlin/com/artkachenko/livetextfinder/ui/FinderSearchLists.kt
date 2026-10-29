@@ -23,8 +23,10 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.artkachenko.livetextfinder.search.MAX_TERMS_PER_LIST
 import com.artkachenko.livetextfinder.search.SavedSearchList
 import com.artkachenko.livetextfinder.search.SearchListEditorState
+import com.artkachenko.livetextfinder.search.previewSearchListTerms
 import livetextfinder.shared.generated.resources.Res
 import livetextfinder.shared.generated.resources.search_list_cancel
 import livetextfinder.shared.generated.resources.search_list_delete
@@ -38,7 +40,15 @@ import livetextfinder.shared.generated.resources.search_list_save
 import livetextfinder.shared.generated.resources.search_list_select_accessibility
 import livetextfinder.shared.generated.resources.search_list_selected
 import livetextfinder.shared.generated.resources.search_list_term_count
+import livetextfinder.shared.generated.resources.search_list_terms_blank_warning
+import livetextfinder.shared.generated.resources.search_list_terms_count
+import livetextfinder.shared.generated.resources.search_list_terms_empty
+import livetextfinder.shared.generated.resources.search_list_terms_entry
+import livetextfinder.shared.generated.resources.search_list_terms_example
+import livetextfinder.shared.generated.resources.search_list_terms_help
 import livetextfinder.shared.generated.resources.search_list_terms_label
+import livetextfinder.shared.generated.resources.search_list_terms_more
+import livetextfinder.shared.generated.resources.search_list_terms_preview
 import livetextfinder.shared.generated.resources.search_lists_heading
 import livetextfinder.shared.generated.resources.search_lists_new
 import org.jetbrains.compose.resources.pluralStringResource
@@ -212,6 +222,17 @@ private fun SearchListEditor(
                 modifier = Modifier.fillMaxWidth(),
                 shape = MaterialTheme.shapes.medium,
             )
+            val preview = previewSearchListTerms(editor.terms)
+            Text(
+                stringResource(Res.string.search_list_terms_help),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                stringResource(Res.string.search_list_terms_example),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             OutlinedTextField(
                 value = editor.terms,
                 onValueChange = onTermsChange,
@@ -219,6 +240,46 @@ private fun SearchListEditor(
                 modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp),
                 shape = MaterialTheme.shapes.medium,
             )
+            Text(
+                stringResource(Res.string.search_list_terms_preview),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Text(
+                stringResource(
+                    Res.string.search_list_terms_count,
+                    preview.terms.size,
+                    MAX_TERMS_PER_LIST,
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            if (preview.terms.isEmpty()) {
+                Text(stringResource(Res.string.search_list_terms_empty))
+            } else {
+                preview.terms.take(5).forEachIndexed { index, term ->
+                    Text(
+                        stringResource(
+                            Res.string.search_list_terms_entry,
+                            index + 1,
+                            term,
+                        ),
+                    )
+                }
+                if (preview.terms.size > 5) {
+                    Text(
+                        pluralStringResource(
+                            Res.plurals.search_list_terms_more,
+                            preview.terms.size - 5,
+                            preview.terms.size - 5,
+                        ),
+                    )
+                }
+            }
+            if (preview.blankLineCount > 0) {
+                Text(
+                    stringResource(Res.string.search_list_terms_blank_warning),
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
             editor.error?.let { error ->
                 Text(error, color = MaterialTheme.colorScheme.error)
             }
