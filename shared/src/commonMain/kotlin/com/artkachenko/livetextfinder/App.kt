@@ -11,18 +11,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -44,7 +39,6 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.artkachenko.livetextfinder.camera.CameraPreview
@@ -62,7 +56,6 @@ import com.artkachenko.livetextfinder.camera.shareFrozen
 import com.artkachenko.livetextfinder.camera.shareImported
 import com.artkachenko.livetextfinder.ocr.OcrStatus
 import com.artkachenko.livetextfinder.ocr.OcrUiState
-import com.artkachenko.livetextfinder.search.HighlightColor
 import com.artkachenko.livetextfinder.search.LiveSearchAreaOwner
 import com.artkachenko.livetextfinder.search.NormalizedSearchArea
 import com.artkachenko.livetextfinder.search.SearchListEditorState
@@ -82,6 +75,7 @@ import com.artkachenko.livetextfinder.ui.ContextMessage
 import com.artkachenko.livetextfinder.ui.FinderSearchControls
 import com.artkachenko.livetextfinder.ui.FinderSearchLists
 import com.artkachenko.livetextfinder.ui.FinderSpacing
+import com.artkachenko.livetextfinder.ui.HighlightColorDialog
 import com.artkachenko.livetextfinder.ui.LiveTextFinderTheme
 import com.artkachenko.livetextfinder.utils.MonotonicClock
 import kotlinx.coroutines.delay
@@ -278,7 +272,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
             ) {
                 Column(
                     Modifier.fillMaxWidth().padding(
-                        horizontal = FinderSpacing.small,
+                        horizontal = FinderSpacing.large,
                         vertical = FinderSpacing.extraSmall,
                     ),
                     verticalArrangement = Arrangement.spacedBy(FinderSpacing.extraSmall),
@@ -679,44 +673,11 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                 )
             }
             if (colorDialogOpen) {
-                AlertDialog(
+                HighlightColorDialog(
+                    selectedColor = sessionState.persisted.highlightColor,
+                    enabled = sessionState.loaded && !sessionState.recoveryRequired,
+                    onSelectColor = session::setHighlightColor,
                     onDismissRequest = { colorDialogOpen = false },
-                    title = { Text("Highlight color") },
-                    text = {
-                        Column(
-                            Modifier.heightIn(max = 320.dp)
-                                .verticalScroll(rememberScrollState())
-                                .selectableGroup(),
-                        ) {
-                            HighlightColor.entries.forEach { color ->
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().selectable(
-                                        selected = sessionState.persisted.highlightColor == color,
-                                        enabled = sessionState.loaded &&
-                                            !sessionState.recoveryRequired,
-                                        role = Role.RadioButton,
-                                        onClick = { session.setHighlightColor(color) },
-                                    ),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    RadioButton(
-                                        selected = sessionState.persisted.highlightColor == color,
-                                        onClick = null,
-                                        enabled = sessionState.loaded &&
-                                            !sessionState.recoveryRequired,
-                                    )
-                                    Box(
-                                        Modifier.padding(end = 12.dp).size(24.dp)
-                                            .background(color.composeColor),
-                                    )
-                                    Text(color.displayName)
-                                }
-                            }
-                        }
-                    },
-                    confirmButton = {
-                        TextButton(onClick = { colorDialogOpen = false }) { Text("Done") }
-                    },
                 )
             }
             if (helpDialogOpen) {

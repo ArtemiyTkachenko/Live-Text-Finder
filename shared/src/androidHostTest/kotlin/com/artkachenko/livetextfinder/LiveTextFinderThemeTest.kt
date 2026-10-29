@@ -349,7 +349,7 @@ class LiveTextFinderThemeTest {
                                     modifier = Modifier.onSizeChanged { controlsSize.value = it }
                                         .fillMaxWidth()
                                         .padding(
-                                            horizontal = FinderSpacing.small,
+                                            horizontal = FinderSpacing.large,
                                             vertical = FinderSpacing.extraSmall,
                                         ),
                                 ) {

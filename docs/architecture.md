@@ -82,7 +82,7 @@ The common control uses a cancellable draft and labelled sliders. Background/sou
 
 A small shared `LiveTextFinderTheme` supplies fallback light/dark colour schemes, Material typography/shapes and shared spacing. A narrow platform colour provider uses Android 12+ dynamic colours and fallback schemes on older Android and iOS. Android context and dynamic-colour APIs remain in Android sources. OCR palette values, camera backgrounds/scrims, projection and exported-image colours remain independent of theme personalisation.
 
-The main search/control region uses one restrained tonal surface, consistent content alignment and supporting typography for the active search. Freeze/Resume use a stronger tonal action while secondary actions stay directly available. The existing inset owner, conditional preview policy, actual measured preview bounds and source callbacks remain in place. List-manager and status presentation are described below.
+The main search/control region uses one restrained tonal surface, consistent content alignment and supporting typography for the active search. The main card and list/editor regions use a shared 16dp outer gutter with deliberately aligned content insets; text fields use the shared medium shape. Highlight/Help actions wrap from the start, and selectable highlight rows use 48dp targets with rounded outlined swatches. Freeze/Resume use a stronger tonal action while secondary actions stay directly available. The existing inset owner, conditional preview policy, actual measured preview bounds and source callbacks remain in place. List-manager and status presentation are described below.
 
 ## Search-list presentation
 

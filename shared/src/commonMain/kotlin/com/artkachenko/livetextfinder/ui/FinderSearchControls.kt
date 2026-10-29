@@ -2,6 +2,7 @@ package com.artkachenko.livetextfinder.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -44,8 +45,8 @@ internal fun FinderSearchControls(
     ) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(
-                horizontal = FinderSpacing.small,
-                vertical = FinderSpacing.extraSmall,
+                horizontal = FinderSpacing.large,
+                vertical = FinderSpacing.small,
             ),
             verticalArrangement = Arrangement.spacedBy(FinderSpacing.extraSmall),
         ) {
@@ -65,6 +66,7 @@ internal fun FinderSearchControls(
                 },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.medium,
             )
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -81,15 +83,15 @@ internal fun FinderSearchControls(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Row(
+            FlowRow(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(FinderSpacing.extraSmall),
-                verticalAlignment = Alignment.CenterVertically,
+                verticalArrangement = Arrangement.spacedBy(FinderSpacing.extraSmall),
+                itemVerticalAlignment = Alignment.CenterVertically,
             ) {
                 TextButton(
                     onClick = onHighlight,
                     enabled = highlightEnabled,
-                    modifier = Modifier.weight(1f),
                 ) {
                     Text(highlightLabel)
                 }

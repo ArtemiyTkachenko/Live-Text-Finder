@@ -1,4 +1,10 @@
 <resources>
+    <string name="highlight_color_title">Highlight color</string>
+    <string name="highlight_color_done">Done</string>
+    <string name="highlight_color_yellow">Yellow</string>
+    <string name="highlight_color_cyan">Cyan</string>
+    <string name="highlight_color_magenta">Magenta</string>
+    <string name="highlight_color_white">White</string>
     <string name="search_lists_heading">Search lists</string>
     <string name="search_lists_new">New list</string>
     <string name="search_list_edit_heading">Edit list</string>

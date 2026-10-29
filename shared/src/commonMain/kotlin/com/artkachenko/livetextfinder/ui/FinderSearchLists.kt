@@ -124,7 +124,7 @@ private fun SearchListRow(
                     .fillMaxWidth()
                     .selectable(selected = selected, role = Role.RadioButton, onClick = onSelect)
                     .semantics { contentDescription = selectLabel }
-                    .padding(FinderSpacing.medium),
+                    .padding(FinderSpacing.large),
                 verticalArrangement = Arrangement.spacedBy(FinderSpacing.extraSmall),
             ) {
                 Text(
@@ -210,12 +210,14 @@ private fun SearchListEditor(
                 label = { Text(stringResource(Res.string.search_list_name_label)) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.medium,
             )
             OutlinedTextField(
                 value = editor.terms,
                 onValueChange = onTermsChange,
                 label = { Text(stringResource(Res.string.search_list_terms_label)) },
                 modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp),
+                shape = MaterialTheme.shapes.medium,
             )
             editor.error?.let { error ->
                 Text(error, color = MaterialTheme.colorScheme.error)

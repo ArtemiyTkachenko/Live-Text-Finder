@@ -4,6 +4,8 @@ import android.app.Activity
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.os.Looper
+import android.os.SystemClock
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
@@ -19,11 +21,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.runtime.BroadcastFrameClock
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.Recomposer
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalDensity
@@ -56,21 +61,27 @@ import com.artkachenko.livetextfinder.ocr.TextElement
 import com.artkachenko.livetextfinder.ocr.TextLine
 import com.artkachenko.livetextfinder.recognitionDetails
 import com.artkachenko.livetextfinder.search.FrameIdentity
+import com.artkachenko.livetextfinder.search.HighlightColor
 import com.artkachenko.livetextfinder.search.Highlights
 import com.artkachenko.livetextfinder.search.SearchPresentationOwner
 import com.artkachenko.livetextfinder.search.SearchSessionState
 import com.artkachenko.livetextfinder.search.searchRecognizedContent
 import com.artkachenko.livetextfinder.search.searchRecognizedText
 import com.artkachenko.livetextfinder.ui.FinderSearchControls
+import com.artkachenko.livetextfinder.ui.HighlightColorDialog
 import com.artkachenko.livetextfinder.ui.sourceStatusMessage
 import java.io.File
 import java.io.FileOutputStream
-import java.util.concurrent.TimeUnit
 import kotlin.math.roundToInt
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.runner.RunWith
@@ -81,6 +92,8 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.shadows.ShadowDialog
 
+private const val MAX_RECOMPOSITION_FRAMES = 32
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -88,12 +101,22 @@ class StatusFeedbackTest {
     private var activity: ComponentActivity? = null
     private var composeView: ComposeView? = null
     private var contentScrollState: ScrollState? = null
+    private var frameClock: BroadcastFrameClock? = null
+    private var recomposer: Recomposer? = null
+    private var recomposerScope: CoroutineScope? = null
+    private var nextFrameTimeNanos = 1_000_000_000L
 
     @After
     fun disposeComposition() {
         composeView?.disposeComposition()
+        ShadowDialog.getLatestDialog()?.dismiss()
+        recomposer?.cancel()
+        recomposerScope?.cancel()
         activity?.finish()
         shadowOf(Looper.getMainLooper()).idle()
+        frameClock = null
+        recomposer = null
+        recomposerScope = null
     }
 
     @Test
@@ -176,6 +199,145 @@ class StatusFeedbackTest {
         assertTouchBounds(close, dialog.window?.decorView)
         click(close)
         assertFalse(isOpen.value)
+    }
+
+    @Test
+    fun productionHighlightPaletteHasSeparatedTouchRowsAndSelectsOnce() {
+        val selectedColor = mutableStateOf(HighlightColor.Magenta)
+        val selectedColors = mutableListOf<HighlightColor>()
+        mount(widthDp = 320, heightDp = 640, fontScale = 1.5f) {
+            LiveTextFinderTheme(darkThemeOverride = true, dynamicColor = false) {
+                HighlightColorDialog(
+                    selectedColor = selectedColor.value,
+                    enabled = true,
+                    onSelectColor = { color ->
+                        selectedColors += color
+                        selectedColor.value = color
+                    },
+                    onDismissRequest = ::ignoreAction,
+                )
+            }
+        }
+        settleDialog()
+
+        val dialog = checkNotNull(ShadowDialog.getLatestDialog())
+        val dialogRoot = findViewRoot(dialog.window?.decorView)
+        var nodes = semanticsNodes(dialogRoot)
+        assertTrue(nodes.any { it.textValues().contains("Highlight color") })
+        val rowDescriptions = HighlightColor.entries.map { it.displayName }
+        val rows = rowDescriptions.map { description ->
+            nodeWithDescription(nodes, description)
+        }
+        rows.forEach { row -> assertTouchBounds(row, dialog.window?.decorView) }
+        rows.forEachIndexed { index, row ->
+            rows.drop(index + 1).forEach { other ->
+                assertFalse(row.touchBoundsInRoot.intersects(other.touchBoundsInRoot))
+            }
+        }
+        val selectedRow = nodeWithSelectedDescription(nodes, "Magenta")
+        assertEquals(true, selectedRow.config.getOrNull(SemanticsProperties.Selected))
+        assertDialogRendered(dialog, "highlight-palette-dark-narrow-large-text.png")
+
+        HighlightColor.entries.forEach { color ->
+            click(nodeWithDescription(nodes, color.displayName))
+            nodes = semanticsNodes(findViewRoot(dialog.window?.decorView))
+            assertEquals(color, selectedColors.last())
+            assertEquals(color, selectedColor.value)
+            assertEquals(
+                true,
+                nodeWithSelectedDescription(nodes, color.displayName)
+                    .config.getOrNull(SemanticsProperties.Selected),
+            )
+        }
+        assertEquals(HighlightColor.entries.toList(), selectedColors)
+    }
+
+    @Test
+    fun productionHighlightPaletteKeepsRowsDisabledUntilSessionIsReady() {
+        val selectedColor = mutableStateOf(HighlightColor.Yellow)
+        val selectedColors = mutableListOf<HighlightColor>()
+        var dismissCount = 0
+        mount(widthDp = 360, heightDp = 640) {
+            LiveTextFinderTheme(darkThemeOverride = false, dynamicColor = false) {
+                HighlightColorDialog(
+                    selectedColor = selectedColor.value,
+                    enabled = false,
+                    onSelectColor = { color ->
+                        selectedColors += color
+                        selectedColor.value = color
+                    },
+                    onDismissRequest = { dismissCount++ },
+                )
+            }
+        }
+        settleDialog()
+
+        val dialog = checkNotNull(ShadowDialog.getLatestDialog())
+        val nodes = semanticsNodes(findViewRoot(dialog.window?.decorView))
+        assertDialogRendered(dialog, "highlight-palette-light-ready-gated.png")
+        val yellow = nodeWithDescription(nodes, "Yellow")
+        assertTrue(yellow.config.contains(SemanticsProperties.Disabled))
+        assertTouchBounds(yellow, dialog.window?.decorView)
+        dispatchTouch(findComposeView(dialog.window?.decorView), yellow.touchBoundsInRoot)
+        measureCurrentComposition()
+        assertTrue(selectedColors.isEmpty())
+        assertEquals(HighlightColor.Yellow, selectedColor.value)
+        val done = nodeWithText(nodes, "Done")
+        assertTouchBounds(done, dialog.window?.decorView)
+        click(done)
+        assertEquals(1, dismissCount)
+    }
+
+    @Test
+    fun shortHighlightDialogScrollsPaletteAndKeepsDoneVisibleAndTouchable() {
+        val selectedColor = mutableStateOf(HighlightColor.Yellow)
+        val selectedColors = mutableListOf<HighlightColor>()
+        var dismissCount = 0
+        mount(widthDp = 360, heightDp = 240) {
+            LiveTextFinderTheme(darkThemeOverride = false, dynamicColor = false) {
+                HighlightColorDialog(
+                    selectedColor = selectedColor.value,
+                    enabled = true,
+                    onSelectColor = { color ->
+                        selectedColors += color
+                        selectedColor.value = color
+                    },
+                    onDismissRequest = { dismissCount++ },
+                )
+            }
+        }
+        settleDialog()
+
+        val dialog = checkNotNull(ShadowDialog.getLatestDialog())
+        val decorView = checkNotNull(dialog.window?.decorView)
+        val density = checkNotNull(activity).resources.displayMetrics.density
+        val widthPx = (360 * density).roundToInt()
+        val heightPx = (240 * density).roundToInt()
+        dialog.window?.setLayout(widthPx, heightPx)
+        shadowOf(Looper.getMainLooper()).idle()
+        findViewRoot(decorView).measureAndLayoutForTest()
+        measureCurrentComposition()
+        assertEquals(heightPx, decorView.height)
+
+        var nodes = semanticsNodes(findViewRoot(decorView))
+        val scrollNode = checkNotNull(
+            nodes.firstOrNull { it.config.getOrNull(SemanticsActions.ScrollBy) != null },
+        )
+        checkNotNull(scrollNode.config.getOrNull(SemanticsActions.ScrollBy)?.action)
+            .invoke(0f, 320f)
+        measureCurrentComposition()
+        nodes = semanticsNodes(findViewRoot(decorView))
+
+        val white = nodeWithDescription(nodes, "White")
+        assertTouchBounds(white, decorView)
+        val done = nodeWithText(nodes, "Done")
+        assertTouchBounds(done, decorView)
+        assertTrue(done.positionInRoot.y >= 0f)
+        assertTrue(done.positionInRoot.y + done.size.height <= decorView.height)
+        click(white)
+        assertEquals(listOf(HighlightColor.White), selectedColors)
+        click(nodeWithText(semanticsNodes(findViewRoot(decorView)), "Done"))
+        assertEquals(1, dismissCount)
     }
 
     @Test
@@ -487,7 +649,10 @@ class StatusFeedbackTest {
                         modifier = Modifier.fillMaxSize(),
                     ) {
                         Column(
-                            Modifier.fillMaxWidth().padding(FinderSpacing.small),
+                            Modifier.fillMaxWidth().padding(
+                                horizontal = FinderSpacing.large,
+                                vertical = FinderSpacing.small,
+                            ),
                             verticalArrangement = Arrangement.spacedBy(FinderSpacing.small),
                         ) {
                             FinderSearchControls(
@@ -630,8 +795,18 @@ class StatusFeedbackTest {
         val hostActivity = Robolectric.buildActivity(ComponentActivity::class.java).setup().get()
         val hostView = ComposeView(hostActivity)
         hostView.setLayerType(View.LAYER_TYPE_SOFTWARE, null)
+        val testFrameClock = BroadcastFrameClock()
+        val scope = CoroutineScope(
+            SupervisorJob() + Dispatchers.Unconfined + testFrameClock,
+        )
+        val testRecomposer = Recomposer(scope.coroutineContext)
+        scope.launch { testRecomposer.runRecomposeAndApplyChanges() }
+        hostView.setParentCompositionContext(testRecomposer)
         activity = hostActivity
         composeView = hostView
+        frameClock = testFrameClock
+        recomposer = testRecomposer
+        recomposerScope = scope
         hostView.setContent {
             CompositionLocalProvider(
                 LocalDensity provides Density(
@@ -646,7 +821,7 @@ class StatusFeedbackTest {
         measureAt(hostView, hostActivity, widthDp, heightDp)
         shadowOf(Looper.getMainLooper()).idle()
         measureAt(hostView, hostActivity, widthDp, heightDp)
-        (hostView.getChildAt(0) as ViewRootForTest).measureAndLayoutForTest()
+        measureCurrentComposition()
     }
 
     @Composable
@@ -755,6 +930,52 @@ class StatusFeedbackTest {
         else -> error("No Compose view root found")
     }
 
+    private fun findComposeView(view: View?): View = when {
+        view is ViewRootForTest -> view
+        view is ViewGroup -> (0 until view.childCount)
+            .asSequence()
+            .mapNotNull { index ->
+                runCatching { findComposeView(view.getChildAt(index)) }.getOrNull()
+            }
+            .firstOrNull()
+            ?: error("No Compose Android view found")
+        else -> error("No Compose Android view found")
+    }
+
+    private fun dispatchTouch(view: View, bounds: Rect) {
+        val x = bounds.center.x
+        val y = bounds.center.y
+        val downTime = SystemClock.uptimeMillis()
+        val down = MotionEvent.obtain(
+            downTime,
+            downTime,
+            MotionEvent.ACTION_DOWN,
+            x,
+            y,
+            0,
+        )
+        try {
+            view.dispatchTouchEvent(down)
+        } finally {
+            down.recycle()
+        }
+
+        val upTime = maxOf(SystemClock.uptimeMillis(), downTime + 1L)
+        val up = MotionEvent.obtain(
+            downTime,
+            upTime,
+            MotionEvent.ACTION_UP,
+            x,
+            y,
+            0,
+        )
+        try {
+            view.dispatchTouchEvent(up)
+        } finally {
+            up.recycle()
+        }
+    }
+
     private fun nodeWithText(nodes: List<SemanticsNode>, text: String): SemanticsNode =
         checkNotNull(nodes.firstOrNull { it.textValues().contains(text) }) {
             "No semantics node with text '$text'"
@@ -772,6 +993,19 @@ class StatusFeedbackTest {
         "No semantics node with description '$description'"
     }
 
+    private fun nodeWithSelectedDescription(
+        nodes: List<SemanticsNode>,
+        description: String,
+    ): SemanticsNode = checkNotNull(
+        nodes.firstOrNull {
+            it.config.getOrNull(SemanticsProperties.ContentDescription)
+                ?.contains(description) == true &&
+                it.config.getOrNull(SemanticsProperties.Selected) == true
+        },
+    ) {
+        "No selected semantics node with description '$description'"
+    }
+
     private fun SemanticsNode.textValues(): List<String> =
         config.getOrNull(SemanticsProperties.Text).orEmpty().map { it.text }
 
@@ -780,6 +1014,9 @@ class StatusFeedbackTest {
         assertTrue(node.touchBoundsInRoot.width / density >= 48f)
         assertTrue(node.touchBoundsInRoot.height / density >= 48f)
     }
+
+    private fun Rect.intersects(other: Rect): Boolean =
+        left < other.right && right > other.left && top < other.bottom && bottom > other.top
 
     private fun assertTextIsLaidOut(node: SemanticsNode) {
         val layouts = mutableListOf<TextLayoutResult>()
@@ -812,22 +1049,32 @@ class StatusFeedbackTest {
     }
 
     private fun settleDialog() {
-        repeat(3) {
-            Snapshot.sendApplyNotifications()
-            shadowOf(Looper.getMainLooper()).idleFor(16, TimeUnit.MILLISECONDS)
-            measureHostRoot()
-            ShadowDialog.getLatestDialog()?.takeIf { it.isShowing }?.window?.decorView?.let {
-                findViewRoot(it)?.measureAndLayoutForTest()
-            }
-        }
+        measureCurrentComposition()
     }
 
     private fun measureCurrentComposition() {
-        repeat(3) {
-            Snapshot.sendApplyNotifications()
-            shadowOf(Looper.getMainLooper()).idleFor(16, TimeUnit.MILLISECONDS)
+        Snapshot.sendApplyNotifications()
+        val testFrameClock = checkNotNull(frameClock)
+        val testRecomposer = checkNotNull(recomposer)
+        var frameCount = 0
+        do {
+            testFrameClock.sendFrame(nextFrameTimeNanos)
+            nextFrameTimeNanos += 16_000_000L
+            frameCount++
+            shadowOf(Looper.getMainLooper()).idle()
             measureHostRoot()
-        }
+            ShadowDialog.getLatestDialog()?.takeIf { it.isShowing }?.window?.decorView?.let {
+                findViewRoot(it).measureAndLayoutForTest()
+            }
+            if (frameCount == MAX_RECOMPOSITION_FRAMES &&
+                testRecomposer.currentState.value != Recomposer.State.Idle
+            ) {
+                error(
+                    "Compose recomposer remained ${testRecomposer.currentState.value} " +
+                        "after $MAX_RECOMPOSITION_FRAMES test frames",
+                )
+            }
+        } while (testRecomposer.currentState.value != Recomposer.State.Idle)
     }
 
     private fun measureHostRoot() {

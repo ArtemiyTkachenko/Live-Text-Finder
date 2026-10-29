@@ -8,7 +8,9 @@ import android.view.View
 import android.widget.FrameLayout
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
@@ -200,6 +202,78 @@ class FinderSearchListsTest {
         assertRendered("lists-dark-editor-error.png")
         click(cancel)
         assertEquals(1, cancelCount)
+    }
+
+    @Test
+    fun mainControlsSelectedListAndEditorShareTheThirtyTwoDpContentInset() {
+        val list = SavedSearchList("shopping", "Shopping list", listOf("Protein"))
+        mount(widthDp = 360, heightDp = 900) {
+            LiveTextFinderTheme(darkThemeOverride = false, dynamicColor = false) {
+                Surface(Modifier.fillMaxSize()) {
+                    Column {
+                        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+                            FinderSearchControls(
+                                showTitle = false,
+                                query = "invoice",
+                                onQueryChange = ::ignoreText,
+                                searchListsLabel = "Search lists",
+                                onSearchLists = ::ignoreAction,
+                                searchContext = "Shopping list · 1 term",
+                                highlightLabel = "Highlight color: Yellow",
+                                highlightEnabled = true,
+                                onHighlight = ::ignoreAction,
+                                onHelp = ::ignoreAction,
+                                captureLabel = null,
+                                captureEnabled = false,
+                                onCapture = ::ignoreAction,
+                                pendingCaptureLabel = null,
+                                onCancelCapture = ::ignoreAction,
+                                liveAreaLabel = null,
+                                onLiveArea = ::ignoreAction,
+                                secondaryActionLabel = null,
+                                onSecondaryAction = ::ignoreAction,
+                            )
+                        }
+                        FinderSearchLists(
+                            lists = listOf(list),
+                            activeListId = list.id,
+                            editor = SearchListEditorState(
+                                isOpen = true,
+                                editingId = list.id,
+                                name = list.name,
+                                terms = "Protein",
+                            ),
+                            canSave = true,
+                            onNew = ::ignoreAction,
+                            onSelect = ::ignoreText,
+                            onEdit = ::ignoreList,
+                            onDelete = ::ignoreList,
+                            onNameChange = ::ignoreText,
+                            onTermsChange = ::ignoreText,
+                            onSave = ::ignoreAction,
+                            onCancel = ::ignoreAction,
+                        )
+                    }
+                }
+            }
+        }
+
+        val nodes = semanticsNodes(useUnmergedTree = true)
+        val query = nodes.single {
+            it.config.getOrNull(SemanticsProperties.EditableText)?.text == "invoice"
+        }
+        val selectedName = nodes.single {
+            it.config.getOrNull(SemanticsProperties.Text)?.singleOrNull()?.text == "Shopping list"
+        }
+        val editorName = nodes.single {
+            it.config.getOrNull(SemanticsProperties.EditableText)?.text == "Shopping list"
+        }
+        val density = checkNotNull(composeView).resources.displayMetrics.density
+        val sharedInsetDp = 32f
+        assertEquals(sharedInsetDp, query.positionInRoot.x / density, 0.5f)
+        assertEquals(sharedInsetDp, selectedName.positionInRoot.x / density, 0.5f)
+        assertEquals(sharedInsetDp, editorName.positionInRoot.x / density, 0.5f)
+        assertRendered("combined-light-shared-content-inset.png")
     }
 
     @Test
@@ -481,9 +555,14 @@ class FinderSearchListsTest {
         view.layout(0, 0, widthPx, heightPx)
     }
 
-    private fun semanticsNodes(): List<SemanticsNode> {
-        val root = (checkNotNull(composeView).getChildAt(0) as ViewRootForTest)
-            .semanticsOwner.rootSemanticsNode
+    private fun semanticsNodes(useUnmergedTree: Boolean = false): List<SemanticsNode> {
+        val semanticsOwner = (checkNotNull(composeView).getChildAt(0) as ViewRootForTest)
+            .semanticsOwner
+        val root = if (useUnmergedTree) {
+            semanticsOwner.unmergedRootSemanticsNode
+        } else {
+            semanticsOwner.rootSemanticsNode
+        }
         val result = mutableListOf<SemanticsNode>()
 
         fun collect(node: SemanticsNode) {
