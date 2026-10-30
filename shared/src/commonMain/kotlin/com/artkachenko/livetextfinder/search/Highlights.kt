@@ -32,6 +32,49 @@ internal data class ElementOutline(
 )
 internal data class Highlights(val ready: Boolean, val outlines: List<ElementOutline>)
 
+internal data class MatchOutlineBounds(
+    val left: Float,
+    val top: Float,
+    val right: Float,
+    val bottom: Float,
+)
+
+internal fun occurrenceBounds(
+    occurrence: TextOccurrence,
+    highlights: Highlights,
+): MatchOutlineBounds? {
+    if (!highlights.ready || occurrence.elementIndices.isEmpty()) return null
+    val selected = occurrence.elementIndices.distinct().map { elementIndex ->
+        highlights.outlines.singleOrNull {
+            it.lineIndex == occurrence.lineIndex && it.elementIndex == elementIndex
+        } ?: return null
+    }
+    if (selected.any { outline ->
+        !validPolygon(outline.points)
+    }) return null
+    val points = selected.flatMap { it.points }
+    return MatchOutlineBounds(
+        points.minOf { it.x },
+        points.minOf { it.y },
+        points.maxOf { it.x },
+        points.maxOf { it.y },
+    ).takeIf { it.right > it.left && it.bottom > it.top }
+}
+
+internal fun DrawScope.drawSelectedOccurrenceMarker(bounds: MatchOutlineBounds) {
+    val inset = 5.dp.toPx()
+    val topLeft = androidx.compose.ui.geometry.Offset(bounds.left - inset, bounds.top - inset)
+    val size = androidx.compose.ui.geometry.Size(
+        bounds.right - bounds.left + inset * 2,
+        bounds.bottom - bounds.top + inset * 2,
+    )
+    val dash = androidx.compose.ui.graphics.PathEffect.dashPathEffect(
+        floatArrayOf(7.dp.toPx(), 4.dp.toPx()),
+    )
+    drawRect(Color.Black, topLeft, size, style = Stroke(4.dp.toPx(), pathEffect = dash))
+    drawRect(Color.White, topLeft, size, style = Stroke(2.dp.toPx(), pathEffect = dash))
+}
+
 /** Draws the same paired outline used for live, frozen, and imported matches. */
 internal fun DrawScope.drawHighlightOutlines(
     outlines: List<ElementOutline>,

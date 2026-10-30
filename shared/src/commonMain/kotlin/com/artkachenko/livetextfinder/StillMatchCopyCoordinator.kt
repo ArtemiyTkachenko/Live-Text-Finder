@@ -24,6 +24,7 @@ internal class StillMatchCopyCoordinator(
     private val session: SearchSessionController,
     private val selectedIndex: () -> Int?,
     private val writeText: suspend (String) -> Unit,
+    private val contextIsCurrent: () -> Boolean = { true },
 ) {
     suspend fun copy(
         row: StillMatchRow,
@@ -43,6 +44,10 @@ internal class StillMatchCopyCoordinator(
                 expectedOwnerToken = ownerToken,
                 currentSource = {
                     when {
+                        importedOwner.state.value.phase == ImportedImagePhase.Picking ||
+                            importedOwner.state.value.phase == ImportedImagePhase.Reading ||
+                            importedOwner.state.value.phase == ImportedImagePhase.Recognizing ->
+                            StillMatchSourceState(null, null, null)
                         importedOwner.state.value.phase == ImportedImagePhase.Imported -> {
                             val snapshot = importedOwner.state.value.snapshot
                             StillMatchSourceState(
@@ -65,6 +70,7 @@ internal class StillMatchCopyCoordinator(
                 currentSearchIdentity = { session.state.value.activeSearch.identity },
                 currentSelectedIndex = selectedIndex,
                 writeText = writeText,
+                currentContextCurrent = contextIsCurrent,
             )
             if (copied) StillMatchCopyOutcome.Copied else StillMatchCopyOutcome.Stale
         } catch (cancelled: CancellationException) {

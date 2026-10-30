@@ -2,10 +2,12 @@ package com.artkachenko.livetextfinder.ui
 
 import android.graphics.Bitmap
 import android.graphics.Canvas as AndroidCanvas
+import android.graphics.Canvas
 import android.os.Looper
 import android.view.View
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Button
@@ -15,8 +17,10 @@ import androidx.compose.runtime.BroadcastFrameClock
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Recomposer
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.MotionDurationScale
@@ -36,6 +40,12 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntSize
 import com.artkachenko.livetextfinder.StillMatchCopyCoordinator
 import com.artkachenko.livetextfinder.StillMatchCopyOutcome
+import com.artkachenko.livetextfinder.StillMatchNavigationCoordinator
+import com.artkachenko.livetextfinder.adjacentStillMatchRow
+import com.artkachenko.livetextfinder.effectiveStillMatchRows
+import com.artkachenko.livetextfinder.filterStillMatchRows
+import com.artkachenko.livetextfinder.performStillMatchLocate
+import com.artkachenko.livetextfinder.rememberStillMatchNavigationCoordinator
 import com.artkachenko.livetextfinder.camera.FrozenFrameFit
 import com.artkachenko.livetextfinder.camera.FrozenFrameOwner
 import com.artkachenko.livetextfinder.camera.ImportedImageOwner
@@ -50,9 +60,16 @@ import com.artkachenko.livetextfinder.ocr.TextElement
 import com.artkachenko.livetextfinder.ocr.TextLine
 import com.artkachenko.livetextfinder.ocr.TextPoint
 import com.artkachenko.livetextfinder.search.ActiveSearchSpec
+import com.artkachenko.livetextfinder.search.ElementOutline
+import com.artkachenko.livetextfinder.search.HighlightColor
+import com.artkachenko.livetextfinder.search.MatchOutlineBounds
 import com.artkachenko.livetextfinder.search.PreviewPoint
 import com.artkachenko.livetextfinder.search.SearchTerm
+import com.artkachenko.livetextfinder.search.StillMatchRow
+import com.artkachenko.livetextfinder.search.TextSearchResult
 import com.artkachenko.livetextfinder.search.inMemorySearchSessionController
+import com.artkachenko.livetextfinder.search.drawHighlightOutlines
+import com.artkachenko.livetextfinder.search.drawSelectedOccurrenceMarker
 import com.artkachenko.livetextfinder.search.searchRecognizedContent
 import com.artkachenko.livetextfinder.search.stillMatchRows
 import kotlin.test.Test
@@ -60,6 +77,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import java.io.File
+import java.io.FileOutputStream
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -113,7 +132,7 @@ class StillInspectionUiTest {
                         transform = transform,
                         onTransformChange = {
                         },
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier.fillMaxSize().background(Color.Black),
                     ) {
                         Canvas(Modifier.matchParentSize()) {
                             drawRect(
@@ -157,6 +176,109 @@ class StillInspectionUiTest {
     }
 
     @Test
+    fun selectedMarkerStaysOutsideColoredOutlineAndSharesViewportTransform() {
+        mount(100, 100) {
+            LiveTextFinderTheme(darkThemeOverride = false, dynamicColor = false) {
+                Surface(Modifier.fillMaxSize()) {
+                    StillInspectionViewport(
+                        sourceIdentity = "import:1",
+                        fit = FrozenFrameFit(100, 100, 0, 100f, 100f),
+                        viewportSize = IntSize(100, 100),
+                        transform = StillViewTransform(zoom = 2f),
+                        onTransformChange = {},
+                        modifier = Modifier.fillMaxSize().background(Color.Black),
+                    ) {
+                        Canvas(Modifier.fillMaxSize()) {
+                            drawHighlightOutlines(
+                                listOf(
+                                    ElementOutline(
+                                        0,
+                                        0,
+                                        listOf(
+                                            PreviewPoint(40f, 40f),
+                                            PreviewPoint(60f, 40f),
+                                            PreviewPoint(60f, 60f),
+                                            PreviewPoint(40f, 60f),
+                                        ),
+                                    ),
+                                ),
+                                HighlightColor.Cyan,
+                            )
+                            drawSelectedOccurrenceMarker(MatchOutlineBounds(40f, 40f, 60f, 60f))
+                        }
+                    }
+                }
+            }
+        }
+
+        val rendered = renderRoot()
+        try {
+            assertEquals(android.graphics.Color.WHITE, rendered.getPixel(25, 20))
+            assertFalse(rendered.getPixel(30, 50) == android.graphics.Color.WHITE)
+            saveVisual(rendered, "still-marker-light.png")
+        } finally {
+            rendered.recycle()
+        }
+    }
+
+    @Test
+    fun compactLargeTextNavigationControlsRenderInLightAndDarkThemes() {
+        var nextClicks = 0
+        mount(240, 360, fontScale = 1.5f) {
+            Column(Modifier.fillMaxSize()) {
+                LiveTextFinderTheme(darkThemeOverride = false, dynamicColor = false) {
+                    Surface(Modifier.weight(1f)) {
+                        StillMatchNavigationControls(
+                            position = 1,
+                            count = 4,
+                            matchedTerm = "invoice",
+                            matchedText = "Invoice 802",
+                            canLocate = true,
+                            onPrevious = {},
+                            onNext = { nextClicks++ },
+                            onCopy = {},
+                        )
+                    }
+                }
+                LiveTextFinderTheme(darkThemeOverride = true, dynamicColor = false) {
+                    Surface(Modifier.weight(1f)) {
+                        StillMatchNavigationControls(
+                            position = 4,
+                            count = 4,
+                            matchedTerm = "invoice",
+                            matchedText = "invoice 910",
+                            canLocate = true,
+                            onPrevious = {},
+                            onNext = {},
+                            onCopy = {},
+                        )
+                    }
+                }
+            }
+        }
+
+        val nodes = nodes(composeRoot())
+        val previous = nodes.first { nodeText(it) == "Previous" }
+        assertNotNull(previous.config.getOrNull(SemanticsProperties.Disabled))
+        val next = nodes.first { nodeText(it) == "Next" }
+        assertTrue(checkNotNull(next.config.getOrNull(SemanticsActions.OnClick)?.action)())
+        assertEquals(1, nextClicks)
+        assertTrue(nodes.any { nodeText(it).contains("invoice: Invoice 802") })
+        assertTrue(
+            nodes.any {
+                it.config.getOrNull(SemanticsProperties.ContentDescription)
+                    ?.any { description -> description.contains("Invoice 802") } == true
+            },
+        )
+        val rendered = renderRoot()
+        try {
+            saveVisual(rendered, "still-navigation-light-dark-compact-large-text.png")
+        } finally {
+            rendered.recycle()
+        }
+    }
+
+    @Test
     fun rememberedTransformResetsForSourceAndViewportButSurvivesSearchAndColorChanges() {
         val source = mutableStateOf("frozen:request-1")
         val viewport = mutableStateOf(IntSize(100, 100))
@@ -188,6 +310,289 @@ class StillInspectionUiTest {
         viewport.value = IntSize(120, 100)
         measureCurrentComposition()
         assertTrue(nodes(composeRoot()).any { node -> nodeText(node) == "1.0:second:1" })
+    }
+
+    @Test
+    fun rememberedNavigationBindingReadsCurrentStillSelectionAndViewport() {
+        val importedOwner = ImportedImageOwner()
+        val frozenOwner = FrozenFrameOwner()
+        val session = inMemorySearchSessionController()
+        session.setManualQuery("foo")
+        val selectionState = mutableStateOf(mutableStateOf<Int?>(null))
+        var selected by selectionState
+        val viewportState = mutableStateOf(mutableStateOf(IntSize.Zero))
+        var viewport by viewportState
+        val visible = mutableStateOf(false)
+        var bound: StillMatchNavigationCoordinator? = null
+        mount(180, 120) {
+            val ownerPhase = importedOwner.state.value.phase
+            val searchIdentity = session.state.value.activeSearch.identity
+            bound = rememberStillMatchNavigationCoordinator(
+                importedOwner,
+                frozenOwner,
+                session,
+                selectedIndex = { selected.value },
+                viewport = { viewport.value },
+                visible = { visible.value },
+            )
+            Text("$ownerPhase:$searchIdentity:${selected.value}:${viewport.value}")
+        }
+
+        val firstSnapshot = importedSnapshot(listOf("foo one", "bar two", "foo three"))
+        adopt(importedOwner, firstSnapshot)
+        measureCurrentComposition()
+        val activeSearch = session.state.value.activeSearch
+        val resultSpec = ActiveSearchSpec(
+            identity = activeSearch.identity,
+            displayName = "Manual query",
+            terms = listOf(SearchTerm("foo-term", "foo"), SearchTerm("bar-term", "bar")),
+        )
+        val firstResult = searchRecognizedContent(resultSpec, firstSnapshot)
+        val allRows = stillMatchRows(firstResult)
+        val firstRows = filterStillMatchRows(allRows, "foo-term")
+        assertEquals(3, allRows.size)
+        assertEquals(2, firstRows.size)
+        val first = firstRows[0]
+        val second = checkNotNull(adjacentStillMatchRow(firstRows, 1, 1))
+        assertEquals(allRows[2].index, second.index)
+        assertEquals(null, adjacentStillMatchRow(firstRows, 1, -1))
+        assertEquals(null, adjacentStillMatchRow(firstRows, firstRows.size, 1))
+        val coordinator = checkNotNull(bound)
+        val ownerToken = checkNotNull(importedOwner.state.value.snapshot)
+        selected.value = first.index
+        viewport.value = IntSize(100, 80)
+        visible.value = true
+        measureCurrentComposition()
+        assertTrue(coordinator.accepts(
+            first, firstResult, "import:44", firstResult.spec.identity, ownerToken,
+            first.index, viewport.value,
+        ))
+
+        var focusCount = 0
+        var termFilter: String? = "foo-term"
+        var dialogOpen = true
+        fun showCaptured(
+            row: StillMatchRow,
+            expectedIndex: Int?,
+            expectedSize: IntSize,
+            expectedToken: Any,
+            result: TextSearchResult = firstResult,
+            onLocated: () -> Unit = {
+                termFilter = null
+                dialogOpen = false
+            },
+        ) = performStillMatchLocate(
+            coordinator,
+            row,
+            result,
+            "import:44",
+            result.spec.identity,
+            expectedToken,
+            expectedIndex,
+            expectedSize,
+            focus = { focusCount++; true },
+            onLocated = onLocated,
+        )
+        val oldShowA = { showCaptured(first, first.index, IntSize(100, 80), ownerToken) }
+        assertEquals(2, effectiveStillMatchRows(allRows, termFilter, first.index).size)
+        val rowB = allRows[1]
+        selected.value = rowB.index
+        assertEquals(allRows, effectiveStillMatchRows(allRows, termFilter, rowB.index))
+        val copiedB = mutableListOf<String>()
+        val copyB = StillMatchCopyCoordinator(
+            importedOwner,
+            frozenOwner,
+            session,
+            selectedIndex = { selected.value },
+            writeText = copiedB::add,
+            contextIsCurrent = {
+                coordinator.accepts(
+                    rowB,
+                    firstResult,
+                    "import:44",
+                    firstResult.spec.identity,
+                    ownerToken,
+                    rowB.index,
+                    viewport.value,
+                    requireLocateContext = false,
+                )
+            },
+        )
+        assertEquals(
+            StillMatchCopyOutcome.Copied,
+            runBlocking {
+                copyB.copy(
+                    rowB,
+                    firstResult,
+                    "import:44",
+                    firstResult.spec.identity,
+                    rowB.index,
+                    ownerToken,
+                )
+            },
+        )
+        assertEquals(listOf("bar"), copiedB)
+        dialogOpen = false
+        assertEquals("foo-term", termFilter)
+        assertEquals(0, focusCount)
+        assertFalse(dialogOpen)
+        dialogOpen = true
+        assertFalse(oldShowA())
+        assertEquals(0, focusCount)
+        assertEquals("foo-term", termFilter)
+        assertTrue(dialogOpen)
+        assertFalse(coordinator.accepts(
+            first, firstResult, "import:44", firstResult.spec.identity, ownerToken,
+            first.index, viewport.value,
+        ))
+        assertTrue(coordinator.accepts(
+            rowB, firstResult, "import:44", firstResult.spec.identity, ownerToken,
+            rowB.index, viewport.value,
+        ))
+        assertTrue(showCaptured(rowB, rowB.index, IntSize(100, 80), ownerToken))
+        assertEquals(1, focusCount)
+        assertEquals(null, termFilter)
+        assertFalse(dialogOpen)
+        selected = mutableStateOf(first.index)
+        viewport = mutableStateOf(IntSize(120, 80))
+        measureCurrentComposition()
+        assertTrue(coordinator.accepts(
+            first, firstResult, "import:44", firstResult.spec.identity, ownerToken,
+            first.index, IntSize(120, 80),
+        ))
+        viewport.value = IntSize(120, 80)
+        termFilter = "foo-term"
+        dialogOpen = true
+        assertFalse(showCaptured(first, first.index, IntSize(100, 80), ownerToken))
+        assertEquals(1, focusCount)
+        assertEquals("foo-term", termFilter)
+        assertTrue(dialogOpen)
+        assertFalse(coordinator.accepts(
+            first, firstResult, "import:44", firstResult.spec.identity, ownerToken,
+            first.index, IntSize(100, 80),
+        ))
+
+        selected = mutableStateOf(rowB.index)
+        measureCurrentComposition()
+        val replacement = importedSnapshot(listOf("foo replacement"))
+        adopt(importedOwner, replacement)
+        termFilter = "foo-term"
+        dialogOpen = true
+        assertFalse(coordinator.accepts(
+            rowB, firstResult, "import:44", firstResult.spec.identity, ownerToken,
+            rowB.index, viewport.value,
+        ))
+        measureCurrentComposition()
+        assertFalse(showCaptured(rowB, rowB.index, IntSize(120, 80), ownerToken))
+        assertEquals(1, focusCount)
+        assertEquals("foo-term", termFilter)
+        assertTrue(dialogOpen)
+        val replacementResult = searchRecognizedContent(
+            session.state.value.activeSearch,
+            replacement,
+        )
+        val replacementRow = stillMatchRows(replacementResult).single()
+        val replacementToken = checkNotNull(importedOwner.state.value.snapshot)
+        selected.value = replacementRow.index
+        viewport.value = IntSize(100, 80)
+        visible.value = false
+        measureCurrentComposition()
+        termFilter = "foo-term"
+        dialogOpen = true
+        assertFalse(
+            showCaptured(
+                replacementRow,
+                replacementRow.index,
+                IntSize(100, 80),
+                replacementToken,
+                replacementResult,
+            ),
+        )
+        assertEquals(1, focusCount)
+        assertEquals("foo-term", termFilter)
+        assertTrue(dialogOpen)
+        viewport.value = IntSize.Zero
+        measureCurrentComposition()
+        assertFalse(coordinator.accepts(
+            replacementRow, replacementResult, "import:44", replacementResult.spec.identity,
+            replacementToken, replacementRow.index, IntSize.Zero,
+        ))
+        assertFalse(
+            showCaptured(
+                replacementRow,
+                replacementRow.index,
+                IntSize.Zero,
+                replacementToken,
+                replacementResult,
+            ),
+        )
+        assertEquals(1, focusCount)
+        assertEquals("foo-term", termFilter)
+        assertTrue(dialogOpen)
+        assertTrue(coordinator.accepts(
+            replacementRow, replacementResult, "import:44", replacementResult.spec.identity,
+            replacementToken, replacementRow.index, IntSize.Zero,
+            requireLocateContext = false,
+        ))
+        val copied = mutableListOf<String>()
+        val copy = StillMatchCopyCoordinator(
+            importedOwner = importedOwner,
+            frozenOwner = frozenOwner,
+            session = session,
+            selectedIndex = { selected.value },
+            writeText = copied::add,
+            contextIsCurrent = {
+                coordinator.accepts(
+                    replacementRow,
+                    replacementResult,
+                    "import:44",
+                    replacementResult.spec.identity,
+                    replacementToken,
+                    replacementRow.index,
+                    IntSize.Zero,
+                    requireLocateContext = false,
+                )
+            },
+        )
+        assertEquals(
+            StillMatchCopyOutcome.Copied,
+            runBlocking {
+                copy.copy(
+                    replacementRow,
+                    replacementResult,
+                    "import:44",
+                    replacementResult.spec.identity,
+                    replacementRow.index,
+                    replacementToken,
+                )
+            },
+        )
+        assertEquals(listOf("foo"), copied)
+        viewport.value = IntSize(100, 80)
+        visible.value = true
+        measureCurrentComposition()
+        termFilter = "foo-term"
+        dialogOpen = true
+        session.setManualQuery("replacement")
+        assertFalse(coordinator.accepts(
+            replacementRow, replacementResult, "import:44", replacementResult.spec.identity,
+            replacementToken, replacementRow.index, IntSize.Zero,
+            requireLocateContext = false,
+        ))
+        assertFalse(
+            showCaptured(
+                replacementRow,
+                replacementRow.index,
+                IntSize.Zero,
+                replacementToken,
+                replacementResult,
+            ),
+        )
+        assertEquals(1, focusCount)
+        assertEquals("foo-term", termFilter)
+        assertTrue(dialogOpen)
+        importedOwner.dispose()
+        frozenOwner.stop()
     }
 
     @Test
@@ -297,6 +702,7 @@ class StillInspectionUiTest {
             writeText = { clipboard.setClipEntry(plainTextClipEntry(it)) },
         )
         val copyMessage = mutableStateOf<String?>(null)
+        var showCount = 0
         mount(360, 520) {
             LiveTextFinderTheme(darkThemeOverride = false, dynamicColor = false) {
                 StillMatchesDialog(
@@ -324,6 +730,7 @@ class StillInspectionUiTest {
                             copyMessage.value = "Could not copy this match. Select it again."
                         }
                     },
+                    onShowOnImage = { showCount++ },
                     onDismiss = {
                     },
                 )
@@ -339,12 +746,22 @@ class StillInspectionUiTest {
             nodeText(node).contains("Copy matched text")
         }
         assertNotNull(disabledCopy.config.getOrNull(SemanticsProperties.Disabled))
+        val disabledShow = nodes(dialogRoot).first { node ->
+            nodeText(node) == "Show on image"
+        }
+        assertNotNull(disabledShow.config.getOrNull(SemanticsProperties.Disabled))
         val rowNode = nodes(dialogRoot).first { node ->
             nodeText(node).contains("match 2") &&
                 node.config.getOrNull(SemanticsActions.OnClick) != null
         }
         assertTrue(checkNotNull(rowNode.config.getOrNull(SemanticsActions.OnClick)?.action)())
         measureCurrentComposition()
+        val show = nodes(dialogComposeRoot()).first { node ->
+            nodeText(node) == "Show on image"
+        }
+        assertTrue(checkNotNull(show.config.getOrNull(SemanticsActions.OnClick)?.action)())
+        assertEquals(1, showCount)
+        saveDialog("still-matches-dialog-light.png")
         assertTrue(
             nodes(dialogComposeRoot()).any { node ->
                 node.config.getOrNull(SemanticsProperties.Selected) == true
@@ -435,6 +852,26 @@ class StillInspectionUiTest {
         return bitmap
     }
 
+    private fun saveVisual(bitmap: Bitmap, fileName: String) {
+        val directory = System.getenv("LTF_VISUAL_OUTPUT_DIR") ?: return
+        val output = File(directory, fileName)
+        output.parentFile?.mkdirs()
+        FileOutputStream(output).use { stream ->
+            assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream))
+        }
+    }
+
+    private fun saveDialog(fileName: String) {
+        val view = checkNotNull(ShadowDialog.getLatestDialog()?.window?.decorView)
+        val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+        view.draw(AndroidCanvas(bitmap))
+        try {
+            saveVisual(bitmap, fileName)
+        } finally {
+            bitmap.recycle()
+        }
+    }
+
     private fun dialogComposeRoot(): ViewRootForTest = findViewRoot(
         checkNotNull(ShadowDialog.getLatestDialog()?.window?.decorView),
     )
@@ -484,6 +921,19 @@ class StillInspectionUiTest {
         },
         frame = FrameInfo(1, 100, 100, 0, TextBounds(0, 0, 100, 100), emptyList()),
     )
+
+    private fun adopt(owner: ImportedImageOwner, snapshot: ImportedTextSnapshot) {
+        val request = checkNotNull(owner.beginPicker())
+        check(
+            owner.adoptProcessedImage(
+                request,
+                ProcessedImportedImage(
+                    Bitmap.createBitmap(100, 20, Bitmap.Config.ARGB_8888),
+                    snapshot,
+                ),
+            ),
+        )
+    }
 
     private fun importedSnapshot(lines: List<String>) = ImportedTextSnapshot(
         text = lines.joinToString(" "),

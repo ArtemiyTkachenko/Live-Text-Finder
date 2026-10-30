@@ -20,6 +20,7 @@ internal suspend fun copyStillMatch(
     currentSearchIdentity: () -> String,
     currentSelectedIndex: () -> Int?,
     writeText: suspend (String) -> Unit,
+    currentContextCurrent: () -> Boolean = { true },
 ): Boolean {
     if (row.index != selectedIndex || result.spec.identity != expectedSearchIdentity) {
         return false
@@ -31,7 +32,7 @@ internal suspend fun copyStillMatch(
         return current.sourceIdentity == expectedSourceIdentity &&
             current.content === result.content && current.ownerToken === expectedOwnerToken &&
             currentSearchIdentity() == expectedSearchIdentity &&
-            currentSelectedIndex() == selectedIndex
+            currentSelectedIndex() == selectedIndex && currentContextCurrent()
     }
 
     if (!isCurrent()) return false

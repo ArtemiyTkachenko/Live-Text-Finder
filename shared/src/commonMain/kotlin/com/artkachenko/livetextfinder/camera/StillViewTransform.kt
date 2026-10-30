@@ -13,6 +13,29 @@ internal data class StillViewTransform(
 
     fun reset(): StillViewTransform = StillViewTransform()
 
+    fun focus(
+        left: Float,
+        top: Float,
+        right: Float,
+        bottom: Float,
+        viewportWidth: Float,
+        viewportHeight: Float,
+        fit: FrozenFrameFit,
+        padding: Float,
+    ): StillViewTransform? {
+        if (!validViewport(viewportWidth, viewportHeight) || !fit.isValid ||
+            !listOf(left, top, right, bottom, padding).all(Float::isFinite) ||
+            right <= left || bottom <= top || padding < 0f
+        ) return null
+        val scale = minOf(
+            (viewportWidth - padding * 2f) / (right - left),
+            (viewportHeight - padding * 2f) / (bottom - top),
+        ).coerceIn(1f, MAX_ZOOM)
+        val panX = (viewportWidth / 2f - (left + right) / 2f) * scale
+        val panY = (viewportHeight / 2f - (top + bottom) / 2f) * scale
+        return bounded(scale, panX, panY, viewportWidth, viewportHeight, fit)
+    }
+
     fun zoomBy(
         factor: Float,
         centroid: PreviewPoint,

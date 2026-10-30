@@ -67,9 +67,15 @@ import com.artkachenko.livetextfinder.search.LiveSearchAreaOwner
 import com.artkachenko.livetextfinder.search.NormalizedSearchArea
 import com.artkachenko.livetextfinder.search.PreviewPoint
 import com.artkachenko.livetextfinder.search.SearchHighlightPalette
+import com.artkachenko.livetextfinder.search.Highlights
 import com.artkachenko.livetextfinder.search.SearchListEditorState
 import com.artkachenko.livetextfinder.search.SearchPresentationOwner
 import com.artkachenko.livetextfinder.search.SearchSessionController
+import com.artkachenko.livetextfinder.search.StillMatchRow
+import com.artkachenko.livetextfinder.rememberStillMatchNavigationCoordinator
+import com.artkachenko.livetextfinder.adjacentStillMatchRow
+import com.artkachenko.livetextfinder.effectiveStillMatchRows
+import com.artkachenko.livetextfinder.performStillMatchLocate
 import com.artkachenko.livetextfinder.search.drawHighlightOutlines
 import com.artkachenko.livetextfinder.search.drawableElementsForSession
 import com.artkachenko.livetextfinder.search.importedHighlightsForDraw
@@ -78,10 +84,13 @@ import com.artkachenko.livetextfinder.search.isPresentationCurrentAreaRevision
 import com.artkachenko.livetextfinder.search.projectFrozenHighlights
 import com.artkachenko.livetextfinder.search.projectHighlights
 import com.artkachenko.livetextfinder.search.projectImportedHighlights
+import com.artkachenko.livetextfinder.search.occurrenceBounds
+import com.artkachenko.livetextfinder.search.drawSelectedOccurrenceMarker
 import com.artkachenko.livetextfinder.search.searchRecognizedContent
 import com.artkachenko.livetextfinder.search.searchRecognizedText
 import com.artkachenko.livetextfinder.search.searchTermSummaries
 import com.artkachenko.livetextfinder.search.stillMatchRows
+import com.artkachenko.livetextfinder.search.stillMatchText
 import com.artkachenko.livetextfinder.ui.ContextMessage
 import com.artkachenko.livetextfinder.ui.FinderOptionsSheet
 import com.artkachenko.livetextfinder.ui.FinderSearchControls
@@ -91,6 +100,7 @@ import com.artkachenko.livetextfinder.ui.HighlightColorDialog
 import com.artkachenko.livetextfinder.ui.LiveTextFinderTheme
 import com.artkachenko.livetextfinder.ui.SearchTermResultsDialog
 import com.artkachenko.livetextfinder.ui.StillInspectionControls
+import com.artkachenko.livetextfinder.ui.StillMatchNavigationControls
 import com.artkachenko.livetextfinder.ui.StillInspectionViewport
 import com.artkachenko.livetextfinder.ui.StillMatchesDialog
 import com.artkachenko.livetextfinder.ui.rememberStillViewTransform
@@ -100,6 +110,7 @@ import kotlinx.coroutines.launch
 import livetextfinder.shared.generated.resources.Res
 import livetextfinder.shared.generated.resources.finder_options_highlight
 import livetextfinder.shared.generated.resources.search_results
+import livetextfinder.shared.generated.resources.search_results_locate_hint
 import livetextfinder.shared.generated.resources.status_cancel
 import livetextfinder.shared.generated.resources.status_share_image
 import livetextfinder.shared.generated.resources.status_share_preparing
@@ -134,7 +145,8 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
             var helpDialogOpen by remember { mutableStateOf(false) }
             var searchResultsDialogOpen by remember(activeSearch.identity) { mutableStateOf(false) }
             var optionsOpen by remember { mutableStateOf(false) }
-            var previewSize by remember { mutableStateOf(IntSize.Zero) }
+            val previewSizeState = remember { mutableStateOf(IntSize.Zero) }
+            var previewSize by previewSizeState
             val rootSizeState = remember { mutableStateOf(IntSize.Zero) }
             val contentScrollState = rememberScrollState()
             var rootSize by rootSizeState
@@ -250,14 +262,143 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
             var matchesDialogOpen by remember(inspectionIdentity, activeSearch.identity) {
                 mutableStateOf(false)
             }
-            var selectedMatch by remember(inspectionIdentity, activeSearch.identity) {
+            val selectedMatchState = remember(inspectionIdentity, activeSearch.identity) {
                 mutableStateOf<Int?>(null)
+            }
+            var selectedMatch by selectedMatchState
+            var selectedTermId by remember(inspectionIdentity, activeSearch.identity) {
+                mutableStateOf<String?>(null)
             }
             var copyMessage by remember(inspectionIdentity, activeSearch.identity) {
                 mutableStateOf<String?>(null)
             }
             val clipboard = LocalClipboard.current
             val coroutineScope = rememberCoroutineScope()
+            val navigationCoordinator = rememberStillMatchNavigationCoordinator(
+                importedOwner,
+                frozenOwner,
+                session,
+                selectedIndex = { selectedMatchState.value },
+                viewport = { previewSizeState.value },
+                isContentVisible,
+            )
+            val expectedSelectedIndex = selectedMatch
+            val effectiveMatchRows = effectiveStillMatchRows(
+                matchRows,
+                selectedTermId,
+                expectedSelectedIndex,
+            )
+            val selectedPosition = effectiveMatchRows.indexOfFirst {
+                it.index == expectedSelectedIndex
+            } + 1
+            val selectedNavigationRow = effectiveMatchRows.firstOrNull {
+                it.index == expectedSelectedIndex
+            }
+            val expectedViewport = previewSize
+            val expectedOwnerToken = when {
+                importedState.phase == ImportedImagePhase.Imported -> importedState.snapshot
+                freezeState.mode == FreezeMode.Frozen -> frozenFrame
+                else -> null
+            }
+            fun stillActionIsCurrent(
+                row: StillMatchRow,
+                expectedSelection: Int?,
+                requireLocateContext: Boolean = true,
+            ): Boolean {
+                val identity = sourceIdentity ?: return false
+                val token = expectedOwnerToken ?: return false
+                return navigationCoordinator.accepts(
+                        row,
+                        search,
+                        identity,
+                        activeSearch.identity,
+                        token,
+                        expectedSelection,
+                        expectedViewport,
+                        requireLocateContext,
+                    )
+            }
+            fun copyActionIsCurrent(row: StillMatchRow, index: Int?): Boolean {
+                val token = expectedOwnerToken ?: return false
+                if (sourceIdentity == null || index == null ||
+                    selectedMatchState.value != index ||
+                    session.state.value.activeSearch.identity != activeSearch.identity ||
+                    stillMatchText(row, search) != row.matchedText
+                ) return false
+                val currentImport = importedOwner.state.value
+                if (currentImport.phase == ImportedImagePhase.Picking ||
+                    currentImport.phase == ImportedImagePhase.Reading ||
+                    currentImport.phase == ImportedImagePhase.Recognizing
+                ) return false
+                val currentToken = if (currentImport.phase == ImportedImagePhase.Imported) {
+                    currentImport.snapshot
+                } else if (frozenOwner.state.value.mode == FreezeMode.Frozen) {
+                    frozenOwner.state.value.frame
+                } else {
+                    null
+                }
+                return currentToken === token
+            }
+            fun projectedStillHighlights() = if (importedState.phase ==
+                ImportedImagePhase.Imported
+            ) {
+                importedState.snapshot?.let { snapshot ->
+                    projectImportedHighlights(
+                        search,
+                        snapshot,
+                        previewSize.width.toFloat(),
+                        previewSize.height.toFloat(),
+                    )
+                }
+            } else if (freezeState.mode == FreezeMode.Frozen) {
+                projectFrozenHighlights(
+                    search, previewSize.width.toFloat(), previewSize.height.toFloat()
+                )
+            } else {
+                null
+            }
+            fun focusMatch(
+                row: StillMatchRow,
+            ): Boolean {
+                val bounds = occurrenceBounds(
+                    row.occurrence,
+                    projectedStillHighlights() ?: return false,
+                )
+                    ?: return false
+                val focused = stillTransform.focus(
+                    bounds.left,
+                    bounds.top,
+                    bounds.right,
+                    bounds.bottom,
+                    previewSize.width.toFloat(),
+                    previewSize.height.toFloat(),
+                    stillFit ?: return false,
+                    24f * density.density,
+                ) ?: return false
+                selectedMatch = row.index
+                stillTransform = focused
+                return true
+            }
+            fun locateMatch(
+                row: StillMatchRow,
+                expectedSelection: Int?,
+                onLocated: () -> Unit = {},
+            ): Boolean {
+                val identity = sourceIdentity ?: return false
+                val token = expectedOwnerToken ?: return false
+                return performStillMatchLocate(
+                    navigationCoordinator,
+                    row,
+                    search,
+                    identity,
+                    activeSearch.identity,
+                    token,
+                    expectedSelection,
+                    expectedViewport,
+                    focus = { focusMatch(row) },
+                    onLocated = onLocated,
+                )
+            }
             LaunchedEffect(sourceIdentity, activeSearch.identity, freezeState.mode) {
                 if (sourceIdentity == null || freezeState.mode != FreezeMode.Frozen &&
                     importedState.phase != ImportedImagePhase.Imported
@@ -317,6 +458,61 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
             // This is the only IME inset owner. The weighted preview receives the remaining
             // height directly, so OCR status changes do not recalculate its available space.
             val shouldShowViews = isContentVisible()
+            val copyFailedMessage = stringResource(Res.string.still_match_copy_failed)
+            val copiedMessage = stringResource(Res.string.still_match_copied)
+            val copySelectedMatch: () -> Unit = {
+                val selectedIndex = expectedSelectedIndex
+                val row = matchRows.firstOrNull { it.index == selectedIndex }
+                val copyOwnerToken = expectedOwnerToken
+                if (sourceIdentity == null || selectedIndex == null || row == null ||
+                    copyOwnerToken == null ||
+                    !copyActionIsCurrent(row, selectedIndex) ||
+                    stillMatchText(row, search) != row.matchedText
+                ) {
+                    copyMessage = copyFailedMessage
+                } else {
+                    coroutineScope.launch {
+                        try {
+                            val outcome = StillMatchCopyCoordinator(
+                                importedOwner = importedOwner,
+                                frozenOwner = frozenOwner,
+                                session = session,
+                                selectedIndex = { selectedMatchState.value },
+                                writeText = { text ->
+                                    clipboard.setClipEntry(plainTextClipEntry(text))
+                                },
+                                contextIsCurrent = {
+                                    copyActionIsCurrent(row, selectedIndex)
+                                },
+                            ).copy(
+                                row,
+                                search,
+                                sourceIdentity,
+                                activeSearch.identity,
+                                selectedIndex,
+                                copyOwnerToken,
+                            )
+                            if (!copyActionIsCurrent(row, selectedIndex)) return@launch
+                            when (outcome) {
+                                StillMatchCopyOutcome.Copied -> {
+                                    copyMessage = copiedMessage
+                                    matchesDialogOpen = false
+                                }
+                                StillMatchCopyOutcome.Stale,
+                                StillMatchCopyOutcome.Failed -> {
+                                    copyMessage = copyFailedMessage
+                                }
+                            }
+                        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                            throw cancelled
+                        } catch (error: Exception) {
+                            if (copyActionIsCurrent(row, selectedIndex)) {
+                                copyMessage = copyFailedMessage
+                            }
+                        }
+                    }
+                }
+            }
             val hasLiveCaptureControls = importedState.phase == ImportedImagePhase.Live ||
                 importedState.phase == ImportedImagePhase.Error
             val captureLabel = if (!hasLiveCaptureControls) {
@@ -530,10 +726,37 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                             onMatches = {
                                 focusManager.clearFocus()
                                 keyboardController?.hide()
-                                selectedMatch = null
                                 matchesDialogOpen = true
                             },
                         )
+                        val selectedRow = selectedNavigationRow
+                        if (selectedPosition > 0 && selectedRow != null) {
+                            val canLocate = shouldShowViews &&
+                                stillActionIsCurrent(selectedRow, expectedSelectedIndex)
+                            if (!canLocate) {
+                                ContextMessage(
+                                    message = stringResource(Res.string.search_results_locate_hint),
+                                )
+                            }
+                            StillMatchNavigationControls(
+                                position = selectedPosition,
+                                count = effectiveMatchRows.size,
+                                matchedTerm = selectedRow.termLabel,
+                                matchedText = selectedRow.matchedText,
+                                canLocate = canLocate,
+                                onPrevious = {
+                                    adjacentStillMatchRow(
+                                        effectiveMatchRows, selectedPosition, -1
+                                    )?.let { locateMatch(it, expectedSelectedIndex) }
+                                },
+                                onNext = {
+                                    adjacentStillMatchRow(
+                                        effectiveMatchRows, selectedPosition, 1
+                                    )?.let { locateMatch(it, expectedSelectedIndex) }
+                                },
+                                onCopy = copySelectedMatch,
+                            )
+                        }
                         copyMessage?.let { message -> ContextMessage(message = message) }
                     }
                 }
@@ -697,6 +920,13 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                                     ),
                                 )
                             }
+                            val selectedRow = matchRows.firstOrNull { it.index == selectedMatch }
+                            val selectedBounds = selectedRow?.takeIf {
+                                stillActionIsCurrent(it, expectedSelectedIndex)
+                            }?.let { row ->
+                                occurrenceBounds(row.occurrence, Highlights(true, outlines))
+                            }
+                            selectedBounds?.let { bounds -> drawSelectedOccurrenceMarker(bounds) }
                             if (liveAreaIsDisplayed) {
                                 val area = checkNotNull(areaState)
                                 drawRect(
@@ -739,68 +969,52 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                 }
             }
             if (matchesDialogOpen && sourceIdentity != null) {
-                val copyFailedMessage = stringResource(Res.string.still_match_copy_failed)
-                val copiedMessage = stringResource(Res.string.still_match_copied)
+                val selectedDialogRow = matchRows.firstOrNull { it.index == selectedMatch }
                 StillMatchesDialog(
                     rows = matchRows,
                     selectedIndex = selectedMatch,
                     copyMessage = copyMessage,
-                    onSelect = { selectedMatch = it },
-                    onDismiss = { matchesDialogOpen = false },
-                    onCopy = {
-                        val selectedIndex = selectedMatch
-                        val row = matchRows.firstOrNull { it.index == selectedIndex }
-                        val expectedOwnerToken = if (
-                            importedOwner.state.value.phase == ImportedImagePhase.Imported
-                        ) {
-                            importedOwner.state.value.snapshot
-                        } else {
-                            frozenOwner.state.value.frame
+                    onSelect = { index ->
+                        val row = matchRows.firstOrNull { it.index == index }
+                        if (row != null && stillActionIsCurrent(
+                            row,
+                            expectedSelectedIndex,
+                            requireLocateContext = false,
+                        )) {
+                            selectedMatch = index
                         }
-                        if (selectedIndex == null || row == null || expectedOwnerToken == null) {
-                            copyMessage = copyFailedMessage
-                        } else {
-                            coroutineScope.launch {
-                                try {
-                                    val outcome = StillMatchCopyCoordinator(
-                                        importedOwner = importedOwner,
-                                        frozenOwner = frozenOwner,
-                                        session = session,
-                                        selectedIndex = { selectedMatch },
-                                        writeText = { text ->
-                                            clipboard.setClipEntry(plainTextClipEntry(text))
-                                        },
-                                    ).copy(
-                                        row,
-                                        search,
-                                        sourceIdentity,
-                                        activeSearch.identity,
-                                        selectedIndex,
-                                        expectedOwnerToken,
-                                    )
-                                    when (outcome) {
-                                        StillMatchCopyOutcome.Copied -> {
-                                            copyMessage = copiedMessage
-                                            matchesDialogOpen = false
-                                        }
-                                        StillMatchCopyOutcome.Stale,
-                                        StillMatchCopyOutcome.Failed -> {
-                                            copyMessage = copyFailedMessage
-                                        }
-                                    }
-                                } catch (cancelled: kotlinx.coroutines.CancellationException) {
-                                    throw cancelled
-                                } catch (error: Exception) {
-                                    copyMessage = copyFailedMessage
-                                }
+                    },
+                    onDismiss = { matchesDialogOpen = false },
+                    onCopy = copySelectedMatch,
+                    onShowOnImage = {
+                        val row = selectedDialogRow
+                        if (row != null) {
+                            locateMatch(row, expectedSelectedIndex) {
+                                selectedTermId = null
+                                matchesDialogOpen = false
                             }
                         }
                     },
+                    canLocate = shouldShowViews && selectedDialogRow?.let {
+                        stillActionIsCurrent(it, expectedSelectedIndex)
+                    } == true,
                 )
             }
             if (searchResultsDialogOpen) {
                 SearchTermResultsDialog(
                     terms = termSummaries,
+                    canLocate = shouldShowViews && sourceIdentity != null,
+                    onSelect = { termId ->
+                        val row = matchRows.firstOrNull {
+                            it.occurrence.termId == termId && stillMatchText(it, search) != null
+                        }
+                        if (row != null) {
+                            locateMatch(row, expectedSelectedIndex) {
+                                selectedTermId = termId
+                                searchResultsDialogOpen = false
+                            }
+                        }
+                    },
                     onDismiss = { searchResultsDialogOpen = false },
                 )
             }

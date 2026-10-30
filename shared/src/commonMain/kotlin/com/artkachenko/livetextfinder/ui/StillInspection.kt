@@ -35,6 +35,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selectableGroup
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.artkachenko.livetextfinder.camera.FrozenFrameFit
@@ -50,6 +52,13 @@ import livetextfinder.shared.generated.resources.status_cancel
 import livetextfinder.shared.generated.resources.still_copy_match
 import livetextfinder.shared.generated.resources.still_matches
 import livetextfinder.shared.generated.resources.still_matches_title
+import livetextfinder.shared.generated.resources.still_match_next
+import livetextfinder.shared.generated.resources.still_match_previous
+import livetextfinder.shared.generated.resources.still_match_show
+import livetextfinder.shared.generated.resources.still_match_position
+import livetextfinder.shared.generated.resources.still_match_position_description
+import livetextfinder.shared.generated.resources.still_match_copy_short
+import livetextfinder.shared.generated.resources.search_results_locate_hint
 import livetextfinder.shared.generated.resources.still_reset_view
 import livetextfinder.shared.generated.resources.still_zoom_in
 import livetextfinder.shared.generated.resources.still_zoom_out
@@ -158,6 +167,8 @@ internal fun StillMatchesDialog(
     copyMessage: String?,
     onSelect: (Int) -> Unit,
     onCopy: () -> Unit,
+    onShowOnImage: () -> Unit = {},
+    canLocate: Boolean = true,
     onDismiss: () -> Unit,
 ) {
     AlertDialog(
@@ -165,8 +176,17 @@ internal fun StillMatchesDialog(
         title = { Text(stringResource(Res.string.still_matches_title)) },
         text = {
             Column(modifier = Modifier.heightIn(max = 420.dp)) {
+                if (!canLocate) {
+                    Text(
+                        stringResource(Res.string.search_results_locate_hint),
+                        modifier = Modifier.padding(bottom = 8.dp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 LazyColumn(
-                    modifier = Modifier.weight(1f, fill = false),
+                    modifier = Modifier.weight(1f, fill = false).semantics {
+                        selectableGroup()
+                    },
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     items(rows, key = StillMatchRow::index) { row ->
@@ -195,7 +215,14 @@ internal fun StillMatchesDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(Res.string.status_cancel)) }
+            Row {
+                TextButton(
+                    enabled = canLocate && selectedIndex != null &&
+                        rows.any { it.index == selectedIndex },
+                    onClick = onShowOnImage,
+                ) { Text(stringResource(Res.string.still_match_show)) }
+                TextButton(onClick = onDismiss) { Text(stringResource(Res.string.status_cancel)) }
+            }
         },
         shape = MaterialTheme.shapes.extraLarge,
     )
@@ -204,44 +231,62 @@ internal fun StillMatchesDialog(
 @Composable
 internal fun SearchTermResultsDialog(
     terms: List<SearchTermSummary>,
+    canLocate: Boolean = true,
+    onSelect: (String) -> Unit = {},
     onDismiss: () -> Unit,
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(Res.string.search_results_title)) },
         text = {
-            LazyColumn(
-                modifier = Modifier.heightIn(max = 320.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                items(terms, key = SearchTermSummary::termId) { term ->
-                    val countDescription = stringResource(
-                        Res.string.search_result_count_description,
+            Column {
+                if (!canLocate) {
+                    Text(
+                        stringResource(Res.string.search_results_locate_hint),
+                        modifier = Modifier.padding(bottom = 8.dp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    Row(
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                    ) {
-                        androidx.compose.foundation.layout.Box(
-                            modifier = Modifier.size(20.dp)
-                                .background(
-                                    term.color.composeColor,
-                                    MaterialTheme.shapes.extraSmall,
-                                )
-                                .border(
-                                    1.dp,
-                                    MaterialTheme.colorScheme.outline,
-                                    MaterialTheme.shapes.extraSmall,
-                                ),
+                }
+                LazyColumn(
+                    modifier = Modifier.heightIn(max = 320.dp).semantics {
+                        selectableGroup()
+                    },
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    items(terms, key = SearchTermSummary::termId) { term ->
+                        val countDescription = stringResource(
+                            Res.string.search_result_count_description,
                         )
-                        Text(term.label, modifier = Modifier.weight(1f))
-                        Text(
-                            term.occurrenceCount.toString(),
-                            modifier = Modifier.semantics {
-                                contentDescription = "$countDescription ${term.occurrenceCount}"
-                            },
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).selectable(
+                                selected = false,
+                                enabled = canLocate && term.occurrenceCount > 0,
+                                role = Role.Button,
+                                onClick = { onSelect(term.termId) },
+                            ),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                        ) {
+                            androidx.compose.foundation.layout.Box(
+                                modifier = Modifier.size(20.dp)
+                                    .background(
+                                        term.color.composeColor,
+                                        MaterialTheme.shapes.extraSmall,
+                                    )
+                                    .border(
+                                        1.dp,
+                                        MaterialTheme.colorScheme.outline,
+                                        MaterialTheme.shapes.extraSmall,
+                                    ),
+                            )
+                            Text(term.label, modifier = Modifier.weight(1f))
+                            Text(
+                                term.occurrenceCount.toString(),
+                                modifier = Modifier.semantics {
+                                    contentDescription = "$countDescription ${term.occurrenceCount}"
+                                },
+                            )
+                        }
                     }
                 }
             }
@@ -252,6 +297,55 @@ internal fun SearchTermResultsDialog(
             }
         },
     )
+}
+
+@Composable
+internal fun StillMatchNavigationControls(
+    position: Int,
+    count: Int,
+    matchedTerm: String,
+    matchedText: String,
+    canLocate: Boolean,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+    onCopy: () -> Unit,
+) {
+    val positionDescription = stringResource(
+        Res.string.still_match_position_description,
+        position,
+        count,
+        matchedTerm,
+        matchedText,
+    )
+    Column(modifier = Modifier.fillMaxWidth()) {
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            TextButton(onClick = onPrevious, enabled = canLocate && position > 1) {
+                Text(stringResource(Res.string.still_match_previous))
+            }
+            Text(
+                stringResource(Res.string.still_match_position, position, count),
+                modifier = Modifier.semantics {
+                    contentDescription = positionDescription
+                },
+            )
+            TextButton(onClick = onNext, enabled = canLocate && position in 1 until count) {
+                Text(stringResource(Res.string.still_match_next))
+            }
+            TextButton(onClick = onCopy, enabled = position > 0) {
+                Text(stringResource(Res.string.still_match_copy_short))
+            }
+        }
+        Text(
+            text = "$matchedTerm: $matchedText",
+            style = MaterialTheme.typography.bodySmall,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
 }
 
 @Composable

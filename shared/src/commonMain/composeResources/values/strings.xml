@@ -13,6 +13,7 @@
     <string name="search_results_title">Search results</string>
     <string name="search_results_done">Done</string>
     <string name="search_result_count_description">Occurrences</string>
+    <string name="search_results_locate_hint">Show the still image to locate a match.</string>
     <string name="highlight_color_preview">Color preview</string>
     <string name="highlight_color_red">Red</string>
     <string name="highlight_color_green">Green</string>
@@ -105,6 +106,12 @@
     <string name="still_reset_view">Reset view</string>
     <string name="still_matches">Matches (%1$d)</string>
     <string name="still_matches_title">Matches in this image</string>
+    <string name="still_match_previous">Previous</string>
+    <string name="still_match_next">Next</string>
+    <string name="still_match_position">Match %1$d of %2$d</string>
+    <string name="still_match_position_description">Match %1$d of %2$d for %3$s: %4$s</string>
+    <string name="still_match_show">Show on image</string>
+    <string name="still_match_copy_short">Copy</string>
     <string name="still_copy_match">Copy matched text</string>
     <string name="still_match_copied">Matched text copied</string>
     <string name="still_match_copy_failed">Could not copy this match. Select it again.</string>
