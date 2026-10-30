@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.artkachenko.livetextfinder.camera.liveSearchAreaAvailable
 import livetextfinder.shared.generated.resources.Res
+import livetextfinder.shared.generated.resources.finder_match_help
 import livetextfinder.shared.generated.resources.help_options_location
 import livetextfinder.shared.generated.resources.help_still_body
 import livetextfinder.shared.generated.resources.help_still_title
@@ -34,7 +35,9 @@ internal fun UsageHelpDialog(onDismissRequest: () -> Unit) {
                     body = "Enter a word or phrase, then point the camera at readable printed " +
                         "Latin text. Matching ignores case and finds substrings within each OCR " +
                         "line; " +
-                        "phrases do not cross lines. No match means none was recognized, not " +
+                        "phrases do not cross lines. " +
+                        stringResource(Res.string.finder_match_help) + " " +
+                        "No match means none was recognized, not " +
                         "proof of absence.",
                 )
                 HelpSection(

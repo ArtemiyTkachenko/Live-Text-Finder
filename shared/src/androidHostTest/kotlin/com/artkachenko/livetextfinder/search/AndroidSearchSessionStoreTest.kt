@@ -40,11 +40,15 @@ class AndroidSearchSessionStoreTest {
                 await { androidSearchSessionStore(context).load(it) }.getOrThrow(),
             )
         }
-        val custom = initial.copy(highlightColor = HighlightColor.fromRgb(18, 171, 239))
+        val custom = initial.copy(
+            highlightColor = HighlightColor.fromRgb(18, 171, 239),
+            matchMode = SearchMatchMode.WholeWord,
+        )
         assertTrue(await { first.save(custom, it) }.isSuccess)
         val customJson = JSONObject(File(context.filesDir, "saved-searches.json").readText())
-        assertEquals(4, customJson.getInt("version"))
+        assertEquals(5, customJson.getInt("version"))
         assertEquals("custom:#12ABEF", customJson.getString("highlightColor"))
+        assertEquals("whole_word", customJson.getString("matchMode"))
         assertEquals(initial.lists.single().paletteSlots, customJson.getJSONArray("lists")
             .getJSONObject(0).getJSONArray("paletteSlots").let { slots ->
                 List(slots.length()) { index -> slots.getInt(index) }
@@ -100,7 +104,7 @@ class AndroidSearchSessionStoreTest {
         val updated = checkNotNull(loaded).copy(highlightColor = HighlightColor.Cyan)
         assertTrue(await { store.save(updated, it) }.isSuccess)
         val written = JSONObject(file.readText())
-        assertEquals(4, written.getInt("version"))
+        assertEquals(5, written.getInt("version"))
         assertEquals("cyan", written.getString("highlightColor"))
         assertEquals(updated, await { androidSearchSessionStore(context).load(it) }.getOrThrow())
     }
@@ -125,7 +129,7 @@ class AndroidSearchSessionStoreTest {
         assertTrue(
             await { store.save(checkNotNull(loaded).copy(manualQuery = "updated"), it) }.isSuccess,
         )
-        assertEquals(4, JSONObject(file.readText()).getInt("version"))
+        assertEquals(5, JSONObject(file.readText()).getInt("version"))
 
         val customVersionTwo = versionTwo.replace("\"cyan\"", "\"custom:#12ABEF\"")
         file.writeText(customVersionTwo)
@@ -168,6 +172,7 @@ class AndroidSearchSessionStoreTest {
             assertEquals(originalBytes, file.readText())
             assertEquals(expectedSlots, loaded.lists.single().paletteSlots)
             assertEquals(color, loaded.highlightColor)
+            assertEquals(SearchMatchMode.Substring, loaded.matchMode)
             val loadedSpec = SearchSessionState(persisted = loaded, loaded = true).activeSearch
             val loadedColors = SearchHighlightPalette.colorsByTerm(
                 loadedSpec,
@@ -188,7 +193,7 @@ class AndroidSearchSessionStoreTest {
             val edited = loaded.copy(manualQuery = "edited", lists = listOf(editedList))
             val rewrittenSlots = listOf(3, 1, 2, 0)
             assertTrue(await { store.save(edited, it) }.isSuccess)
-            assertEquals(4, JSONObject(file.readText()).getInt("version"))
+            assertEquals(5, JSONObject(file.readText()).getInt("version"))
             val reopened = checkNotNull(
                 await { androidSearchSessionStore(context).load(it) }.getOrThrow(),
             )
@@ -280,7 +285,9 @@ class AndroidSearchSessionStoreTest {
         val store = androidSearchSessionStore(context)
         val validBytes = prefix + listPrefix + "[0,1]" + suffix
         file.writeText(validBytes)
-        assertTrue(await { store.load(it) }.isSuccess)
+        val versionFour = checkNotNull(await { store.load(it) }.getOrThrow())
+        assertEquals(SearchMatchMode.Substring, versionFour.matchMode)
+        assertEquals(validBytes, file.readText())
         invalidSlots.forEach { slots ->
             val bytes = prefix + listPrefix + slots + suffix
             file.writeText(bytes)
@@ -314,6 +321,40 @@ class AndroidSearchSessionStoreTest {
         )
         assertTrue(await { store.save(invalidSave, it) }.isFailure)
         assertEquals(storedBytes, file.readText())
+    }
+
+    @Test
+    fun versionFiveRejectsUnknownMissingNullAndExtraMatchModeFieldsWithoutChangingBytes() {
+        val file = File(context.filesDir, "saved-searches.json")
+        val valid = JSONObject()
+            .put("version", 5)
+            .put("manualQuery", "kept")
+            .put("activeListId", JSONObject.NULL)
+            .put("lists", JSONArray())
+            .put("highlightColor", "yellow")
+            .put("matchMode", "whole_word")
+            .toString()
+        val invalid = listOf(
+            valid.replace("whole_word", "unknown"),
+            valid.replace(",\"matchMode\":\"whole_word\"", ""),
+            valid.replace("\"whole_word\"", "null"),
+            valid.replace("\"whole_word\"", "3"),
+            valid.replace("\"whole_word\"", "\"substring\"").replace(
+                "\"matchMode\":\"substring\"",
+                "\"matchMode\":\"substring\",\"extra\":true",
+            ),
+        )
+        val store = androidSearchSessionStore(context)
+        invalid.forEach { bytes ->
+            file.writeText(bytes)
+            assertTrue(await { store.load(it) }.isFailure)
+            assertEquals(bytes, file.readText())
+        }
+        file.writeText(valid)
+        assertEquals(
+            SearchMatchMode.WholeWord,
+            await { store.load(it) }.getOrThrow()?.matchMode,
+        )
     }
 
     @Test

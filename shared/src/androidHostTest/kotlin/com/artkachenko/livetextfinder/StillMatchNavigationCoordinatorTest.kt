@@ -8,6 +8,7 @@ import com.artkachenko.livetextfinder.camera.ProcessedImportedImage
 import com.artkachenko.livetextfinder.ocr.ImportedTextSnapshot
 import com.artkachenko.livetextfinder.ocr.TextElement
 import com.artkachenko.livetextfinder.ocr.TextLine
+import com.artkachenko.livetextfinder.search.SearchMatchMode
 import com.artkachenko.livetextfinder.search.inMemorySearchSessionController
 import com.artkachenko.livetextfinder.search.searchRecognizedContent
 import com.artkachenko.livetextfinder.search.stillMatchRows
@@ -62,6 +63,14 @@ class StillMatchNavigationCoordinatorTest {
         ))
         currentViewport = viewport
         selectedIndex = null
+        assertFalse(coordinator.accepts(
+            row, result, "import:4", result.spec.identity, snapshot, row.index, viewport,
+        ))
+        selectedIndex = row.index
+        assertTrue(coordinator.accepts(
+            row, result, "import:4", result.spec.identity, snapshot, row.index, viewport,
+        ))
+        session.setMatchMode(SearchMatchMode.WholeWord)
         assertFalse(coordinator.accepts(
             row, result, "import:4", result.spec.identity, snapshot, row.index, viewport,
         ))

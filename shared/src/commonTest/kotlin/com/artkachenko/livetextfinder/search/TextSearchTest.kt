@@ -54,6 +54,41 @@ class TextSearchTest {
         assertTrue(search("cafe\u0301", snapshot).occurrences.isEmpty())
     }
 
+    @Test
+    fun wholeWordsUseUnicodeBoundariesAndKeepLiteralPunctuation() {
+        val snapshot = snapshot(
+            listOf("_cat cat2 ٣cat Ⅳcat ácat cat- cat' cat😀 cat"),
+            listOf("xa a a"),
+        )
+        val wholeWord = manualSearchSpec("cat", SearchMatchMode.WholeWord)
+        assertEquals(
+            listOf(
+                TextOccurrence(0, 26, 29, listOf(0)),
+                TextOccurrence(0, 31, 34, listOf(0)),
+                TextOccurrence(0, 36, 39, listOf(0)),
+                TextOccurrence(0, 42, 45, listOf(0)),
+            ),
+            searchRecognizedContent(wholeWord, snapshot).occurrences,
+        )
+        assertEquals(
+            listOf(TextOccurrence(1, 3, 6, listOf(0))),
+            searchRecognizedContent(
+                manualSearchSpec("a a", SearchMatchMode.WholeWord),
+                snapshot,
+            ).occurrences,
+        )
+    }
+
+    @Test
+    fun wholeWordTreatsSupplementaryUnicodeLettersAndNumbersAsWordCharacters() {
+        val snapshot = snapshot(listOf("𞀀cat cat𞀀 𝟘cat cat𝟘 cat"))
+        val result = searchRecognizedContent(
+            manualSearchSpec("cat", SearchMatchMode.WholeWord),
+            snapshot,
+        )
+        assertEquals(listOf(TextOccurrence(0, 24, 27, listOf(0))), result.occurrences)
+    }
+
     @Test fun queryAndElementsNormalizeWhitespaceWithoutLosingElementIndices() {
         val snapshot = snapshot(listOf(" ", "  Alpha\t\nBeta ", "\u00A0", " Gamma  "))
         val result = search(" \tBETA\n\u00A0gamma  ", snapshot)

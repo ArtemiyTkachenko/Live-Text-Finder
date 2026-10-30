@@ -23,6 +23,7 @@ import com.artkachenko.livetextfinder.search.ActiveSearchSpec
 import com.artkachenko.livetextfinder.search.FrameIdentity
 import com.artkachenko.livetextfinder.search.HighlightColor
 import com.artkachenko.livetextfinder.search.SearchHighlightPalette
+import com.artkachenko.livetextfinder.search.SearchMatchMode
 import com.artkachenko.livetextfinder.search.SearchSessionController
 import com.artkachenko.livetextfinder.search.SearchTerm
 import com.artkachenko.livetextfinder.search.inMemorySearchSessionController
@@ -1050,6 +1051,15 @@ class ImageShareBoundaryTest {
                     ),
                 )
             },
+            expectCurrentMatches = true,
+        )
+        verifySessionMutationSuppressesCapturedShare(
+            prepare = { controller ->
+                assertNull(controller.saveList(null, "Selected", "target"))
+                val listId = checkNotNull(controller.state.value.persisted.lists.singleOrNull()?.id)
+                controller.selectList(listId)
+            },
+            mutate = { controller -> controller.setMatchMode(SearchMatchMode.WholeWord) },
             expectCurrentMatches = true,
         )
     }

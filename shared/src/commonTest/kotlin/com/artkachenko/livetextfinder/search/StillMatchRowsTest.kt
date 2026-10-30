@@ -158,7 +158,7 @@ class StillMatchRowsTest {
         assertTrue(copied.isEmpty())
 
         currentSource = source
-        currentSearch = "search-replaced"
+        currentSearch = manualSearchSpec("MATCH ED", SearchMatchMode.WholeWord).identity
         assertFalse(
             runSuspend {
                 copy(

@@ -1098,6 +1098,9 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                         sessionState.persisted.highlightColor.displayName,
                     ),
                     highlightEnabled = sessionState.loaded && !sessionState.recoveryRequired,
+                    matchMode = sessionState.persisted.matchMode,
+                    matchModeEnabled = sessionState.loaded && !sessionState.recoveryRequired,
+                    onMatchMode = session::setMatchMode,
                     liveAreaLabel = liveAreaLabel,
                     showImport = importedState.phase == ImportedImagePhase.Live ||
                         importedState.phase == ImportedImagePhase.Error,

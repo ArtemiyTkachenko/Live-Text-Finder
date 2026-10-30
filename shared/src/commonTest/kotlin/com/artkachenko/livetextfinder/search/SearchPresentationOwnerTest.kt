@@ -517,11 +517,7 @@ class SearchPresentationOwnerTest {
         ).outlinedElements.single()
         assertEquals(targetReset.outline.points, targetReset.displayOutline.points)
 
-        val newSearch = ActiveSearchSpec(
-            identity = "changed-search",
-            displayName = "Alpha",
-            terms = listOf(SearchTerm("alpha", "alpha")),
-        )
+        val newSearch = manualSearchSpec("alpha", SearchMatchMode.WholeWord)
         val searchReset = localOwner.present(
             newSearch,
             state(

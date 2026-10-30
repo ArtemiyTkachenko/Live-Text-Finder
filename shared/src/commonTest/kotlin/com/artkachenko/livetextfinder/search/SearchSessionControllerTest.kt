@@ -113,6 +113,65 @@ class SearchSessionControllerTest {
     }
 
     @Test
+    fun matchModeWaitsForLoadChangesIdentityAndSerializesLatestMode() {
+        val store = ControlledStore()
+        val session = SearchSessionController(store)
+        session.setMatchMode(SearchMatchMode.WholeWord)
+        assertEquals(SearchMatchMode.Substring, session.state.value.persisted.matchMode)
+        assertTrue(store.writes.isEmpty())
+
+        store.completeLoad(
+            PersistedSearchState(
+                "manual",
+                listOf(SavedSearchList("stable", "Parts", listOf("foo"))),
+                "stable",
+                matchMode = SearchMatchMode.WholeWord,
+            ),
+        )
+        assertEquals(SearchMatchMode.WholeWord, session.state.value.persisted.matchMode)
+        assertEquals(SearchMatchMode.WholeWord, session.state.value.activeSearch.matchMode)
+        val wholeWordIdentity = session.state.value.activeSearch.identity
+        session.setMatchMode(SearchMatchMode.WholeWord)
+        assertTrue(store.writes.isEmpty())
+
+        session.setMatchMode(SearchMatchMode.Substring)
+        val substringIdentity = session.state.value.activeSearch.identity
+        assertNotEquals(wholeWordIdentity, substringIdentity)
+        session.setMatchMode(SearchMatchMode.WholeWord)
+        assertEquals(1, store.writes.size)
+        store.completeWrite(0)
+        assertEquals(2, store.writes.size)
+        assertEquals(SearchMatchMode.WholeWord, store.writes[1].first.matchMode)
+    }
+
+    @Test
+    fun typingBeforeLoadPreservesStoredMatchModeAndRecoveryResetUsesSubstring() {
+        val store = ControlledStore()
+        val session = SearchSessionController(store)
+        session.setManualQuery("typed")
+        store.completeLoad(
+            PersistedSearchState(
+                "stored",
+                emptyList(),
+                null,
+                matchMode = SearchMatchMode.WholeWord,
+            ),
+        )
+        assertEquals("typed", session.state.value.persisted.manualQuery)
+        assertEquals(SearchMatchMode.WholeWord, session.state.value.persisted.matchMode)
+
+        val recoveringStore = ControlledStore()
+        val recoveringSession = SearchSessionController(recoveringStore)
+        recoveringStore.failLoad("broken")
+        recoveringSession.setMatchMode(SearchMatchMode.WholeWord)
+        assertEquals(SearchMatchMode.Substring, recoveringSession.state.value.persisted.matchMode)
+        recoveringSession.retry()
+        recoveringStore.completeReset()
+        assertEquals(SearchMatchMode.Substring, recoveringSession.state.value.persisted.matchMode)
+        assertEquals(SearchMatchMode.Substring, recoveringStore.writes.single().first.matchMode)
+    }
+
+    @Test
     fun lateLoadMergesManualEditAndQueuedColorWritesKeepLatestValue() {
         val store = ControlledStore()
         val session = SearchSessionController(store)

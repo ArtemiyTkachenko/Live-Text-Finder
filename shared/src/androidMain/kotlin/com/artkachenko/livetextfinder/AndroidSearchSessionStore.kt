@@ -9,6 +9,7 @@ import com.artkachenko.livetextfinder.search.MAX_LISTS
 import com.artkachenko.livetextfinder.search.MAX_TERMS_PER_LIST
 import com.artkachenko.livetextfinder.search.PersistedSearchState
 import com.artkachenko.livetextfinder.search.SavedSearchList
+import com.artkachenko.livetextfinder.search.SearchMatchMode
 import com.artkachenko.livetextfinder.search.SearchSessionStore
 import com.artkachenko.livetextfinder.search.legacyPaletteSlots
 import com.artkachenko.livetextfinder.search.validatePersistedSearchState
@@ -89,6 +90,7 @@ private class AndroidSearchSessionStore(context: Context) : SearchSessionStore {
     private fun encode(state: PersistedSearchState): String = JSONObject().apply {
         put("version", VERSION)
         put("highlightColor", state.highlightColor.storageKey)
+        put("matchMode", state.matchMode.storageKey)
         put("manualQuery", state.manualQuery)
         put("activeListId", state.activeListId ?: JSONObject.NULL)
         put("lists", JSONArray().apply {
@@ -109,7 +111,12 @@ private class AndroidSearchSessionStore(context: Context) : SearchSessionStore {
         require(version is Int && version in MIN_VERSION..VERSION) {
             "Unsupported saved search file version."
         }
-        require(root.length() == if (version == 1) V1_ROOT_FIELD_COUNT else ROOT_FIELD_COUNT) {
+        val expectedRootFields = when (version) {
+            1 -> V1_ROOT_FIELD_COUNT
+            5 -> V5_ROOT_FIELD_COUNT
+            else -> ROOT_FIELD_COUNT
+        }
+        require(root.length() == expectedRootFields) {
             "Unsupported saved search file fields."
         }
         val manualQuery = root.get("manualQuery") as? String
@@ -129,7 +136,7 @@ private class AndroidSearchSessionStore(context: Context) : SearchSessionStore {
             for (index in 0 until array.length()) {
                 val item = array.get(index) as? JSONObject
                     ?: error("Saved search list has an invalid type.")
-                val expectedListFields = if (version == 4) {
+                val expectedListFields = if (version >= 4) {
                     V4_LIST_FIELD_COUNT
                 } else {
                     LEGACY_LIST_FIELD_COUNT
@@ -153,7 +160,7 @@ private class AndroidSearchSessionStore(context: Context) : SearchSessionStore {
                         add(term)
                     }
                 }
-                val paletteSlots = if (version == 4) {
+                val paletteSlots = if (version >= 4) {
                     val slotsArray = item.get("paletteSlots") as? JSONArray
                         ?: error("Saved term colors have an invalid type.")
                     buildList {
@@ -184,7 +191,21 @@ private class AndroidSearchSessionStore(context: Context) : SearchSessionStore {
                     ?: error("Saved highlight colour is unknown.")
             }
         }
-        val value = PersistedSearchState(manualQuery, lists, activeListId, highlightColor)
+        val matchMode = if (version < 5) {
+            SearchMatchMode.Substring
+        } else {
+            val key = root.get("matchMode") as? String
+                ?: error("Saved match mode has an invalid type.")
+            SearchMatchMode.fromStorageKey(key)
+                ?: error("Saved match mode is unknown.")
+        }
+        val value = PersistedSearchState(
+            manualQuery,
+            lists,
+            activeListId,
+            highlightColor,
+            matchMode,
+        )
         val validationError = validatePersistedSearchState(value)
         require(validationError == null) {
             validationError ?: "Saved search data is invalid."
@@ -193,10 +214,11 @@ private class AndroidSearchSessionStore(context: Context) : SearchSessionStore {
     }
 
     private companion object {
-        const val VERSION = 4
+        const val VERSION = 5
         const val MIN_VERSION = 1
         const val V1_ROOT_FIELD_COUNT = 4
         const val ROOT_FIELD_COUNT = 5
+        const val V5_ROOT_FIELD_COUNT = 6
         const val LEGACY_LIST_FIELD_COUNT = 3
         const val V4_LIST_FIELD_COUNT = 4
         const val MAX_FILE_BYTES = 256 * 1024

@@ -39,6 +39,7 @@ data class PersistedSearchState(
     val lists: List<SavedSearchList>,
     val activeListId: String?,
     val highlightColor: HighlightColor = HighlightColor.Yellow,
+    val matchMode: SearchMatchMode = SearchMatchMode.Substring,
 )
 
 /** The current load, search, and persistence state shown by the interface. */
@@ -56,7 +57,7 @@ data class SearchSessionState(
         get() {
             val list = activeList
             if (list == null) {
-                return manualSearchSpec(persisted.manualQuery)
+                return manualSearchSpec(persisted.manualQuery, persisted.matchMode)
             }
 
             check(list.paletteSlots.size == list.terms.size &&
@@ -70,12 +71,13 @@ data class SearchSessionState(
             }
             val identity = buildString {
                 append("list\u0000").append(list.id).append('\u0000')
+                append(persisted.matchMode.storageKey).append('\u0000')
                 terms.forEach { term ->
                     append(term.text.length).append(':').append(term.text)
                     append('@').append(term.paletteSlot).append(';')
                 }
             }
-            return ActiveSearchSpec(identity, list.name, terms)
+            return ActiveSearchSpec(identity, list.name, terms, persisted.matchMode)
         }
 }
 
@@ -299,6 +301,17 @@ class SearchSessionController(private val store: SearchSessionStore) {
             return
         }
         update(current.persisted.copy(highlightColor = color))
+    }
+
+    /** Changes the literal matching behavior after the saved session is healthy. */
+    fun setMatchMode(matchMode: SearchMatchMode) {
+        val current = state.value
+        if (!current.loaded || current.recoveryRequired ||
+            current.persisted.matchMode == matchMode
+        ) {
+            return
+        }
+        update(current.persisted.copy(matchMode = matchMode))
     }
 
     /** Retries the latest save, reloads after an ordinary read failure, or confirms reset. */

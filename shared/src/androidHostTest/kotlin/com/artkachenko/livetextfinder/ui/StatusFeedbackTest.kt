@@ -69,6 +69,7 @@ import com.artkachenko.livetextfinder.search.Highlights
 import com.artkachenko.livetextfinder.search.InMemorySearchSessionStore
 import com.artkachenko.livetextfinder.search.SavedSearchList
 import com.artkachenko.livetextfinder.search.SearchListEditorState
+import com.artkachenko.livetextfinder.search.SearchMatchMode
 import com.artkachenko.livetextfinder.search.SearchPresentationOwner
 import com.artkachenko.livetextfinder.search.SearchSessionController
 import com.artkachenko.livetextfinder.search.SearchSessionState
@@ -137,6 +138,9 @@ class StatusFeedbackTest {
     fun optionsActionOpensScrollableSheetAndClosesBeforeInvokingSelection() {
         val optionsOpen = mutableStateOf(false)
         val highlightCalls = mutableIntStateOf(0)
+        val matchModeCalls = mutableIntStateOf(0)
+        val matchMode = mutableStateOf(SearchMatchMode.Substring)
+        val matchModeEnabled = mutableStateOf(true)
         val areaCalls = mutableIntStateOf(0)
         val importCalls = mutableIntStateOf(0)
         val helpCalls = mutableIntStateOf(0)
@@ -169,6 +173,12 @@ class StatusFeedbackTest {
                     FinderOptionsSheet(
                         highlightLabel = "Highlight color: Yellow",
                         highlightEnabled = highlightEnabled.value,
+                        matchMode = matchMode.value,
+                        matchModeEnabled = matchModeEnabled.value,
+                        onMatchMode = {
+                            matchMode.value = it
+                            matchModeCalls.intValue++
+                        },
                         liveAreaLabel = "Live area: Full frame",
                         showImport = showImport.value,
                         onHighlight = {
@@ -206,15 +216,27 @@ class StatusFeedbackTest {
         assertTrue(nodes.any { it.textValues().contains("Import image") })
         assertTrue(nodes.any { it.textValues().contains("Help") })
         assertTouchBounds(
+            nodeWithText(nodes, "Substring", clickable = true),
+            optionsDialog().window?.decorView,
+        )
+        assertTouchBounds(
+            nodeWithText(nodes, "Whole words", clickable = true),
+            optionsDialog().window?.decorView,
+        )
+        val substringNode = nodeWithText(nodes, "Substring", clickable = true)
+        val wholeWordsNode = nodeWithText(nodes, "Whole words", clickable = true)
+        val density = checkNotNull(optionsDialog().window?.decorView)
+            .resources.displayMetrics.density
+        assertTrue(substringNode.size.height / density >= 48f)
+        assertTrue(wholeWordsNode.size.height / density >= 48f)
+        assertEquals(true, substringNode.config.getOrNull(SemanticsProperties.Selected))
+        assertEquals(false, wholeWordsNode.config.getOrNull(SemanticsProperties.Selected))
+        assertTouchBounds(
             nodeWithText(nodes, "Live area: Full frame", clickable = true),
             optionsDialog().window?.decorView,
         )
         assertTouchBounds(
             nodeWithText(nodes, "Import image", clickable = true),
-            optionsDialog().window?.decorView,
-        )
-        assertTouchBounds(
-            nodeWithText(nodes, "Help", clickable = true),
             optionsDialog().window?.decorView,
         )
         val scrollViewport = nodes.firstOrNull {
@@ -226,7 +248,7 @@ class StatusFeedbackTest {
         val scrollBy = checkNotNull(
             scrollViewport?.config?.getOrNull(SemanticsActions.ScrollBy)?.action,
         )
-        assertTrue(scrollBy(0f, 120f))
+        assertTrue(scrollBy(0f, 320f))
         measureCurrentComposition()
         nodes = optionsDialogNodes()
         val helpAfterScroll = nodeWithText(nodes, "Help", clickable = true)
@@ -238,6 +260,16 @@ class StatusFeedbackTest {
         assertFullyVisibleInDialog(helpAfterScroll, firstDialogView)
         assertTouchBounds(helpAfterScroll, firstDialog.window?.decorView)
         assertDialogRendered(firstDialog, "options-sheet-dark-compact.png")
+
+        click(nodeWithText(nodes, "Whole words", clickable = true))
+        assertEquals(1, matchModeCalls.intValue)
+        nodes = optionsDialogNodes()
+        assertEquals(
+            true,
+            nodeWithText(nodes, "Whole words", clickable = true).config.getOrNull(
+                SemanticsProperties.Selected,
+            ),
+        )
 
         click(nodeWithText(nodes, "Live area: Full frame", clickable = true))
         assertEquals(1, areaCalls.intValue)
@@ -260,6 +292,7 @@ class StatusFeedbackTest {
         nodes = semanticsNodes(composeView)
         assertFalse(nodes.any { it.textValues().contains("Live area: Full frame") })
         highlightEnabled.value = false
+        matchModeEnabled.value = false
         showImport.value = false
         Snapshot.sendApplyNotifications()
         measureCurrentComposition()
@@ -267,6 +300,10 @@ class StatusFeedbackTest {
         nodes = optionsDialogNodes()
         assertTrue(
             nodeWithText(nodes, "Highlight color: Yellow")
+                .config.contains(SemanticsProperties.Disabled),
+        )
+        assertTrue(
+            nodeWithText(nodes, "Whole words")
                 .config.contains(SemanticsProperties.Disabled),
         )
         assertFalse(nodes.any { it.textValues().contains("Import image") })
@@ -277,6 +314,13 @@ class StatusFeedbackTest {
         )
         measureCurrentComposition()
         assertEquals(1, highlightCalls.intValue)
+        val disabledMatchMode = nodeWithText(nodes, "Whole words")
+        dispatchTouch(
+            findComposeView(optionsDialog().window?.decorView),
+            disabledMatchMode.touchBoundsInRoot,
+        )
+        measureCurrentComposition()
+        assertEquals(1, matchModeCalls.intValue)
         checkNotNull(optionsDialog() as? ComponentDialog)
             .onBackPressedDispatcher.onBackPressed()
         advanceFramesUntil { !optionsOpen.value }
@@ -313,6 +357,9 @@ class StatusFeedbackTest {
                     FinderOptionsSheet(
                         highlightLabel = "Highlight color: Yellow",
                         highlightEnabled = true,
+                        matchMode = SearchMatchMode.Substring,
+                        matchModeEnabled = true,
+                        onMatchMode = { },
                         liveAreaLabel = null,
                         showImport = false,
                         onHighlight = { optionsOpen.value = false },

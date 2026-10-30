@@ -40,20 +40,37 @@ internal data class NormalizedElementLine(
 
 internal const val MANUAL_TERM_ID = "manual"
 
+/** Literal matching behavior applied to every active search term. */
+enum class SearchMatchMode(val storageKey: String) {
+    Substring("substring"),
+    WholeWord("whole_word");
+
+    companion object {
+        fun fromStorageKey(key: String): SearchMatchMode? = entries.firstOrNull {
+            it.storageKey == key
+        }
+    }
+}
+
 /** Immutable identity for the complete active search, including mode and every term. */
 data class ActiveSearchSpec(
     val identity: String,
     val displayName: String,
     val terms: List<SearchTerm>,
+    val matchMode: SearchMatchMode = SearchMatchMode.Substring,
 )
 
 /** A stable identity paired with one independent literal term or phrase. */
 data class SearchTerm(val id: String, val text: String, val paletteSlot: Int? = null)
 
-internal fun manualSearchSpec(query: String): ActiveSearchSpec = ActiveSearchSpec(
-    identity = "manual\u0000$query",
+internal fun manualSearchSpec(
+    query: String,
+    matchMode: SearchMatchMode = SearchMatchMode.Substring,
+): ActiveSearchSpec = ActiveSearchSpec(
+    identity = "manual\u0000${matchMode.storageKey}\u0000$query",
     displayName = "Manual search",
     terms = if (query.isEmpty()) emptyList() else listOf(SearchTerm(MANUAL_TERM_ID, query)),
+    matchMode = matchMode,
 )
 
 /** Original snapshot retains frame metadata and geometry for every referenced element. */
@@ -100,6 +117,12 @@ internal fun searchRecognizedContent(
                         break
                     }
                     val end = start + term.text.length
+                    if (spec.matchMode == SearchMatchMode.WholeWord &&
+                        !hasWholeWordBoundaries(normalizedLine.text, start, end)
+                    ) {
+                        from = start + 1
+                        continue
+                    }
                     add(TextOccurrence(lineIndex, start, end, normalizedLine.spans.filter {
                         it.start < end && it.endExclusive > start
                     }.map { it.elementIndex }, term.id))
@@ -208,3 +231,30 @@ internal fun normalizeRecognizedText(text: String): String = buildString {
 }
 
 private fun normalizeWhitespace(text: String): String = normalizeRecognizedText(text)
+
+private val wordCharacter = Regex("[\\p{L}\\p{N}\\p{M}_]")
+
+private fun hasWholeWordBoundaries(text: String, start: Int, end: Int): Boolean =
+    (start == 0 || !isWordCharacterBefore(text, start)) &&
+        (end == text.length || !isWordCharacterAt(text, end))
+
+private fun isWordCharacterBefore(text: String, offset: Int): Boolean {
+    val last = text[offset - 1]
+    val start = if (last.isLowSurrogate() && offset >= 2 && text[offset - 2].isHighSurrogate()) {
+        offset - 2
+    } else {
+        offset - 1
+    }
+    return wordCharacter.matches(text.substring(start, offset))
+}
+
+private fun isWordCharacterAt(text: String, offset: Int): Boolean {
+    val end = if (text[offset].isHighSurrogate() && offset + 1 < text.length &&
+        text[offset + 1].isLowSurrogate()
+    ) {
+        offset + 2
+    } else {
+        offset + 1
+    }
+    return wordCharacter.matches(text.substring(offset, end))
+}

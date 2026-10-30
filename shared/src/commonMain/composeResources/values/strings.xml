@@ -44,6 +44,10 @@
     <string name="finder_options">Options</string>
     <string name="finder_options_title">Options</string>
     <string name="finder_options_highlight">Highlight color: %1$s</string>
+    <string name="finder_options_matching">Matching</string>
+    <string name="finder_match_substring">Substring</string>
+    <string name="finder_match_whole_words">Whole words</string>
+    <string name="finder_match_help">Searches literal text. Whole words require non-letter, number, mark, or underscore boundaries.</string>
     <string name="finder_options_import">Import image</string>
     <string name="finder_options_help">Help</string>
     <string name="help_options_location">Open Options for highlight colour, the optional live area, image import, and Help.</string>
