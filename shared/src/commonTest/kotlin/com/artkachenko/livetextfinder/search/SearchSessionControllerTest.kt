@@ -193,6 +193,64 @@ class SearchSessionControllerTest {
     }
 
     @Test
+    fun listEditsKeepSurvivorSlotsAndAllocateAfterReservingAllSurvivors() {
+        val store = ControlledStore()
+        val session = SearchSessionController(store)
+        store.completeLoad(null)
+        assertNull(session.saveList(null, "Parts", "zebra"))
+        val initial = session.state.value.persisted.lists.single()
+        assertEquals(listOf(0), initial.paletteSlots)
+
+        assertNull(session.saveList(initial.id, "Parts", "aardvark\nzebra"))
+        val added = session.state.value.persisted.lists.single()
+        assertEquals(listOf(1, 0), added.paletteSlots)
+
+        assertNull(session.saveList(initial.id, "Renamed", "ZEBRA"))
+        val renamed = session.state.value.persisted.lists.single()
+        assertEquals(listOf(0), renamed.paletteSlots)
+        assertEquals("Renamed", renamed.name)
+
+        assertNull(session.saveList(initial.id, "Renamed", "zebra\nnew"))
+        assertEquals(listOf(0, 1), session.state.value.persisted.lists.single().paletteSlots)
+    }
+
+    @Test
+    fun listEditUsesIgnoreCaseSurvivorsAndReusesFreedSlotsInInputOrder() {
+        val store = ControlledStore()
+        val session = SearchSessionController(store)
+        store.completeLoad(null)
+        assertNull(session.saveList(null, "Greek", "ς\nalpha"))
+        val initial = session.state.value.persisted.lists.single()
+
+        assertTrue("ς".lowercase() != "σ".lowercase())
+        assertTrue("ς".equals("σ", ignoreCase = true))
+        assertNull(session.saveList(initial.id, "Greek", "σ\nnew"))
+
+        val edited = session.state.value.persisted.lists.single()
+        assertEquals(initial.paletteSlots.first(), edited.paletteSlots.first())
+        assertEquals(0, edited.paletteSlots.last())
+        assertEquals(listOf("σ", "new"), edited.terms)
+    }
+
+    @Test
+    fun replacingThirtyTwoTermsNeverCollidesAndUsesTheFreedSlot() {
+        val store = ControlledStore()
+        val session = SearchSessionController(store)
+        store.completeLoad(null)
+        val terms = (0 until MAX_TERMS_PER_LIST).map { "term-$it" }
+        assertNull(session.saveList(null, "Full", terms.joinToString("\n")))
+        val initial = session.state.value.persisted.lists.single()
+
+        val replacementTerms = listOf("replacement") + terms.drop(1)
+        assertNull(session.saveList(initial.id, "Full", replacementTerms.joinToString("\n")))
+
+        val updated = session.state.value.persisted.lists.single()
+        assertEquals(MAX_TERMS_PER_LIST, updated.paletteSlots.toSet().size)
+        assertEquals(initial.paletteSlots.first(), updated.paletteSlots.first())
+        assertEquals(initial.paletteSlots.drop(1), updated.paletteSlots.drop(1))
+    }
+
+    @Test
     fun listValidationRejectsInvalidOrDuplicateInputWithoutDiscardingLines() {
         val store = ControlledStore()
         val session = SearchSessionController(store)

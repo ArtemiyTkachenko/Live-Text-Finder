@@ -48,7 +48,7 @@ data class ActiveSearchSpec(
 )
 
 /** A stable identity paired with one independent literal term or phrase. */
-data class SearchTerm(val id: String, val text: String)
+data class SearchTerm(val id: String, val text: String, val paletteSlot: Int? = null)
 
 internal fun manualSearchSpec(query: String): ActiveSearchSpec = ActiveSearchSpec(
     identity = "manual\u0000$query",

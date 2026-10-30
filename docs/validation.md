@@ -317,3 +317,17 @@ Compact presets and RGB controls are covered by production-component host checks
 Android debug compilation, **261 host tests across 42 suites with zero failures/errors/skips**, Android lint (**zero errors, 14 existing warnings**) and shared iOS simulator compilation passed. The iOS task checks shared-source compatibility only; iOS introduction remains deferred. Whitespace and scoped added-line/import checks passed; no configured Kotlin formatter exists. Independent source-first review returned **PASS WITH LIMITATIONS**, with no actionable functional defects. The final cleanup uses the WCAG 2.4 luminance exponent and wraps the fixture and palette signature. Independent re-review verified the corrections and retained **PASS WITH LIMITATIONS**. The corrected-test aggregate passed with all 261 tests; subsequent signature formatting changes no behavior.
 
 Physical camera/touchscreen behavior, TalkBack, real clipboard/share-sheet delivery and full App/device runtime remain pending. No APK was generated or installed and no device test was run. Source images and OCR remain memory-only; the saved-state schema is unchanged.
+
+## Durable list-entry colour slots — 2026-10-30
+
+Schema 4 stores one unique palette slot per list entry. Existing v1–v3 lists retain their previous visible colours and remain unchanged on disk until an ordinary save. Focused checks cover preserving survivor colours through edits, Unicode case matching, explicit-slot summaries and still rows, migration/reopening, malformed v4 assignments and byte preservation on invalid loads/saves. A production PNG check rejects a stale style-only share and confirms that a fresh share uses the updated slot colour.
+
+The decoder enforces the 1–32 term limit immediately after the JSON array type check, before constructing terms or migrating slots. Otherwise valid v1–v3 fixtures with 33 unique terms verify original bytes remain intact, the real controller enters recovery and blocks writes, and persistence resumes after explicit reset. Independent source-first review identified this bound; independent correction verification returned **PASS WITH LIMITATIONS**, with no remaining actionable findings.
+
+The final aggregate command passed:
+
+```sh
+./gradlew :androidApp:compileDebugKotlin :shared:testAndroidHostTest :androidApp:lintDebug :shared:compileKotlinIosSimulatorArm64 --console=plain
+```
+
+Exit 0, **BUILD SUCCESSFUL in 37s**, 73 tasks (16 executed/57 up-to-date): **269 host tests across 42 suites, zero failures/errors/skips**, Android compilation, Android lint (**zero errors, 14 warnings**) and shared iOS simulator compilation. The iOS task checks shared-source compatibility only; iOS introduction remains deferred. Scoped Kotlin line-length/import/braces inspection and whitespace checks passed; no configured Kotlin formatter exists. No APK was generated or installed. Physical device/runtime, TalkBack and actual external clipboard/share delivery remain pending.

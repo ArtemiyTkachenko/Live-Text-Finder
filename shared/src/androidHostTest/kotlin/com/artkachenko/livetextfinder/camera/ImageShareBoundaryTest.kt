@@ -22,6 +22,7 @@ import com.artkachenko.livetextfinder.ocr.TextPoint
 import com.artkachenko.livetextfinder.search.ActiveSearchSpec
 import com.artkachenko.livetextfinder.search.FrameIdentity
 import com.artkachenko.livetextfinder.search.HighlightColor
+import com.artkachenko.livetextfinder.search.SearchHighlightPalette
 import com.artkachenko.livetextfinder.search.SearchSessionController
 import com.artkachenko.livetextfinder.search.SearchTerm
 import com.artkachenko.livetextfinder.search.inMemorySearchSessionController
@@ -1034,6 +1035,23 @@ class ImageShareBoundaryTest {
                 assertNull(controller.saveList(listId, "Selected", "missing"))
             },
         )
+        verifySessionMutationSuppressesCapturedShare(
+            prepare = { controller ->
+                assertNull(controller.saveList(null, "Selected", "other\ntarget"))
+                val listId = checkNotNull(controller.state.value.persisted.lists.singleOrNull()?.id)
+                controller.selectList(listId)
+            },
+            mutate = { controller ->
+                val persisted = controller.state.value.persisted
+                val list = checkNotNull(persisted.lists.singleOrNull())
+                controller.state.value = controller.state.value.copy(
+                    persisted = persisted.copy(
+                        lists = listOf(list.copy(paletteSlots = list.paletteSlots.reversed())),
+                    ),
+                )
+            },
+            expectCurrentMatches = true,
+        )
     }
 
     @Test
@@ -1404,6 +1422,7 @@ class ImageShareBoundaryTest {
     private fun verifySessionMutationSuppressesCapturedShare(
         prepare: (SearchSessionController) -> Unit,
         mutate: (SearchSessionController) -> Unit,
+        expectCurrentMatches: Boolean = false,
     ) {
         val context = RuntimeEnvironment.getApplication()
         val (source, snapshot, _) = importedFixture()
@@ -1443,9 +1462,10 @@ class ImageShareBoundaryTest {
         val changedIdentity = session.state.value.activeSearch.identity
         assertTrue(changedIdentity != originalIdentity)
         val currentSearch = searchRecognizedContent(session.state.value.activeSearch, snapshot)
-        assertTrue(currentSearch.occurrences.isEmpty())
-        assertTrue(
-            projectImportedHighlights(currentSearch, snapshot, 40f, 24f).outlines.isEmpty(),
+        assertEquals(expectCurrentMatches, currentSearch.occurrences.isNotEmpty())
+        assertEquals(
+            expectCurrentMatches,
+            projectImportedHighlights(currentSearch, snapshot, 40f, 24f).outlines.isNotEmpty(),
         )
 
         try {
@@ -1489,7 +1509,12 @@ class ImageShareBoundaryTest {
         val decoded = context.contentResolver.openInputStream(uri)!!.use { stream ->
             BitmapFactory.decodeStream(stream)
         }
-        assertEquals(source.getPixel(5, 10), decoded.getPixel(5, 10))
+        if (expectCurrentMatches) {
+            assertEquals(Color.BLACK, decoded.getPixel(5, 10))
+            assertEquals(SearchHighlightPalette.colors[0].argb.toInt(), decoded.getPixel(9, 6))
+        } else {
+            assertEquals(source.getPixel(5, 10), decoded.getPixel(5, 10))
+        }
         assertEquals(Color.RED, decoded.getPixel(1, 1))
         decoded.recycle()
         shareFiles(context.cacheDir).forEach { file -> file.delete() }

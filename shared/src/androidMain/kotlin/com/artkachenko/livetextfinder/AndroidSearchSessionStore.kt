@@ -6,9 +6,11 @@ import android.os.Looper
 import android.util.AtomicFile
 import com.artkachenko.livetextfinder.search.HighlightColor
 import com.artkachenko.livetextfinder.search.MAX_LISTS
+import com.artkachenko.livetextfinder.search.MAX_TERMS_PER_LIST
 import com.artkachenko.livetextfinder.search.PersistedSearchState
 import com.artkachenko.livetextfinder.search.SavedSearchList
 import com.artkachenko.livetextfinder.search.SearchSessionStore
+import com.artkachenko.livetextfinder.search.legacyPaletteSlots
 import com.artkachenko.livetextfinder.search.validatePersistedSearchState
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -95,6 +97,7 @@ private class AndroidSearchSessionStore(context: Context) : SearchSessionStore {
                     put("id", list.id)
                     put("name", list.name)
                     put("terms", JSONArray(list.terms))
+                    put("paletteSlots", JSONArray(list.paletteSlots))
                 })
             }
         })
@@ -126,7 +129,12 @@ private class AndroidSearchSessionStore(context: Context) : SearchSessionStore {
             for (index in 0 until array.length()) {
                 val item = array.get(index) as? JSONObject
                     ?: error("Saved search list has an invalid type.")
-                require(item.length() == LIST_FIELD_COUNT) {
+                val expectedListFields = if (version == 4) {
+                    V4_LIST_FIELD_COUNT
+                } else {
+                    LEGACY_LIST_FIELD_COUNT
+                }
+                require(item.length() == expectedListFields) {
                     "Saved search list has unsupported fields."
                 }
                 val id = item.get("id") as? String
@@ -135,6 +143,9 @@ private class AndroidSearchSessionStore(context: Context) : SearchSessionStore {
                     ?: error("Saved search list name has an invalid type.")
                 val termsArray = item.get("terms") as? JSONArray
                     ?: error("Saved search terms have an invalid type.")
+                require(termsArray.length() in 1..MAX_TERMS_PER_LIST) {
+                    "Saved search data contains an invalid term count."
+                }
                 val terms = buildList {
                     for (termIndex in 0 until termsArray.length()) {
                         val term = termsArray.get(termIndex) as? String
@@ -142,7 +153,20 @@ private class AndroidSearchSessionStore(context: Context) : SearchSessionStore {
                         add(term)
                     }
                 }
-                add(SavedSearchList(id, name, terms))
+                val paletteSlots = if (version == 4) {
+                    val slotsArray = item.get("paletteSlots") as? JSONArray
+                        ?: error("Saved term colors have an invalid type.")
+                    buildList {
+                        for (slotIndex in 0 until slotsArray.length()) {
+                            val slot = slotsArray.get(slotIndex) as? Int
+                                ?: error("Saved term color slot has an invalid type.")
+                            add(slot)
+                        }
+                    }
+                } else {
+                    legacyPaletteSlots(terms, terms.indices.map { termIndex -> "$id:$termIndex" })
+                }
+                add(SavedSearchList(id, name, terms, paletteSlots))
             }
         }
         val highlightColor = when (version) {
@@ -169,11 +193,12 @@ private class AndroidSearchSessionStore(context: Context) : SearchSessionStore {
     }
 
     private companion object {
-        const val VERSION = 3
+        const val VERSION = 4
         const val MIN_VERSION = 1
         const val V1_ROOT_FIELD_COUNT = 4
         const val ROOT_FIELD_COUNT = 5
-        const val LIST_FIELD_COUNT = 3
+        const val LEGACY_LIST_FIELD_COUNT = 3
+        const val V4_LIST_FIELD_COUNT = 4
         const val MAX_FILE_BYTES = 256 * 1024
         const val BUFFER_SIZE = 8 * 1024
 

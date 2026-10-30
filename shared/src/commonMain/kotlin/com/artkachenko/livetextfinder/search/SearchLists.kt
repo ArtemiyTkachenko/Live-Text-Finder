@@ -26,7 +26,12 @@ internal fun previewSearchListTerms(input: String): SearchListTermsPreview {
 }
 
 /** A reusable named search containing independent literal terms or phrases. */
-data class SavedSearchList(val id: String, val name: String, val terms: List<String>)
+data class SavedSearchList(
+    val id: String,
+    val name: String,
+    val terms: List<String>,
+    val paletteSlots: List<Int> = legacyPaletteSlots(terms),
+)
 
 /** The app-owned values that are persisted across Android launches. */
 data class PersistedSearchState(
@@ -54,12 +59,21 @@ data class SearchSessionState(
                 return manualSearchSpec(persisted.manualQuery)
             }
 
+            check(list.paletteSlots.size == list.terms.size &&
+                list.paletteSlots.all { it in SearchHighlightPalette.colors.indices } &&
+                list.paletteSlots.toSet().size == list.paletteSlots.size
+            ) {
+                "The active list has invalid palette slots."
+            }
             val terms = list.terms.mapIndexed { index, text ->
-                SearchTerm("${list.id}:$index", text)
+                SearchTerm("${list.id}:$index", text, list.paletteSlots[index])
             }
             val identity = buildString {
                 append("list\u0000").append(list.id).append('\u0000')
-                terms.forEach { term -> append(term.text.length).append(':').append(term.text) }
+                terms.forEach { term ->
+                    append(term.text.length).append(':').append(term.text)
+                    append('@').append(term.paletteSlot).append(';')
+                }
             }
             return ActiveSearchSpec(identity, list.name, terms)
         }
@@ -123,6 +137,12 @@ internal fun validatePersistedSearchState(value: PersistedSearchState): String? 
         seenNames.add(list.name)
         if (list.terms.size !in 1..MAX_TERMS_PER_LIST) {
             return "Saved search data contains an invalid term count."
+        }
+        if (list.paletteSlots.size != list.terms.size ||
+            list.paletteSlots.any { it !in SearchHighlightPalette.colors.indices } ||
+            list.paletteSlots.toSet().size != list.paletteSlots.size
+        ) {
+            return "Saved search data contains invalid term colors."
         }
 
         var totalTermChars = 0
@@ -202,6 +222,7 @@ class SearchSessionController(private val store: SearchSessionStore) {
             return "Search lists are unavailable until storage is recovered."
         }
         val current = state.value.persisted
+        validatePersistedSearchState(current)?.let { error -> return error }
         if (id != null && current.lists.none { it.id == id }) {
             return "That saved list no longer exists. Reopen the editor before saving."
         }
@@ -242,7 +263,9 @@ class SearchSessionController(private val store: SearchSessionStore) {
         }
 
         val stableId = id ?: newListId()
-        val replacement = SavedSearchList(stableId, name, terms)
+        val previous = id?.let { listId -> current.lists.first { it.id == listId } }
+        val slots = allocatePaletteSlots(terms, previous)
+        val replacement = SavedSearchList(stableId, name, terms, slots)
         val lists = if (id == null) {
             current.lists + replacement
         } else {

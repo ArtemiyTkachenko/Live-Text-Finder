@@ -6,6 +6,7 @@ import com.artkachenko.livetextfinder.ocr.TextLine
 import kotlin.math.pow
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
@@ -46,6 +47,81 @@ class SearchHighlightPaletteTest {
         assertEquals(
             colorsByLabel(first),
             colorsByLabel(reconstructed),
+        )
+    }
+
+    @Test
+    fun explicitSlotsKeepColorsAcrossReorderingAndRejectInvalidAssignments() {
+        val first = ActiveSearchSpec(
+            "first",
+            "List",
+            listOf(SearchTerm("a", "zebra", 0), SearchTerm("b", "apple", 1)),
+        )
+        val reordered = ActiveSearchSpec(
+            "reordered",
+            "List",
+            listOf(SearchTerm("b", "apple", 1), SearchTerm("a", "zebra", 0)),
+        )
+        assertEquals(
+            SearchHighlightPalette.colorsByTerm(first, HighlightColor.Yellow),
+            SearchHighlightPalette.colorsByTerm(reordered, HighlightColor.Yellow),
+        )
+
+        val duplicateSlots = first.copy(
+            terms = listOf(SearchTerm("a", "zebra", 0), SearchTerm("b", "apple", 0)),
+        )
+        assertFailsWith<IllegalArgumentException> {
+            SearchHighlightPalette.colorsByTerm(duplicateSlots, HighlightColor.Yellow)
+        }
+    }
+
+    @Test
+    fun persistedSlotChangesAffectIdentitySummariesAndStillRows() {
+        val content = ImportedTextSnapshot(
+            text = "zebra apple",
+            lines = listOf(
+                TextLine(
+                    "zebra apple",
+                    null,
+                    emptyList(),
+                    listOf(TextElement("zebra apple", null, emptyList())),
+                ),
+            ),
+            width = 100,
+            height = 20,
+            sourceIdentity = 2L,
+        )
+        fun state(slots: List<Int>) = SearchSessionState(
+            persisted = PersistedSearchState(
+                "",
+                listOf(SavedSearchList("stable", "Parts", listOf("zebra", "apple"), slots)),
+                "stable",
+            ),
+            loaded = true,
+        )
+        val first = state(listOf(0, 1)).activeSearch
+        val second = state(listOf(1, 0)).activeSearch
+        assertNotEquals(first.identity, second.identity)
+
+        val firstResult = searchRecognizedContent(first, content)
+        val secondResult = searchRecognizedContent(second, content)
+        val firstSummaries = searchTermSummaries(firstResult)
+        val secondSummaries = searchTermSummaries(secondResult)
+        assertEquals(firstSummaries.map { it.label }, secondSummaries.map { it.label })
+        assertNotEquals(firstSummaries.map { it.color }, secondSummaries.map { it.color })
+        assertEquals(
+            firstResult.occurrences.map { occurrence ->
+                SearchHighlightPalette.colorsByTerm(first, HighlightColor.Yellow)
+                    .getValue(occurrence.termId)
+            },
+            stillMatchRows(firstResult).map { it.termColor },
+        )
+        assertEquals(
+            secondResult.occurrences.map { occurrence ->
+                SearchHighlightPalette.colorsByTerm(second, HighlightColor.Yellow)
+                    .getValue(occurrence.termId)
+            },
+            stillMatchRows(secondResult).map { it.termColor },
         )
     }
 
