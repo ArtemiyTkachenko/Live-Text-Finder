@@ -22,6 +22,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -69,6 +70,8 @@ import com.artkachenko.livetextfinder.search.PreviewPoint
 import com.artkachenko.livetextfinder.search.SearchHighlightPalette
 import com.artkachenko.livetextfinder.search.Highlights
 import com.artkachenko.livetextfinder.search.SearchListEditorState
+import com.artkachenko.livetextfinder.search.SearchListTransferCopy
+import com.artkachenko.livetextfinder.search.rememberSearchListTransferOwner
 import com.artkachenko.livetextfinder.search.SearchPresentationOwner
 import com.artkachenko.livetextfinder.search.SearchSessionController
 import com.artkachenko.livetextfinder.search.StillMatchRow
@@ -114,6 +117,23 @@ import livetextfinder.shared.generated.resources.search_results_locate_hint
 import livetextfinder.shared.generated.resources.status_cancel
 import livetextfinder.shared.generated.resources.status_share_image
 import livetextfinder.shared.generated.resources.status_share_preparing
+import livetextfinder.shared.generated.resources.search_list_import_fallback_name
+import livetextfinder.shared.generated.resources.search_list_transfer_cancel
+import livetextfinder.shared.generated.resources.search_list_transfer_help
+import livetextfinder.shared.generated.resources.search_list_transfer_choose_file
+import livetextfinder.shared.generated.resources.search_list_transfer_reading
+import livetextfinder.shared.generated.resources.search_list_transfer_choose_destination
+import livetextfinder.shared.generated.resources.search_list_transfer_saving
+import livetextfinder.shared.generated.resources.search_list_transfer_import_canceled
+import livetextfinder.shared.generated.resources.search_list_transfer_export_canceled
+import livetextfinder.shared.generated.resources.search_list_transfer_import_ready
+import livetextfinder.shared.generated.resources.search_list_transfer_export_complete
+import livetextfinder.shared.generated.resources.search_list_transfer_another_busy
+import livetextfinder.shared.generated.resources.search_list_transfer_import_unavailable
+import livetextfinder.shared.generated.resources.search_list_transfer_export_unavailable
+import livetextfinder.shared.generated.resources.search_list_transfer_list_invalid
+import livetextfinder.shared.generated.resources.search_list_transfer_import_failed
+import livetextfinder.shared.generated.resources.search_list_transfer_export_failed
 import livetextfinder.shared.generated.resources.still_match_copied
 import livetextfinder.shared.generated.resources.still_match_copy_failed
 import org.jetbrains.compose.resources.stringResource
@@ -134,7 +154,56 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
             val selectedList = sessionState.activeList
             val managerOpenState = remember { mutableStateOf(false) }
             var managerOpen by managerOpenState
-            var editor by remember { mutableStateOf(SearchListEditorState()) }
+            val editorState = remember { mutableStateOf(SearchListEditorState()) }
+            var editor by editorState
+            val transferContextRevisionState = remember { mutableLongStateOf(0L) }
+            var transferContextRevision by transferContextRevisionState
+            val transferOwner = rememberSearchListTransferOwner()
+            val transferFallbackName = stringResource(Res.string.search_list_import_fallback_name)
+            val transferCopy = SearchListTransferCopy(
+                fallbackName = transferFallbackName,
+                chooseFile = stringResource(Res.string.search_list_transfer_choose_file),
+                readingFile = stringResource(Res.string.search_list_transfer_reading),
+                chooseDestination = stringResource(
+                    Res.string.search_list_transfer_choose_destination,
+                ),
+                savingFile = stringResource(Res.string.search_list_transfer_saving),
+                importCanceled = stringResource(Res.string.search_list_transfer_import_canceled),
+                exportCanceled = stringResource(Res.string.search_list_transfer_export_canceled),
+                importReady = stringResource(Res.string.search_list_transfer_import_ready),
+                exportComplete = stringResource(Res.string.search_list_transfer_export_complete),
+                anotherTransfer = stringResource(Res.string.search_list_transfer_another_busy),
+                importUnavailable = stringResource(
+                    Res.string.search_list_transfer_import_unavailable,
+                ),
+                exportUnavailable = stringResource(
+                    Res.string.search_list_transfer_export_unavailable,
+                ),
+                listCannotExport = stringResource(Res.string.search_list_transfer_list_invalid),
+                importFailed = stringResource(Res.string.search_list_transfer_import_failed),
+                exportFailed = stringResource(Res.string.search_list_transfer_export_failed),
+            )
+            SideEffect {
+                transferOwner.updateContext(
+                    sessionState = sessionState,
+                    managerOpen = managerOpen,
+                    editor = editor,
+                    contextRevision = transferContextRevision,
+                    copy = transferCopy,
+                    isContextCurrent = {
+                        session.state.value == sessionState &&
+                            managerOpenState.value == managerOpen &&
+                            editorState.value == editor &&
+                            transferContextRevisionState.longValue == transferContextRevision
+                    },
+                    onImportDraft = { name, terms ->
+                        transferContextRevision++
+                        editor = editor.importedDraft(name, terms)
+                        managerOpen = true
+                    },
+                )
+            }
+            val transferState = transferOwner.state.value
             var deleteId by remember { mutableStateOf<String?>(null) }
             var resetConfirm by remember { mutableStateOf(false) }
             var colorDialogOpen by remember { mutableStateOf(false) }
@@ -566,9 +635,15 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                     FinderSearchControls(
                         showTitle = shouldShowViews,
                         query = query,
-                        onQueryChange = session::setManualQuery,
+                        onQueryChange = { value ->
+                            transferOwner.contextChanged()
+                            transferContextRevision++
+                            session.setManualQuery(value)
+                        },
                         searchListsLabel = if (managerOpen) "Close lists" else "Search lists",
                         onSearchLists = {
+                            transferOwner.contextChanged()
+                            transferContextRevision++
                             managerOpen = !managerOpen
                             editor = editor.close()
                         },
@@ -614,6 +689,18 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                             }
                         },
                     )
+                    if (transferState.message != null) {
+                        ContextMessage(
+                            message = transferState.message,
+                            actionLabel = if (transferState.busy) {
+                                stringResource(Res.string.search_list_transfer_cancel)
+                            } else {
+                                null
+                            },
+                            onAction = if (transferState.busy) transferOwner::cancel else null,
+                            isError = transferState.isError,
+                        )
+                    }
                     FinderStatusRegion(
                         state = state,
                         importedState = importedState,
@@ -624,7 +711,11 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                         highlights = highlights,
                         areaSelected = areaState != null,
                         shouldShowViews = shouldShowViews,
-                        onRetrySavedData = session::retry,
+                        onRetrySavedData = {
+                            transferOwner.contextChanged()
+                            transferContextRevision++
+                            session.retry()
+                        },
                         onRequestReset = { resetConfirm = true },
                     )
                     if (activeSearch.terms.isNotEmpty()) {
@@ -766,13 +857,35 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                         activeListId = sessionState.persisted.activeListId,
                         editor = editor,
                         canSave = sessionState.loaded && !sessionState.recoveryRequired,
-                        onNew = { editor = editor.startNew() },
-                        onSelect = session::selectList,
-                        onEdit = { list -> editor = editor.edit(list) },
+                        onNew = {
+                            transferOwner.contextChanged()
+                            transferContextRevision++
+                            editor = editor.startNew()
+                        },
+                        onSelect = { id ->
+                            transferOwner.contextChanged()
+                            transferContextRevision++
+                            session.selectList(id)
+                        },
+                        onEdit = { list ->
+                            transferOwner.contextChanged()
+                            transferContextRevision++
+                            editor = editor.edit(list)
+                        },
                         onDelete = { list -> deleteId = list.id },
-                        onNameChange = { editor = editor.copy(name = it) },
-                        onTermsChange = { editor = editor.copy(terms = it) },
+                        onNameChange = {
+                            transferOwner.contextChanged()
+                            transferContextRevision++
+                            editor = editor.copy(name = it)
+                        },
+                        onTermsChange = {
+                            transferOwner.contextChanged()
+                            transferContextRevision++
+                            editor = editor.copy(terms = it)
+                        },
                         onSave = {
+                            transferOwner.contextChanged()
+                            transferContextRevision++
                             val error = session.saveList(
                                 editor.editingId,
                                 editor.name,
@@ -784,7 +897,11 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                                 editor.copy(error = error)
                             }
                         },
-                        onCancel = { editor = editor.close() },
+                        onCancel = {
+                            transferOwner.contextChanged()
+                            transferContextRevision++
+                            editor = editor.close()
+                        },
                     )
                 }
                 if (shouldShowViews) {
@@ -1030,6 +1147,8 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                     confirmButton = {
                         TextButton(
                             onClick = {
+                                transferOwner.contextChanged()
+                                transferContextRevision++
                                 session.deleteList(id)
                                 if (editor.editingId == id) {
                                     editor = editor.close()
@@ -1058,6 +1177,8 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                     confirmButton = {
                         TextButton(onClick = {
                             resetConfirm = false
+                            transferOwner.contextChanged()
+                            transferContextRevision++
                             session.retry()
                         }) {
                             Text("Reset")
@@ -1084,7 +1205,11 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                 HighlightColorDialog(
                     selectedColor = sessionState.persisted.highlightColor,
                     enabled = sessionState.loaded && !sessionState.recoveryRequired,
-                    onSelectColor = session::setHighlightColor,
+                    onSelectColor = { color ->
+                        transferOwner.contextChanged()
+                        transferContextRevision++
+                        session.setHighlightColor(color)
+                    },
                     onDismissRequest = { colorDialogOpen = false },
                 )
             }
@@ -1100,10 +1225,30 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                     highlightEnabled = sessionState.loaded && !sessionState.recoveryRequired,
                     matchMode = sessionState.persisted.matchMode,
                     matchModeEnabled = sessionState.loaded && !sessionState.recoveryRequired,
-                    onMatchMode = session::setMatchMode,
+                    onMatchMode = { mode ->
+                        transferOwner.contextChanged()
+                        transferContextRevision++
+                        session.setMatchMode(mode)
+                    },
                     liveAreaLabel = liveAreaLabel,
                     showImport = importedState.phase == ImportedImagePhase.Live ||
                         importedState.phase == ImportedImagePhase.Error,
+                    showListTransfer = transferState.supported,
+                    listTransferHelp = if (transferState.supported) {
+                        stringResource(Res.string.search_list_transfer_help)
+                    } else {
+                        null
+                    },
+                    importListEnabled = transferState.importEnabled,
+                    exportListEnabled = transferState.exportEnabled,
+                    onImportList = {
+                        optionsOpen = false
+                        transferOwner.importList()
+                    },
+                    onExportList = {
+                        optionsOpen = false
+                        transferOwner.exportSelectedList()
+                    },
                     onHighlight = {
                         optionsOpen = false
                         colorDialogOpen = true

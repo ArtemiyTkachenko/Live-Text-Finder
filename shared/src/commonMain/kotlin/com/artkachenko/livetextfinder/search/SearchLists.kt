@@ -25,6 +25,43 @@ internal fun previewSearchListTerms(input: String): SearchListTermsPreview {
     )
 }
 
+/** Validates and canonicalizes the terms entered for a saved search list. */
+internal fun validateSearchListTerms(input: String): Result<List<String>> {
+    val rawLines = input.lines()
+    if (rawLines.size > MAX_TERMS_PER_LIST) {
+        return Result.failure(
+            IllegalArgumentException("Lists can contain at most $MAX_TERMS_PER_LIST terms."),
+        )
+    }
+    val terms = rawLines.map(::normalizeRecognizedText)
+    if (terms.any { it.isEmpty() }) {
+        return Result.failure(
+            IllegalArgumentException(
+                "Remove blank term lines. Each line must contain a term or phrase.",
+            ),
+        )
+    }
+    if (terms.any { it.length > MAX_TERM_LENGTH }) {
+        return Result.failure(
+            IllegalArgumentException("Each term can contain at most $MAX_TERM_LENGTH characters."),
+        )
+    }
+    if (terms.indices.any { index ->
+            terms.take(index).any { it.equals(terms[index], ignoreCase = true) }
+        }
+    ) {
+        return Result.failure(IllegalArgumentException("Terms must be unique, ignoring case."))
+    }
+    if (terms.sumOf { it.length } > MAX_TOTAL_TERM_CHARS) {
+        return Result.failure(
+            IllegalArgumentException(
+                "A list can contain at most $MAX_TOTAL_TERM_CHARS total term characters.",
+            ),
+        )
+    }
+    return Result.success(terms)
+}
+
 /** A reusable named search containing independent literal terms or phrases. */
 data class SavedSearchList(
     val id: String,
@@ -240,25 +277,8 @@ class SearchSessionController(private val store: SearchSessionStore) {
             return "That list name is already in use."
         }
 
-        val rawLines = termsInput.lines()
-        if (rawLines.size > MAX_TERMS_PER_LIST) {
-            return "Lists can contain at most $MAX_TERMS_PER_LIST terms."
-        }
-        val terms = rawLines.map(::normalizeRecognizedText)
-        if (terms.any { it.isEmpty() }) {
-            return "Remove blank term lines. Each line must contain a term or phrase."
-        }
-        if (terms.any { it.length > MAX_TERM_LENGTH }) {
-            return "Each term can contain at most $MAX_TERM_LENGTH characters."
-        }
-        if (terms.indices.any { index ->
-                terms.take(index).any { it.equals(terms[index], ignoreCase = true) }
-            }
-        ) {
-            return "Terms must be unique, ignoring case."
-        }
-        if (terms.sumOf { it.length } > MAX_TOTAL_TERM_CHARS) {
-            return "A list can contain at most $MAX_TOTAL_TERM_CHARS total term characters."
+        val terms = validateSearchListTerms(termsInput).getOrElse { error ->
+            return error.message ?: "Search list terms are invalid."
         }
         if (id == null && current.lists.size >= MAX_LISTS) {
             return "You can save at most $MAX_LISTS lists."

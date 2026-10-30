@@ -29,6 +29,8 @@ import livetextfinder.shared.generated.resources.finder_options_help
 import livetextfinder.shared.generated.resources.finder_options_import
 import livetextfinder.shared.generated.resources.finder_options_matching
 import livetextfinder.shared.generated.resources.finder_options_title
+import livetextfinder.shared.generated.resources.search_list_export
+import livetextfinder.shared.generated.resources.search_list_import
 import org.jetbrains.compose.resources.stringResource
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -41,6 +43,12 @@ internal fun FinderOptionsSheet(
     onMatchMode: (SearchMatchMode) -> Unit,
     liveAreaLabel: String?,
     showImport: Boolean,
+    showListTransfer: Boolean,
+    listTransferHelp: String?,
+    importListEnabled: Boolean,
+    exportListEnabled: Boolean,
+    onImportList: () -> Unit,
+    onExportList: () -> Unit,
     onHighlight: () -> Unit,
     onLiveArea: () -> Unit,
     onImport: () -> Unit,
@@ -91,6 +99,29 @@ internal fun FinderOptionsSheet(
             if (showImport) {
                 TextButton(onClick = onImport, modifier = Modifier.fillMaxWidth()) {
                     Text(stringResource(Res.string.finder_options_import))
+                }
+            }
+            if (showListTransfer) {
+                TextButton(
+                    onClick = onImportList,
+                    enabled = importListEnabled,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                ) {
+                    Text(stringResource(Res.string.search_list_import))
+                }
+                TextButton(
+                    onClick = onExportList,
+                    enabled = exportListEnabled,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                ) {
+                    Text(stringResource(Res.string.search_list_export))
+                }
+                if (listTransferHelp != null) {
+                    Text(
+                        text = listTransferHelp,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
             TextButton(onClick = onHelp, modifier = Modifier.fillMaxWidth()) {

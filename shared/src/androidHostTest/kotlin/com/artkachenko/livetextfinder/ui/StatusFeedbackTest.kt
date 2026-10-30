@@ -181,6 +181,12 @@ class StatusFeedbackTest {
                         },
                         liveAreaLabel = "Live area: Full frame",
                         showImport = showImport.value,
+                        showListTransfer = false,
+                        listTransferHelp = null,
+                        importListEnabled = false,
+                        exportListEnabled = false,
+                        onImportList = ::ignoreAction,
+                        onExportList = ::ignoreAction,
                         onHighlight = {
                             optionsOpen.value = false
                             highlightCalls.intValue++
@@ -330,6 +336,88 @@ class StatusFeedbackTest {
     }
 
     @Test
+    fun listTransferActionsKeepActualBoundsAndTermsOnlyHelpAtLargeText() {
+        val optionsOpen = mutableStateOf(false)
+        val transferHelp =
+            "Search list text files contain one term or phrase per line. " +
+                "Export includes the selected list terms only; colours and search settings " +
+                "are not included."
+        mount(widthDp = 320, heightDp = 360, fontScale = 1.4f) {
+            LiveTextFinderTheme(darkThemeOverride = false, dynamicColor = false) {
+                Surface(Modifier.fillMaxSize()) {
+                    Column {
+                        FinderSearchControls(
+                            showTitle = false,
+                            query = "invoice",
+                            onQueryChange = ::ignoreText,
+                            searchListsLabel = "Search lists",
+                            onSearchLists = ::ignoreAction,
+                            searchContext = "Manual search",
+                            onOptions = { optionsOpen.value = true },
+                            captureLabel = null,
+                            captureEnabled = false,
+                            onCapture = ::ignoreAction,
+                            pendingCaptureLabel = null,
+                            onCancelCapture = ::ignoreAction,
+                            secondaryActionLabel = null,
+                            onSecondaryAction = ::ignoreAction,
+                        )
+                    }
+                }
+                if (optionsOpen.value) {
+                    FinderOptionsSheet(
+                        highlightLabel = "Highlight color: Yellow",
+                        highlightEnabled = true,
+                        matchMode = SearchMatchMode.Substring,
+                        matchModeEnabled = true,
+                        onMatchMode = ::ignoreMatchMode,
+                        liveAreaLabel = null,
+                        showImport = true,
+                        showListTransfer = true,
+                        listTransferHelp = transferHelp,
+                        importListEnabled = true,
+                        exportListEnabled = true,
+                        onImportList = ::ignoreAction,
+                        onExportList = ::ignoreAction,
+                        onHighlight = ::ignoreAction,
+                        onLiveArea = ::ignoreAction,
+                        onImport = ::ignoreAction,
+                        onHelp = ::ignoreAction,
+                        onDismissRequest = { optionsOpen.value = false },
+                    )
+                }
+            }
+        }
+
+        openOptionsSheet()
+        val initialNodes = optionsDialogNodes()
+        val viewport = checkNotNull(initialNodes.firstOrNull {
+            it.config.getOrNull(SemanticsActions.ScrollBy) != null
+        })
+        checkNotNull(viewport.config.getOrNull(SemanticsActions.ScrollBy)?.action)
+            .invoke(0f, 1_600f)
+        measureCurrentComposition()
+        val nodes = optionsDialogNodes()
+        val dialog = optionsDialog()
+        val dialogView = checkNotNull(dialog.window?.decorView)
+        val density = dialogView.resources.displayMetrics.density
+        val scrollViewport = checkNotNull(nodes.firstOrNull {
+            it.config.getOrNull(SemanticsActions.ScrollBy) != null
+        })
+        listOf("Import search list", "Export selected list").forEach { label ->
+            val action = nodeWithText(nodes, label, clickable = true)
+            assertTrue(action.size.width / density >= 48f)
+            assertTrue(action.size.height / density >= 48f)
+            assertFullyVisibleInViewport(action, scrollViewport)
+            assertFullyVisibleInDialog(action, dialogView)
+        }
+        val help = nodeWithText(nodes, transferHelp)
+        assertFullyVisibleInViewport(help, scrollViewport)
+        assertFullyVisibleInDialog(help, dialogView)
+        assertDialogRendered(dialog, "options-list-transfer-large-text.png")
+    }
+
+    @Test
     fun lightOptionsSheetRendersInItsNativeWindowAndClosesOnHelp() {
         val optionsOpen = mutableStateOf(false)
         var helpCalls = 0
@@ -362,6 +450,12 @@ class StatusFeedbackTest {
                         onMatchMode = { },
                         liveAreaLabel = null,
                         showImport = false,
+                        showListTransfer = false,
+                        listTransferHelp = null,
+                        importListEnabled = false,
+                        exportListEnabled = false,
+                        onImportList = ::ignoreAction,
+                        onExportList = ::ignoreAction,
                         onHighlight = { optionsOpen.value = false },
                         onLiveArea = ::ignoreAction,
                         onImport = ::ignoreAction,
@@ -2088,6 +2182,8 @@ class StatusFeedbackTest {
     }
 
     private fun ignoreAction() = Unit
+
+    private fun ignoreMatchMode(value: SearchMatchMode) = Unit
 
     private fun ignoreList(value: SavedSearchList) = Unit
 

@@ -17,5 +17,8 @@ internal data class SearchListEditorState(
         terms = list.terms.joinToString("\n"),
     )
 
+    fun importedDraft(name: String, terms: List<String>): SearchListEditorState =
+        startNew().copy(name = name, terms = terms.joinToString("\n"))
+
     fun close(): SearchListEditorState = SearchListEditorState()
 }

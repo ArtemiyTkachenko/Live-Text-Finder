@@ -82,6 +82,10 @@ Android storage is app-private and atomic with serialized background operations.
 
 Required evidence includes actual Android storage round-trips across separate instances and interrupted-write recovery, common asynchronous startup/save ordering and CRUD validation tests, independent multi-term counting/provenance and term-specific retention tests, plus existing regressions. Device relaunch, process restart after save acknowledgement, rapid input/backgrounding, editor accessibility and live simultaneous matching remain external acceptance checks.
 
+### Android plain-text list transfer
+
+Use **Options → Import search list** or **Export selected list** to transfer only saved-list terms. The format is strict UTF-8 text with one canonical term per line, LF or CRLF separators, and at most 65,536 bytes. Import creates a new editable draft; saving remains an explicit Search lists action and never replaces an existing list automatically. Export serializes the selected list's terms with a terminal newline. Names, colours, active selection, manual query and search settings are excluded. Import is unavailable during editing or unhealthy/busy storage; export requires a healthy saved selection. Android uses system Open Document/Create Document pickers without storage permissions, URI history or persistent grants. iOS does not expose these actions. Provider-specific picker/stream behavior remains a device acceptance check.
+
 ## Android freeze/resume — next bounded increment
 
 Freeze requests one next analyzed frame, pairing its copied full-buffer pixels with that same frame's OCR snapshot. It is not a preview screenshot. While capture is pending, show cancellation; a five-second deadline invalidates late results. Freeze preserves up to one 4,000,000-pixel ARGB image in memory, with no per-frame image cache or disk persistence. Reject oversized or failed captures visibly.
