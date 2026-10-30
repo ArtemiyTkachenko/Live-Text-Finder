@@ -69,8 +69,9 @@ internal fun UsageHelpDialog(onDismissRequest: () -> Unit) {
                 HelpSection(
                     title = "Colour and sharing on Android",
                     body = stringResource(Res.string.help_options_location) + " " +
-                        "Highlight colour applies to all previews and newly " +
-                        "shared images. " +
+                        "The selected colour applies to manual search. Each list entry gets a " +
+                        "stable labelled colour across previews and shared images; open Search " +
+                        "results to see each entry and its current count. " +
                         "Android saves the query, lists, selection, and colour. Share image is " +
                         "available for frozen or imported images; it prepares a temporary " +
                         "highlighted PNG and opens the system share sheet. Opening it does not " +

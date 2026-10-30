@@ -294,7 +294,8 @@ internal class SearchPresentationOwner {
                 val duplicate = elements.any { existing ->
                     existing.snapshot === group.snapshot &&
                         existing.outline.lineIndex == outline.lineIndex &&
-                        existing.outline.elementIndex == outline.elementIndex
+                        existing.outline.elementIndex == outline.elementIndex &&
+                        existing.group.termId == group.termId
                 }
                 if (!duplicate) {
                     elements += PresentedElement(

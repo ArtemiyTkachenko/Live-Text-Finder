@@ -19,6 +19,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.artkachenko.livetextfinder.search.ElementOutline
 import com.artkachenko.livetextfinder.search.HighlightColor
+import com.artkachenko.livetextfinder.search.SearchHighlightPalette
 import com.artkachenko.livetextfinder.search.TextSearchResult
 import com.artkachenko.livetextfinder.search.projectFrozenHighlights
 import com.artkachenko.livetextfinder.search.projectImportedHighlights
@@ -202,6 +203,7 @@ internal actual class ImageShareOwner actual constructor() {
                 snapshot.frame.rotationDegrees,
                 outlines.outlines,
                 highlightColor,
+                SearchHighlightPalette.colorsByTerm(search.spec, highlightColor),
             )
         }
     }
@@ -256,6 +258,7 @@ internal actual class ImageShareOwner actual constructor() {
                 bitmap,
                 outlines.outlines,
                 highlightColor,
+                SearchHighlightPalette.colorsByTerm(search.spec, highlightColor),
             )
         }
     }

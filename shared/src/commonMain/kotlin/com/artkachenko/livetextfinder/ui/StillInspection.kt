@@ -1,5 +1,6 @@
 package com.artkachenko.livetextfinder.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -7,10 +8,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.selectable
@@ -30,13 +33,19 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.artkachenko.livetextfinder.camera.FrozenFrameFit
 import com.artkachenko.livetextfinder.camera.StillViewTransform
 import com.artkachenko.livetextfinder.search.PreviewPoint
+import com.artkachenko.livetextfinder.search.SearchTermSummary
 import com.artkachenko.livetextfinder.search.StillMatchRow
 import livetextfinder.shared.generated.resources.Res
+import livetextfinder.shared.generated.resources.search_result_count_description
+import livetextfinder.shared.generated.resources.search_results_done
+import livetextfinder.shared.generated.resources.search_results_title
 import livetextfinder.shared.generated.resources.status_cancel
 import livetextfinder.shared.generated.resources.still_copy_match
 import livetextfinder.shared.generated.resources.still_matches
@@ -193,6 +202,59 @@ internal fun StillMatchesDialog(
 }
 
 @Composable
+internal fun SearchTermResultsDialog(
+    terms: List<SearchTermSummary>,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(Res.string.search_results_title)) },
+        text = {
+            LazyColumn(
+                modifier = Modifier.heightIn(max = 320.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                items(terms, key = SearchTermSummary::termId) { term ->
+                    val countDescription = stringResource(
+                        Res.string.search_result_count_description,
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    ) {
+                        androidx.compose.foundation.layout.Box(
+                            modifier = Modifier.size(20.dp)
+                                .background(
+                                    term.color.composeColor,
+                                    MaterialTheme.shapes.extraSmall,
+                                )
+                                .border(
+                                    1.dp,
+                                    MaterialTheme.colorScheme.outline,
+                                    MaterialTheme.shapes.extraSmall,
+                                ),
+                        )
+                        Text(term.label, modifier = Modifier.weight(1f))
+                        Text(
+                            term.occurrenceCount.toString(),
+                            modifier = Modifier.semantics {
+                                contentDescription = "$countDescription ${term.occurrenceCount}"
+                            },
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(Res.string.search_results_done))
+            }
+        },
+    )
+}
+
+@Composable
 private fun StillMatchRowItem(
     row: StillMatchRow,
     selected: Boolean,
@@ -215,6 +277,25 @@ private fun StillMatchRowItem(
             modifier = Modifier.defaultMinSize(minHeight = 48.dp)
                 .padding(horizontal = 12.dp, vertical = 8.dp),
         ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+            ) {
+                androidx.compose.foundation.layout.Box(
+                    modifier = Modifier.size(16.dp)
+                        .background(
+                            row.termColor.composeColor,
+                            MaterialTheme.shapes.extraSmall,
+                        )
+                        .border(
+                            1.dp,
+                            MaterialTheme.colorScheme.outline,
+                            MaterialTheme.shapes.extraSmall,
+                        ),
+                )
+                Text(row.termLabel, style = MaterialTheme.typography.labelMedium)
+            }
             Text(
                 text = row.matchedText,
                 style = MaterialTheme.typography.bodyLarge,

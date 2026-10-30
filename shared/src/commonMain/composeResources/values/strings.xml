@@ -7,7 +7,12 @@
     <string name="highlight_color_white">White</string>
     <string name="highlight_color_custom">Custom color</string>
     <string name="highlight_color_custom_selected">Custom color (%1$s)</string>
-    <string name="highlight_color_custom_description">Choose a color for live, frozen and imported highlights and annotated shares. A black outline stays underneath.</string>
+    <string name="highlight_color_custom_description">This color applies to manual search. Search list entries use their own colors. A black outline stays underneath.</string>
+    <string name="highlight_color_selected">Selected</string>
+    <string name="search_results">Search results (%1$d)</string>
+    <string name="search_results_title">Search results</string>
+    <string name="search_results_done">Done</string>
+    <string name="search_result_count_description">Occurrences</string>
     <string name="highlight_color_preview">Color preview</string>
     <string name="highlight_color_red">Red</string>
     <string name="highlight_color_green">Green</string>

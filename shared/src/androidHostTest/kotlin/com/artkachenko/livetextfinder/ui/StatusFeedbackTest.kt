@@ -72,11 +72,13 @@ import com.artkachenko.livetextfinder.search.SearchListEditorState
 import com.artkachenko.livetextfinder.search.SearchPresentationOwner
 import com.artkachenko.livetextfinder.search.SearchSessionController
 import com.artkachenko.livetextfinder.search.SearchSessionState
+import com.artkachenko.livetextfinder.search.SearchTermSummary
 import com.artkachenko.livetextfinder.search.searchRecognizedContent
 import com.artkachenko.livetextfinder.search.searchRecognizedText
 import com.artkachenko.livetextfinder.ui.FinderSearchControls
 import com.artkachenko.livetextfinder.ui.FinderSearchLists
 import com.artkachenko.livetextfinder.ui.HighlightColorDialog
+import com.artkachenko.livetextfinder.ui.SearchTermResultsDialog
 import com.artkachenko.livetextfinder.ui.sourceStatusMessage
 import java.io.File
 import java.io.FileOutputStream
@@ -674,6 +676,42 @@ class StatusFeedbackTest {
     }
 
     @Test
+    fun productionSearchResultsDialogScrollsAllThirtyTwoLabeledTermsIncludingZeroCounts() {
+        val terms = List(32) { index ->
+            SearchTermSummary(
+                termId = "term-$index",
+                label = "long search phrase label $index",
+                color = com.artkachenko.livetextfinder.search.SearchHighlightPalette.colors[index],
+                occurrenceCount = if (index == 31) 0 else index + 1,
+            )
+        }
+        mount(widthDp = 320, heightDp = 620, fontScale = 1.2f) {
+            LiveTextFinderTheme(darkThemeOverride = false, dynamicColor = false) {
+                SearchTermResultsDialog(terms = terms, onDismiss = ::ignoreAction)
+            }
+        }
+        settleDialog()
+
+        val dialog = checkNotNull(ShadowDialog.getLatestDialog())
+        val dialogRoot = findViewRoot(dialog.window?.decorView)
+        var nodes = semanticsNodes(dialogRoot)
+        assertTrue(nodes.any { it.textValues().contains("Search results") })
+        assertTrue(nodes.any { it.textValues().contains("long search phrase label 0") })
+        assertDialogRendered(dialog, "search-results-32-top-light-large-text.png")
+        val scrollNode = checkNotNull(
+            nodes.firstOrNull { it.config.getOrNull(SemanticsActions.ScrollBy) != null },
+        )
+        val scrollBy = checkNotNull(scrollNode.config.getOrNull(SemanticsActions.ScrollBy)?.action)
+        assertTrue(scrollBy(0f, 2_000f))
+        measureCurrentComposition()
+        nodes = semanticsNodes(dialogRoot)
+        assertTrue(nodes.any { it.textValues().contains("long search phrase label 31") })
+        assertTrue(nodes.any { it.textValues().contains("0") })
+        assertTouchBounds(nodeWithText(nodes, "Done"), dialog.window?.decorView)
+        assertDialogRendered(dialog, "search-results-32-bottom-light-large-text.png")
+    }
+
+    @Test
     fun productionHighlightPaletteKeepsRowsDisabledUntilSessionIsReady() {
         val selectedColor = mutableStateOf(HighlightColor.Yellow)
         val selectedColors = mutableListOf<HighlightColor>()
@@ -890,16 +928,16 @@ class StatusFeedbackTest {
         assertTouchBounds(reopenedRedSlider, decorView)
         dispatchTouchAt(
             findComposeView(decorView),
-            reopenedRedSlider.touchBoundsInRoot.left + 1f,
+            reopenedRedSlider.positionInRoot.x + reopenedRedSlider.size.width * 0.05f,
             reopenedRedSlider.touchBoundsInRoot.center.y,
         )
         measureCurrentComposition()
         nodes = semanticsNodes(findViewRoot(decorView))
-        assertTrue(nodes.any { it.textValues().contains("#00FF00") })
+        assertTrue(nodes.any { it.textValues().contains("#01FF00") })
 
         click(nodeWithText(nodes, "Apply"))
-        assertEquals(listOf(HighlightColor.fromRgb(0, 255, 0)), selectedColors)
-        assertEquals(HighlightColor.fromRgb(0, 255, 0), selectedColor.value)
+        assertEquals(listOf(HighlightColor.fromRgb(1, 255, 0)), selectedColors)
+        assertEquals(HighlightColor.fromRgb(1, 255, 0), selectedColor.value)
         assertEquals(1, dismissCount)
 
         isOpen.value = true
@@ -907,14 +945,14 @@ class StatusFeedbackTest {
         dialog = checkNotNull(ShadowDialog.getLatestDialog())
         decorView = checkNotNull(dialog.window?.decorView)
         nodes = semanticsNodes(findViewRoot(decorView))
-        val selectedCustomRow = nodeWithDescription(nodes, "Custom color (#00FF00)")
+        val selectedCustomRow = nodeWithDescription(nodes, "Custom color (#01FF00)")
         assertEquals(true, selectedCustomRow.config.getOrNull(SemanticsProperties.Selected))
         click(selectedCustomRow)
         nodes = semanticsNodes(findViewRoot(decorView))
-        assertTrue(nodes.any { it.textValues().contains("#00FF00") })
+        assertTrue(nodes.any { it.textValues().contains("#01FF00") })
         click(nodeWithText(nodes, "Cancel"))
         nodes = semanticsNodes(findViewRoot(decorView))
-        assertTrue(nodes.any { it.textValues().contains("#00FF00") })
+        assertTrue(nodes.any { it.textValues().contains("#01FF00") })
         assertEquals(1, selectedColors.size)
         assertEquals(1, dismissCount)
     }
@@ -944,6 +982,40 @@ class StatusFeedbackTest {
         val editorNodes = semanticsNodes(findViewRoot(decorView))
         assertTrue(editorNodes.any { it.textValues().contains("#12ABEF") })
         assertDialogRendered(dialog, "custom-highlight-editor-dark-large-text.png")
+    }
+
+    @Test
+    fun productionCustomEditorShowsThreeChannelsAndFixedActionsInLargeViewport() {
+        mount(widthDp = 360, heightDp = 700, fontScale = 1.3f) {
+            LiveTextFinderTheme(darkThemeOverride = false, dynamicColor = false) {
+                HighlightColorDialog(
+                    selectedColor = HighlightColor.fromRgb(18, 171, 239),
+                    enabled = true,
+                    onSelectColor = { ignoreAction() },
+                    onDismissRequest = ::ignoreAction,
+                )
+            }
+        }
+        settleDialog()
+        val dialog = checkNotNull(ShadowDialog.getLatestDialog())
+        val decorView = checkNotNull(dialog.window?.decorView)
+        val customColorRow = nodeWithDescription(
+            semanticsNodes(findViewRoot(decorView)),
+            "Custom color (#12ABEF)",
+        )
+        click(customColorRow)
+        val nodes = semanticsNodes(findViewRoot(decorView))
+        listOf("Red", "Green", "Blue").forEach { label ->
+            val slider = nodeWithDescription(nodes, label)
+            assertTouchBounds(slider, decorView)
+            assertSliderLayoutHeight(slider, decorView)
+            assertFullyVisibleInDialog(slider, decorView)
+        }
+        assertFullyVisibleInDialog(nodeWithText(nodes, "Apply"), decorView)
+        assertFullyVisibleInDialog(nodeWithText(nodes, "Cancel"), decorView)
+        assertTouchBounds(nodeWithText(nodes, "Apply"), decorView)
+        assertTouchBounds(nodeWithText(nodes, "Cancel"), decorView)
+        assertDialogRendered(dialog, "custom-highlight-editor-light-all-channels-large-text.png")
     }
 
     @Test
@@ -984,7 +1056,7 @@ class StatusFeedbackTest {
         assertTouchBounds(redSlider, decorView)
         dispatchTouchAt(
             findComposeView(decorView),
-            redSlider.touchBoundsInRoot.left + 1f,
+            redSlider.positionInRoot.x + redSlider.size.width * 0.05f,
             redSlider.touchBoundsInRoot.center.y,
         )
         measureCurrentComposition()

@@ -31,6 +31,7 @@ class StillMatchRowsTest {
         )
 
         val rows = stillMatchRows(result)
+        val colors = SearchHighlightPalette.colorsByTerm(result.spec, HighlightColor.Yellow)
         assertEquals(
             listOf("aba", "ABa", "ababa", "ABaBa"),
             rows.map { it.matchedText },
@@ -38,6 +39,12 @@ class StillMatchRowsTest {
         assertEquals(listOf("short", "short", "long", "long"), rows.map { it.occurrence.termId })
         assertEquals(listOf(0, 0, 0, 0), rows.map { it.occurrence.lineIndex })
         assertEquals(listOf(0, 6, 0, 6), rows.map { it.occurrence.start })
+        assertEquals(listOf("aba", "aba", "ababa", "ababa"), rows.map { it.termLabel })
+        assertEquals(
+            listOf(colors.getValue("short"), colors.getValue("short"),
+                colors.getValue("long"), colors.getValue("long")),
+            rows.map { it.termColor },
+        )
         assertEquals("aba", stillMatchText(rows.first(), result))
     }
 

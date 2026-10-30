@@ -6,12 +6,14 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
@@ -51,6 +53,7 @@ import livetextfinder.shared.generated.resources.highlight_color_green
 import livetextfinder.shared.generated.resources.highlight_color_magenta
 import livetextfinder.shared.generated.resources.highlight_color_preview
 import livetextfinder.shared.generated.resources.highlight_color_red
+import livetextfinder.shared.generated.resources.highlight_color_selected
 import livetextfinder.shared.generated.resources.highlight_color_title
 import livetextfinder.shared.generated.resources.highlight_color_white
 import livetextfinder.shared.generated.resources.highlight_color_yellow
@@ -98,21 +101,27 @@ internal fun HighlightColorDialog(
             } else {
                 Column(
                     modifier = Modifier.heightIn(max = 320.dp)
-                        .verticalScroll(rememberScrollState())
-                        .selectableGroup(),
+                        .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(FinderSpacing.extraSmall),
                 ) {
                     Text(
                         text = stringResource(Res.string.highlight_color_custom_description),
                         style = MaterialTheme.typography.bodyMedium,
                     )
-                    HighlightColor.entries.forEach { color ->
-                        HighlightColorRow(
-                            color = color,
-                            selected = selectedColor == color,
-                            enabled = enabled,
-                            onClick = { onSelectColor(color) },
-                        )
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth().selectableGroup(),
+                        maxItemsInEachRow = 2,
+                        horizontalArrangement = Arrangement.spacedBy(FinderSpacing.extraSmall),
+                        verticalArrangement = Arrangement.spacedBy(FinderSpacing.extraSmall),
+                    ) {
+                        HighlightColor.entries.forEach { color ->
+                            HighlightColorSwatch(
+                                color = color,
+                                selected = selectedColor == color,
+                                enabled = enabled,
+                                onClick = { onSelectColor(color) },
+                            )
+                        }
                     }
                     CustomColorRow(
                         color = selectedColor,
@@ -217,18 +226,20 @@ private fun CustomColorEditor(
         modifier = Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(FinderSpacing.extraSmall),
     ) {
-        Text(
-            text = stringResource(Res.string.highlight_color_custom_description),
-            style = MaterialTheme.typography.bodyMedium,
-        )
         val previewLabel = stringResource(Res.string.highlight_color_preview)
-        Box(
+        Row(
             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
-                .background(color.composeColor, MaterialTheme.shapes.medium)
-                .border(1.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.medium)
                 .semantics { contentDescription = previewLabel },
-        )
-        Text(color.hexRgb, style = MaterialTheme.typography.titleMedium)
+            horizontalArrangement = Arrangement.spacedBy(FinderSpacing.small),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier.size(36.dp)
+                    .background(color.composeColor, MaterialTheme.shapes.small)
+                    .border(1.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.small),
+            )
+            Text(color.hexRgb, style = MaterialTheme.typography.titleMedium)
+        }
         RgbSlider(
             label = stringResource(Res.string.highlight_color_red),
             value = red,
@@ -260,15 +271,16 @@ private fun RgbSlider(
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val sliderColors = SliderDefaults.colors()
-    Column {
-        Row(
-            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(label, style = MaterialTheme.typography.bodyLarge)
-            Text(value.toString(), style = MaterialTheme.typography.bodyLarge)
-        }
+    Row(
+        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+        horizontalArrangement = Arrangement.spacedBy(FinderSpacing.extraSmall),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            label,
+            modifier = Modifier.widthIn(min = 36.dp),
+            style = MaterialTheme.typography.bodyMedium,
+        )
         Slider(
             value = value.toFloat(),
             onValueChange = { onValueChange(it.roundToInt().coerceIn(0, 255)) },
@@ -287,13 +299,19 @@ private fun RgbSlider(
                     )
                 }
             },
-            modifier = Modifier.semantics { contentDescription = label },
+            modifier = Modifier.weight(1f).heightIn(min = 48.dp)
+                .semantics { contentDescription = label },
+        )
+        Text(
+            value.toString(),
+            modifier = Modifier.widthIn(min = 32.dp),
+            style = MaterialTheme.typography.bodyMedium,
         )
     }
 }
 
 @Composable
-private fun HighlightColorRow(
+private fun HighlightColorSwatch(
     color: HighlightColor,
     selected: Boolean,
     enabled: Boolean,
@@ -303,7 +321,7 @@ private fun HighlightColorRow(
     val labelText = stringResource(label)
     val swatchShape = MaterialTheme.shapes.extraSmall
     Row(
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth(0.48f)
             .heightIn(min = 48.dp)
             .selectable(
                 selected = selected,
@@ -312,17 +330,29 @@ private fun HighlightColorRow(
                 onClick = onClick,
             )
             .semantics { contentDescription = labelText }
-            .padding(horizontal = FinderSpacing.small),
-        horizontalArrangement = Arrangement.spacedBy(FinderSpacing.small),
+            .border(
+                width = if (selected && color == HighlightColor.White) 2.dp else 0.dp,
+                color = MaterialTheme.colorScheme.outline,
+                shape = MaterialTheme.shapes.small,
+            )
+            .padding(horizontal = FinderSpacing.extraSmall),
+        horizontalArrangement = Arrangement.spacedBy(FinderSpacing.extraSmall),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        RadioButton(selected = selected, onClick = null, enabled = enabled)
         Box(
             modifier = Modifier.size(24.dp)
                 .background(color.composeColor, swatchShape)
                 .border(1.dp, MaterialTheme.colorScheme.outline, swatchShape),
         )
-        Text(text = labelText, style = MaterialTheme.typography.bodyLarge)
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = labelText, style = MaterialTheme.typography.bodyMedium)
+            if (selected) {
+                Text(
+                    stringResource(Res.string.highlight_color_selected),
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
+        }
     }
 }
 

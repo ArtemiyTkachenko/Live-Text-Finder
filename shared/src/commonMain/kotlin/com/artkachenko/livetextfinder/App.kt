@@ -66,6 +66,7 @@ import com.artkachenko.livetextfinder.ocr.OcrUiState
 import com.artkachenko.livetextfinder.search.LiveSearchAreaOwner
 import com.artkachenko.livetextfinder.search.NormalizedSearchArea
 import com.artkachenko.livetextfinder.search.PreviewPoint
+import com.artkachenko.livetextfinder.search.SearchHighlightPalette
 import com.artkachenko.livetextfinder.search.SearchListEditorState
 import com.artkachenko.livetextfinder.search.SearchPresentationOwner
 import com.artkachenko.livetextfinder.search.SearchSessionController
@@ -79,6 +80,7 @@ import com.artkachenko.livetextfinder.search.projectHighlights
 import com.artkachenko.livetextfinder.search.projectImportedHighlights
 import com.artkachenko.livetextfinder.search.searchRecognizedContent
 import com.artkachenko.livetextfinder.search.searchRecognizedText
+import com.artkachenko.livetextfinder.search.searchTermSummaries
 import com.artkachenko.livetextfinder.search.stillMatchRows
 import com.artkachenko.livetextfinder.ui.ContextMessage
 import com.artkachenko.livetextfinder.ui.FinderOptionsSheet
@@ -87,6 +89,7 @@ import com.artkachenko.livetextfinder.ui.FinderSearchLists
 import com.artkachenko.livetextfinder.ui.FinderSpacing
 import com.artkachenko.livetextfinder.ui.HighlightColorDialog
 import com.artkachenko.livetextfinder.ui.LiveTextFinderTheme
+import com.artkachenko.livetextfinder.ui.SearchTermResultsDialog
 import com.artkachenko.livetextfinder.ui.StillInspectionControls
 import com.artkachenko.livetextfinder.ui.StillInspectionViewport
 import com.artkachenko.livetextfinder.ui.StillMatchesDialog
@@ -96,6 +99,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import livetextfinder.shared.generated.resources.Res
 import livetextfinder.shared.generated.resources.finder_options_highlight
+import livetextfinder.shared.generated.resources.search_results
 import livetextfinder.shared.generated.resources.status_cancel
 import livetextfinder.shared.generated.resources.status_share_image
 import livetextfinder.shared.generated.resources.status_share_preparing
@@ -114,6 +118,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
             ImportedImagePicker(importedOwner)
             val importedState = importedOwner.state.value
             val sessionState = session.state.value
+            val activeSearch = sessionState.activeSearch
             val query = sessionState.persisted.manualQuery
             val selectedList = sessionState.activeList
             val managerOpenState = remember { mutableStateOf(false) }
@@ -127,6 +132,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
             var areaState by remember { mutableStateOf<NormalizedSearchArea?>(null) }
             var areaRevision by remember { mutableLongStateOf(areaOwner.revision) }
             var helpDialogOpen by remember { mutableStateOf(false) }
+            var searchResultsDialogOpen by remember(activeSearch.identity) { mutableStateOf(false) }
             var optionsOpen by remember { mutableStateOf(false) }
             var previewSize by remember { mutableStateOf(IntSize.Zero) }
             val rootSizeState = remember { mutableStateOf(IntSize.Zero) }
@@ -154,7 +160,6 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                 !managerOpenState.value && !isCompact && imeInsets.getBottom(density) == 0
             }
             val presentationOwner = remember { SearchPresentationOwner() }
-            val activeSearch = sessionState.activeSearch
             val presentation = remember(
                 activeSearch,
                 state,
@@ -228,8 +233,19 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                 }
             }
             var stillTransform by rememberStillViewTransform(inspectionIdentity, previewSize)
-            val matchRows = remember(search, inspectionIdentity) {
-                if (inspectionIdentity != null) stillMatchRows(search) else emptyList()
+            val matchRows = remember(
+                search,
+                inspectionIdentity,
+                sessionState.persisted.highlightColor,
+            ) {
+                if (inspectionIdentity != null) {
+                    stillMatchRows(search, sessionState.persisted.highlightColor)
+                } else {
+                    emptyList()
+                }
+            }
+            val termSummaries = remember(search, sessionState.persisted.highlightColor) {
+                searchTermSummaries(search, sessionState.persisted.highlightColor)
             }
             var matchesDialogOpen by remember(inspectionIdentity, activeSearch.identity) {
                 mutableStateOf(false)
@@ -415,6 +431,11 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                         onRetrySavedData = session::retry,
                         onRequestReset = { resetConfirm = true },
                     )
+                    if (activeSearch.terms.isNotEmpty()) {
+                        TextButton(onClick = { searchResultsDialogOpen = true }) {
+                            Text(stringResource(Res.string.search_results, search.occurrences.size))
+                        }
+                    }
                     if (sourceIdentity != null) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             TextButton(
@@ -660,12 +681,20 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                                     drawHighlightOutlines(
                                         outlines,
                                         session.state.value.persisted.highlightColor,
+                                        SearchHighlightPalette.colorsByTerm(
+                                            activeSearch,
+                                            session.state.value.persisted.highlightColor,
+                                        ),
                                     )
                                 }
                             } else {
                                 drawHighlightOutlines(
                                     outlines,
                                     session.state.value.persisted.highlightColor,
+                                    SearchHighlightPalette.colorsByTerm(
+                                        activeSearch,
+                                        session.state.value.persisted.highlightColor,
+                                    ),
                                 )
                             }
                             if (liveAreaIsDisplayed) {
@@ -767,6 +796,12 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                             }
                         }
                     },
+                )
+            }
+            if (searchResultsDialogOpen) {
+                SearchTermResultsDialog(
+                    terms = termSummaries,
+                    onDismiss = { searchResultsDialogOpen = false },
                 )
             }
             deleteId?.let { id ->

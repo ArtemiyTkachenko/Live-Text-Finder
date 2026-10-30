@@ -1,6 +1,7 @@
 package com.artkachenko.livetextfinder.search
 
 import com.artkachenko.livetextfinder.ocr.FrameInfo
+import com.artkachenko.livetextfinder.ocr.ImportedTextSnapshot
 import com.artkachenko.livetextfinder.ocr.OcrSnapshot
 import com.artkachenko.livetextfinder.ocr.OcrStatus
 import com.artkachenko.livetextfinder.ocr.OcrUiState
@@ -152,6 +153,45 @@ class HighlightsTest {
 
         assertEquals(2, search.occurrences.size)
         assertEquals(listOf(0), highlights.outlines.map { it.elementIndex })
+        assertEquals(listOf("foo", "foobar"), highlights.outlines.single().termIds)
+    }
+
+    @Test
+    fun containedTermsKeepOwnersAcrossLiveFrozenAndImportedProjections() {
+        val cameraSnapshot = snapshot(element("nuts"))
+        val spec = ActiveSearchSpec(
+            "contained",
+            "Contained",
+            listOf(SearchTerm("nut", "nut"), SearchTerm("nuts", "nuts")),
+        )
+        val cameraSearch = searchRecognizedText(
+            spec,
+            OcrUiState(OcrStatus.TextRecognized, snapshot = cameraSnapshot),
+        )
+        val liveProjection = FrameProjection(
+            cameraSnapshot,
+            FrameIdentity(1, 1),
+            PreviewTarget(400, 200, identity),
+        )
+        val live = projectHighlights(cameraSearch, liveProjection, 400, 200)
+        val frozen = projectFrozenHighlights(cameraSearch, 400f, 200f)
+        val still = ImportedTextSnapshot(
+            cameraSnapshot.text,
+            cameraSnapshot.lines,
+            400,
+            200,
+            9L,
+        )
+        val importedSearch = searchRecognizedContent(spec, still)
+        val imported = projectImportedHighlights(importedSearch, still, 400f, 200f)
+
+        assertEquals(2, cameraSearch.occurrences.size)
+        assertEquals(listOf(0), live.outlines.map { it.elementIndex })
+        assertEquals(listOf("nut", "nuts"), live.outlines.single().termIds)
+        assertEquals(live.outlines.single().termIds, frozen.outlines.single().termIds)
+        assertEquals(live.outlines.single().termIds, imported.outlines.single().termIds)
+        assertEquals(live.outlines.single().points, frozen.outlines.single().points)
+        assertEquals(live.outlines.single().points, imported.outlines.single().points)
     }
 
     @Test fun equalTextOnSeparateLinesRetainsSeparateOutlineIdentity() {

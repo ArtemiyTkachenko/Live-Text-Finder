@@ -120,6 +120,43 @@ class SearchPresentationOwnerTest {
     }
 
     @Test
+    fun overlappingTermOwnersExpireIndependentlyWhenCurrentGeometrySharesElementIndex() {
+        val spec = ActiveSearchSpec(
+            "two-terms",
+            "Two terms",
+            listOf(SearchTerm("alpha", "alpha"), SearchTerm("beta", "beta")),
+        )
+        val initial = state(listOf(Box("alpha beta", 10)), 1, 0)
+        present(spec, initial, 0)
+        val latest = state(listOf(Box("beta", 12)), 2, 100)
+
+        val retained = present(spec, latest, 100)
+        val drawable = drawableElementsForSearch(
+            spec.identity,
+            spec.identity,
+            retained,
+            latest,
+            100,
+            400f,
+            200f,
+        )
+        assertEquals(setOf("alpha", "beta"), drawable.map { it.group.termId }.toSet())
+        assertEquals(2, drawable.distinctBy { it.displayOutline.points }.size)
+
+        val afterExpiry = drawableElementsForSearch(
+            spec.identity,
+            spec.identity,
+            retained,
+            latest,
+            400,
+            400f,
+            200f,
+        )
+        assertEquals(listOf("beta"), afterExpiry.map { it.group.termId })
+        assertEquals(0, afterExpiry.single().outline.elementIndex)
+    }
+
+    @Test
     fun displayOutlineScaffoldingDefaultsToExactRawGeometry() {
         val source = state(listOf(Box("alpha", 10)), 1, 0)
         val presentation = present("alpha", source, 0)

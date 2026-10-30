@@ -24,29 +24,99 @@ internal data class FrameProjection(
     val target: PreviewTarget,
 )
 internal data class PreviewPoint(val x: Float, val y: Float)
-internal data class ElementOutline(val lineIndex: Int, val elementIndex: Int, val points: List<PreviewPoint>)
+internal data class ElementOutline(
+    val lineIndex: Int,
+    val elementIndex: Int,
+    val points: List<PreviewPoint>,
+    val termIds: List<String> = emptyList(),
+)
 internal data class Highlights(val ready: Boolean, val outlines: List<ElementOutline>)
 
 /** Draws the same paired outline used for live, frozen, and imported matches. */
 internal fun DrawScope.drawHighlightOutlines(
     outlines: List<ElementOutline>,
     highlightColor: HighlightColor = HighlightColor.Yellow,
+    colorsByTermId: Map<String, HighlightColor> = emptyMap(),
 ) {
     clipRect {
-        val paths = outlines.mapNotNull { outline ->
+        val grouped = outlines.groupBy {
+            Triple(it.lineIndex, it.elementIndex, it.points)
+        }.values.mapNotNull { owners ->
+            val outline = owners.firstOrNull() ?: return@mapNotNull null
             val first = outline.points.firstOrNull() ?: return@mapNotNull null
-            Path().apply {
+            val path = Path().apply {
                 moveTo(first.x, first.y)
                 outline.points.drop(1).forEach { lineTo(it.x, it.y) }
                 close()
             }
+            val termIds = owners.flatMap { it.termIds }.distinct()
+            outline.copy(termIds = termIds) to path
         }
-        paths.forEach { path ->
+        grouped.forEach { (_, path) ->
             drawPath(path, Color.Black, style = Stroke(6.dp.toPx()))
         }
-        paths.forEach { path ->
-            drawPath(path, highlightColor.composeColor, style = Stroke(3.dp.toPx()))
+        grouped.forEach { (outline, path) ->
+            val colors = colorsByTermId.keys
+                .filter { it in outline.termIds }
+                .mapNotNull(colorsByTermId::get)
+                .distinct()
+            if (colors.size <= 1) {
+                drawPath(
+                    path,
+                    (colors.singleOrNull() ?: highlightColor).composeColor,
+                    style = Stroke(3.dp.toPx()),
+                )
+            } else {
+                val segments = splitPolygonPerimeter(outline.points, colors.size)
+                segments.forEachIndexed { index, points ->
+                    val first = points.firstOrNull() ?: return@forEachIndexed
+                    val segment = Path().apply {
+                        moveTo(first.x, first.y)
+                        points.drop(1).forEach { lineTo(it.x, it.y) }
+                    }
+                    drawPath(segment, colors[index].composeColor, style = Stroke(3.dp.toPx()))
+                }
+            }
         }
+    }
+}
+
+/** Splits a polygon perimeter into equal-length open segments, preserving its exact geometry. */
+internal fun splitPolygonPerimeter(
+    points: List<PreviewPoint>,
+    count: Int,
+): List<List<PreviewPoint>> {
+    if (points.size < 2 || count <= 1) return listOf(points + listOfNotNull(points.firstOrNull()))
+    val closed = points + points.first()
+    val lengths = closed.zipWithNext { first, second ->
+        kotlin.math.hypot(
+            (second.x - first.x).toDouble(),
+            (second.y - first.y).toDouble(),
+        ).toFloat()
+    }
+    val total = lengths.sum()
+    if (!total.isFinite() || total <= 0f) return emptyList()
+    return (0 until count).map { index ->
+        val start = total * index / count
+        val end = total * (index + 1) / count
+        val result = mutableListOf<PreviewPoint>()
+        var distance = 0f
+        lengths.forEachIndexed { edge, length ->
+            val edgeStart = distance
+            val edgeEnd = distance + length
+            if (length > 0f && edgeEnd > start && edgeStart < end) {
+                val from = ((start - edgeStart) / length).coerceIn(0f, 1f)
+                val to = ((end - edgeStart) / length).coerceIn(0f, 1f)
+                val a = closed[edge]
+                val b = closed[edge + 1]
+                val p1 = PreviewPoint(a.x + (b.x - a.x) * from, a.y + (b.y - a.y) * from)
+                val p2 = PreviewPoint(a.x + (b.x - a.x) * to, a.y + (b.y - a.y) * to)
+                if (result.lastOrNull() != p1) result += p1
+                result += p2
+            }
+            distance = edgeEnd
+        }
+        result
     }
 }
 
@@ -80,7 +150,12 @@ internal fun projectFrozenHighlights(
         ) {
             null
         } else {
-            ElementOutline(lineIndex, elementIndex, points)
+            ElementOutline(
+                lineIndex,
+                elementIndex,
+                points,
+                ownerIds(search, lineIndex, elementIndex),
+            )
         }
     }
     return Highlights(true, outlines)
@@ -120,7 +195,12 @@ internal fun projectImportedHighlights(
         ) {
             null
         } else {
-            ElementOutline(lineIndex, elementIndex, points)
+            ElementOutline(
+                lineIndex,
+                elementIndex,
+                points,
+                ownerIds(search, lineIndex, elementIndex),
+            )
         }
     }
     return Highlights(true, outlines)
@@ -169,10 +249,21 @@ internal fun projectHighlights(
         val points = elementPolygon(element)?.map { matrix.map(it) ?: return@mapNotNull null }
             ?: return@mapNotNull null
         if (!validPolygon(points) || !intersectsPreview(points, overlayWidth, overlayHeight)) null
-        else ElementOutline(line, index, points)
+        else ElementOutline(line, index, points, ownerIds(search, line, index))
     }
     return Highlights(true, outlines)
 }
+
+private fun ownerIds(search: TextSearchResult, lineIndex: Int, elementIndex: Int): List<String> =
+    search.occurrences.asSequence()
+        .filter { it.lineIndex == lineIndex && elementIndex in it.elementIndices }
+        .map { it.termId }
+        .distinct()
+        .sortedBy { id ->
+            normalizeRecognizedText(search.spec.terms.firstOrNull { it.id == id }?.text.orEmpty())
+                .lowercase()
+        }
+        .toList()
 
 /** Full-buffer upright → raw → sensor → actual view. Crop is validated, never subtracted twice. */
 internal fun uprightToPreview(frame: FrameInfo, target: PreviewTarget): PixelTransform? {

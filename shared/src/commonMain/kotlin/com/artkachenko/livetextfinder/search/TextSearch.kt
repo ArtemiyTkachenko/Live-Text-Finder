@@ -21,6 +21,15 @@ internal data class StillMatchRow(
     val occurrence: TextOccurrence,
     val matchedText: String,
     val lineContext: String,
+    val termLabel: String,
+    val termColor: HighlightColor,
+)
+
+internal data class SearchTermSummary(
+    val termId: String,
+    val label: String,
+    val color: HighlightColor,
+    val occurrenceCount: Int,
 )
 
 /** A normalized OCR line assembled from the same element sequence used during matching. */
@@ -102,8 +111,12 @@ internal fun searchRecognizedContent(
     return TextSearchResult(displayQuery, content, occurrences, spec)
 }
 
-internal fun stillMatchRows(result: TextSearchResult): List<StillMatchRow> {
+internal fun stillMatchRows(
+    result: TextSearchResult,
+    manualColor: HighlightColor = HighlightColor.Yellow,
+): List<StillMatchRow> {
     val content = result.content ?: return emptyList()
+    val colors = SearchHighlightPalette.colorsByTerm(result.spec, manualColor)
     val normalizedLines = mutableMapOf<Int, NormalizedElementLine>()
     return result.occurrences.mapIndexedNotNull { index, occurrence ->
         val line = content.lines.getOrNull(occurrence.lineIndex) ?: return@mapIndexedNotNull null
@@ -120,8 +133,26 @@ internal fun stillMatchRows(result: TextSearchResult): List<StillMatchRow> {
                 occurrence = occurrence,
                 matchedText = normalized.text.substring(occurrence.start, occurrence.endExclusive),
                 lineContext = normalized.text,
+                termLabel = result.spec.terms.firstOrNull { it.id == occurrence.termId }
+                    ?.text.orEmpty(),
+                termColor = colors[occurrence.termId] ?: manualColor,
             )
         }
+    }
+}
+
+internal fun searchTermSummaries(
+    result: TextSearchResult,
+    manualColor: HighlightColor = HighlightColor.Yellow,
+): List<SearchTermSummary> {
+    val colors = SearchHighlightPalette.colorsByTerm(result.spec, manualColor)
+    return result.spec.terms.map { term ->
+        SearchTermSummary(
+            termId = term.id,
+            label = normalizeRecognizedText(term.text),
+            color = colors[term.id] ?: manualColor,
+            occurrenceCount = result.occurrences.count { it.termId == term.id },
+        )
     }
 }
 
