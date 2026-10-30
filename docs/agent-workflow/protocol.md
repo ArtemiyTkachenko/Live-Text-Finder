@@ -1,6 +1,6 @@
 # Agent workflow protocol
 
-The coordinating chat owns scope approval, dispatch, canonical state and final acceptance. `docs/agent-workflow/state.json` is the local, Git-ignored persistent handoff; it may be absent in a fresh checkout. Historical stage evidence is also kept locally under `docs/agent-workflow/stages/` and ignored by Git. Version concise requirements, current validation outcomes and standing guidance rather than raw logs or per-run agent reports. Workers propose state changes in reports; only the coordinator edits canonical state. Role instructions guide behavior but do not enforce a sandbox or role allowlist.
+The coordinating chat owns scope approval, dispatch, task context and final acceptance. Keep handoffs, current agendas, session state and user-authorization history in chats, outside the repository; do not create repository mission/handoff documents or coordinator state files. Existing historical stage evidence under `docs/agent-workflow/stages/` remains local and Git-ignored. Version concise product requirements, validation outcomes and standing guidance rather than raw logs or per-run agent reports. Role instructions guide behavior but do not enforce a sandbox or role allowlist.
 
 ## Sequence
 
@@ -20,7 +20,7 @@ Use only `planner`, `implementer` and `reviewer`. Root remains Sol Medium. Role 
 
 Initial review is fresh-context and source-first: provide the original neutral approved specification, acceptance criteria and actual target; omit implementation rationale, summaries, anticipated findings and conclusions. Review the complete authorized target and attribute pre-existing changes separately. Correction review may use the findings checklist. Findings give severity, location, evidence, trigger, expected behavior and correction direction. Preserve historical reports and interrupted review facts; never create empty or pre-passed reports.
 
-The coordinator records exact next action, evidence, unresolved findings and ownership in `state.json`. At handoff confirm the prior writer stopped and reconcile current repository facts. Do not infer worker liveness from old identifiers. Keep reports concise; workers need not reread the whole conversation history.
+The coordinator records the next action, evidence, unresolved findings and ownership in the chat. At handoff confirm the prior writer stopped and reconcile current repository facts. Do not infer worker liveness from old identifiers. Keep reports concise; workers receive only the relevant task context.
 
 ## User-authorized autonomous continuation
 

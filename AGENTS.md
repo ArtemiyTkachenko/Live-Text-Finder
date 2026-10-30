@@ -1,6 +1,6 @@
 # Project guidance
 
-Follow the [workflow protocol](docs/agent-workflow/protocol.md) and persistent [mission/state handoff](docs/agent-workflow/mission.md) for roles, sequencing and stop conditions. The coordinating chat owns dispatch and canonical state; roles do not enforce permissions or dispatch work. CS-003 independent source review completed with runtime limitations; current user authorization governs further product work. Generated stage evidence and coordinator state are retained locally and ignored by Git; durable requirements and validation summaries stay in the project documentation.
+Follow the [workflow protocol](docs/agent-workflow/protocol.md) for roles, sequencing and stop conditions. The coordinating chat owns dispatch, task context and final acceptance; roles do not enforce permissions or dispatch work. Keep handoffs, session state, current agendas and user-authorization history in chats, outside the repository. Do not create repository mission/handoff documents or coordinator state files. Durable product requirements, architecture and validation summaries stay in the project documentation. Existing historical stage evidence remains local and Git-ignored.
 
 ## Project constraints
 
