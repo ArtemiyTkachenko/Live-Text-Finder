@@ -13,6 +13,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import livetextfinder.shared.generated.resources.Res
 import livetextfinder.shared.generated.resources.finder_options
@@ -27,6 +28,7 @@ internal fun FinderSearchControls(
     onSearchLists: () -> Unit,
     searchContext: String,
     onOptions: () -> Unit,
+    savingLabel: String? = null,
     captureLabel: String?,
     captureEnabled: Boolean,
     onCapture: () -> Unit,
@@ -73,12 +75,21 @@ internal fun FinderSearchControls(
                 TextButton(onClick = onSearchLists) {
                     Text(searchListsLabel)
                 }
-                Text(
-                    searchContext,
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        searchContext,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        savingLabel ?: " ",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (savingLabel == null) Color.Transparent else
+                            MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
             TextButton(onClick = onOptions) {
                 Text(stringResource(Res.string.finder_options))

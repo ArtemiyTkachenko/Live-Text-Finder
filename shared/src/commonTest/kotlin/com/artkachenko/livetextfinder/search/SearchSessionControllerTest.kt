@@ -366,6 +366,30 @@ class SearchSessionControllerTest {
     }
 
     @Test
+    fun selectingCurrentListDoesNotQueueWritesOrClearWriteError() {
+        val store = ControlledStore()
+        val session = SearchSessionController(store)
+        store.completeLoad(
+            PersistedSearchState(
+                "manual",
+                listOf(SavedSearchList("one", "Parts", listOf("bolt"))),
+                "one",
+            ),
+        )
+        session.setManualQuery("queued query")
+        val savingState = session.state.value
+        session.selectList(null)
+        assertEquals(savingState, session.state.value)
+        store.completeWrite(0, Result.failure(IllegalStateException("disk full")))
+
+        val failedState = session.state.value
+        session.selectList(null)
+        assertEquals(failedState, session.state.value)
+        assertEquals("disk full", session.state.value.error)
+        assertEquals(1, store.writes.size)
+    }
+
+    @Test
     fun selectedListAndManualQueryRestoreTogetherAcrossControllerInstances() {
         val stored = PersistedSearchState(
             "kept manual query",

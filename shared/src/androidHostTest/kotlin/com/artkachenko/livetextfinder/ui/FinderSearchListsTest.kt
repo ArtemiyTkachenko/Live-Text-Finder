@@ -36,6 +36,7 @@ import com.artkachenko.livetextfinder.search.SavedSearchList
 import com.artkachenko.livetextfinder.search.SearchListEditorState
 import com.artkachenko.livetextfinder.search.SearchSessionController
 import com.artkachenko.livetextfinder.search.SearchSessionStore
+import com.artkachenko.livetextfinder.search.dispatchSearchListSelection
 import java.io.File
 import java.io.FileOutputStream
 import java.util.concurrent.TimeUnit
@@ -72,7 +73,11 @@ class FinderSearchListsTest {
     fun productionListRowsExposeLocalizedCountsSelectionAndIndependentActions() {
         val first = SavedSearchList("one", "Parts", listOf("bolt"))
         val second = SavedSearchList("two", "Monthly review", listOf("invoice", "receipt"))
+        val session = SearchSessionController(
+            ImmediateSearchSessionStore(PersistedSearchState("", listOf(first, second), first.id)),
+        )
         val selected = mutableStateOf<String?>(first.id)
+        var invalidations = 0
         val selectCalls = mutableListOf<String>()
         val editCalls = mutableListOf<SavedSearchList>()
         val deleteCalls = mutableListOf<SavedSearchList>()
@@ -87,8 +92,10 @@ class FinderSearchListsTest {
                         canSave = true,
                         onNew = { editor.value = editor.value.startNew() },
                         onSelect = { id ->
-                            selectCalls += id
-                            selected.value = id
+                            if (dispatchSearchListSelection(session, id) { invalidations++ }) {
+                                selectCalls += id
+                                selected.value = session.state.value.persisted.activeListId
+                            }
                         },
                         onEdit = { list -> editCalls += list },
                         onDelete = { list -> deleteCalls += list },
@@ -118,9 +125,13 @@ class FinderSearchListsTest {
         assertTouchBounds(nodeWithText(nodes, "New list"))
         assertRendered("lists-light-populated.png")
 
+        click(selectedRow)
+        assertEquals(0, invalidations)
+        assertTrue(selectCalls.isEmpty())
         click(nodeWithDescription(nodes, "Select Monthly review"))
         assertEquals("two", selected.value)
         assertEquals(listOf("two"), selectCalls)
+        assertEquals(1, invalidations)
         nodes = semanticsNodes()
         click(nodeWithDescription(nodes, "Edit Parts"))
         assertEquals(listOf(first), editCalls)

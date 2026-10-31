@@ -67,13 +67,16 @@ import com.artkachenko.livetextfinder.search.FrameIdentity
 import com.artkachenko.livetextfinder.search.HighlightColor
 import com.artkachenko.livetextfinder.search.Highlights
 import com.artkachenko.livetextfinder.search.InMemorySearchSessionStore
+import com.artkachenko.livetextfinder.search.PersistedSearchState
 import com.artkachenko.livetextfinder.search.SavedSearchList
 import com.artkachenko.livetextfinder.search.SearchListEditorState
 import com.artkachenko.livetextfinder.search.SearchMatchMode
 import com.artkachenko.livetextfinder.search.SearchPresentationOwner
 import com.artkachenko.livetextfinder.search.SearchSessionController
 import com.artkachenko.livetextfinder.search.SearchSessionState
+import com.artkachenko.livetextfinder.search.SearchSessionStore
 import com.artkachenko.livetextfinder.search.SearchTermSummary
+import com.artkachenko.livetextfinder.search.dispatchSearchListSelection
 import com.artkachenko.livetextfinder.search.searchRecognizedContent
 import com.artkachenko.livetextfinder.search.searchRecognizedText
 import com.artkachenko.livetextfinder.ui.FinderSearchControls
@@ -87,6 +90,8 @@ import kotlin.math.roundToInt
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -159,6 +164,7 @@ class StatusFeedbackTest {
                             onSearchLists = ::ignoreAction,
                             searchContext = "Manual search",
                             onOptions = { optionsOpen.value = true },
+                            savingLabel = "Saving…",
                             captureLabel = null,
                             captureEnabled = false,
                             onCapture = ::ignoreAction,
@@ -212,6 +218,8 @@ class StatusFeedbackTest {
             }
         }
 
+        assertTrue(semanticsNodes(composeView).any { it.textValues().contains("Saving…") })
+        assertRendered("status-dark-compact-saving-caption.png")
         openOptionsSheet()
         var nodes = optionsDialogNodes()
         assertTouchBounds(
@@ -1477,7 +1485,7 @@ class StatusFeedbackTest {
         session.value = SearchSessionState(loaded = true, saving = true)
         measureCurrentComposition()
         nodes = semanticsNodes(composeView)
-        assertTrue(nodes.any { it.textValues().contains("Saving…") })
+        assertFalse(nodes.any { it.textValues().contains("Saving…") })
 
         session.value = SearchSessionState(
             loaded = true,
@@ -1512,8 +1520,250 @@ class StatusFeedbackTest {
     }
 
     @Test
+    fun productionSelectionSerializesRealWritesAndKeepsMeasuredBoundsStable() {
+        runSelectionComposition(320, 1.4f, darkTheme = true)
+        disposeComposition()
+        runSelectionComposition(360, 1.25f, darkTheme = false)
+    }
+
+    private fun runSelectionComposition(widthDp: Int, fontScale: Float, darkTheme: Boolean) {
+        val listA = SavedSearchList(
+            "a",
+            "Invoices and receipts for the monthly review 001",
+            listOf("invoice"),
+        )
+        val listB = SavedSearchList(
+            "b",
+            "Invoices and receipts for the monthly review 002",
+            listOf("receipt"),
+        )
+        val store = ControlledSearchSessionStore()
+        val session = SearchSessionController(store)
+        var revision = 0
+        var expectedActiveId: String? = null
+        fun dispatch(id: String?): Boolean = dispatchSearchListSelection(session, id) {
+            assertEquals(expectedActiveId, session.state.value.persisted.activeListId)
+            revision++
+        }
+        assertFalse(dispatch(listA.id))
+        assertFalse(dispatch(null))
+        assertEquals(0, revision)
+        assertTrue(store.writes.isEmpty())
+        store.completeLoad(PersistedSearchState("manual", listOf(listA, listB), listA.id))
+        assertFalse(dispatch("missing"))
+        assertEquals(0, store.writes.size)
+
+        val managerOpen = mutableStateOf(true)
+        val scroll = ScrollState(0)
+        contentScrollState = scroll
+        mount(widthDp, 900, fontScale) {
+            LiveTextFinderTheme(darkThemeOverride = darkTheme, dynamicColor = false) {
+                Surface(Modifier.fillMaxSize()) {
+                    AppContentColumn(
+                        scrollState = scroll,
+                        scrollable = false,
+                        modifier = Modifier.fillMaxSize(),
+                    ) {
+                        Column(Modifier.fillMaxWidth()) {
+                            Box(Modifier.semantics { contentDescription = "Controls bounds" }) {
+                                FinderSearchControls(
+                                    showTitle = false,
+                                    query = session.state.value.persisted.manualQuery,
+                                    onQueryChange = session::setManualQuery,
+                                    searchListsLabel = "Search lists",
+                                    onSearchLists = { managerOpen.value = !managerOpen.value },
+                                    searchContext = session.state.value.activeList?.name
+                                        ?: "Manual search",
+                                    onOptions = ::ignoreAction,
+                                    savingLabel = if (session.state.value.saving) {
+                                        "Saving…"
+                                    } else {
+                                        null
+                                    },
+                                    captureLabel = null,
+                                    captureEnabled = false,
+                                    onCapture = ::ignoreAction,
+                                    pendingCaptureLabel = null,
+                                    onCancelCapture = ::ignoreAction,
+                                    secondaryActionLabel = null,
+                                    onSecondaryAction = ::ignoreAction,
+                                )
+                            }
+                            TestFinderStatusRegion(
+                                state = OcrUiState(OcrStatus.Paused),
+                                importedState = ImportedImageState(),
+                                sessionState = session.state.value,
+                                shouldShowViews = true,
+                                onRetry = session::retry,
+                            )
+                        }
+                        if (managerOpen.value) {
+                            Box(Modifier.semantics { contentDescription = "List bounds" }) {
+                                FinderSearchLists(
+                                    lists = session.state.value.persisted.lists,
+                                    activeListId = session.state.value.persisted.activeListId,
+                                    editor = SearchListEditorState(),
+                                    canSave = session.state.value.loaded,
+                                    onNew = ::ignoreAction,
+                                    onSelect = { id -> dispatch(id) },
+                                    onEdit = ::ignoreList,
+                                    onDelete = ::ignoreList,
+                                    onNameChange = ::ignoreText,
+                                    onTermsChange = ::ignoreText,
+                                    onSave = ::ignoreAction,
+                                    onCancel = ::ignoreAction,
+                                )
+                            }
+                        } else {
+                            Box(
+                                Modifier.weight(1f).fillMaxWidth().background(Color.Black)
+                                    .semantics { contentDescription = "Preview region" },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        val idleNodes = semanticsNodes(composeView)
+        val idleState = session.state.value
+        val idleControlsBounds = layoutBounds(nodeWithDescription(idleNodes, "Controls bounds"))
+        expectedActiveId = listA.id
+        click(nodeWithDescription(idleNodes, "Select ${listA.name}"))
+        assertSame(idleState, session.state.value)
+        assertEquals(0, revision)
+        assertTrue(store.writes.isEmpty())
+
+        expectedActiveId = listA.id
+        click(nodeWithDescription(semanticsNodes(composeView), "Select ${listB.name}"))
+        assertEquals(1, revision)
+        assertEquals(listB.id, session.state.value.persisted.activeListId)
+        assertEquals(1, store.writes.size)
+        assertTrue(session.state.value.saving)
+        var savingNodes = semanticsNodes(composeView)
+        assertTrue(savingNodes.any { it.textValues().contains("Saving…") })
+        assertEquals(
+            idleControlsBounds,
+            layoutBounds(nodeWithDescription(savingNodes, "Controls bounds")),
+        )
+        val pendingBounds = selectionBounds(savingNodes, listA, listB)
+        assertRendered("selection-${widthDp}-manager-saving.png")
+        val pendingState = session.state.value
+        expectedActiveId = listB.id
+        click(nodeWithDescription(savingNodes, "Select ${listB.name}"))
+        assertSame(pendingState, session.state.value)
+        assertEquals(1, revision)
+        assertEquals(1, store.writes.size)
+        store.completeWrite(0)
+        measureCurrentComposition()
+        assertFalse(session.state.value.saving)
+        assertEquals(1, store.writes.size)
+        assertEquals(pendingBounds, selectionBounds(semanticsNodes(composeView), listA, listB))
+        assertRendered("selection-${widthDp}-saving.png")
+
+        expectedActiveId = listB.id
+        click(nodeWithDescription(semanticsNodes(composeView), "Select ${listA.name}"))
+        expectedActiveId = listA.id
+        click(nodeWithDescription(semanticsNodes(composeView), "Select ${listB.name}"))
+        assertEquals(3, revision)
+        assertEquals(2, store.writes.size)
+        expectedActiveId = listB.id
+        click(nodeWithDescription(semanticsNodes(composeView), "Select ${listB.name}"))
+        assertEquals(3, revision)
+        assertEquals(2, store.writes.size)
+        store.completeWrite(1)
+        assertEquals(3, store.writes.size)
+        assertEquals(listB.id, store.writes[2].first.activeListId)
+        store.completeWrite(2)
+        assertFalse(session.state.value.saving)
+
+        expectedActiveId = listB.id
+        click(nodeWithDescription(semanticsNodes(composeView), "Select ${listA.name}"))
+        store.completeWrite(3)
+        expectedActiveId = listA.id
+        click(nodeWithDescription(semanticsNodes(composeView), "Select ${listB.name}"))
+        store.completeWrite(4, Result.failure(IllegalStateException("disk full")))
+        measureCurrentComposition()
+        val failedState = session.state.value
+        assertEquals(listB.id, failedState.persisted.activeListId)
+        assertEquals("disk full", failedState.error)
+        expectedActiveId = listB.id
+        click(nodeWithDescription(semanticsNodes(composeView), "Select ${listB.name}"))
+        assertSame(failedState, session.state.value)
+        assertEquals(5, revision)
+        assertEquals(5, store.writes.size)
+        click(nodeWithText(semanticsNodes(composeView), "Retry"))
+        assertEquals(6, store.writes.size)
+        store.completeWrite(5)
+        measureCurrentComposition()
+        assertNull(session.state.value.error)
+
+        assertFalse(dispatch("missing"))
+        assertEquals(5, revision)
+        assertEquals(6, store.writes.size)
+        expectedActiveId = listB.id
+        assertTrue(dispatch(null))
+        assertEquals(6, revision)
+        assertEquals(null, session.state.value.persisted.activeListId)
+        assertEquals(7, store.writes.size)
+        val manualPending = session.state.value
+        expectedActiveId = null
+        assertFalse(dispatch(null))
+        assertSame(manualPending, session.state.value)
+        assertEquals(6, revision)
+        store.completeWrite(6)
+
+        managerOpen.value = false
+        measureCurrentComposition()
+        val previewIdle = semanticsNodes(composeView)
+        val previewIdleBounds = layoutBounds(nodeWithDescription(previewIdle, "Preview region"))
+        assertTrue(previewIdleBounds.second.height > 0)
+        assertRendered("selection-${widthDp}-preview-idle.png")
+        expectedActiveId = null
+        assertTrue(dispatch(listB.id))
+        measureCurrentComposition()
+        savingNodes = semanticsNodes(composeView)
+        assertTrue(savingNodes.any { it.textValues().contains("Saving…") })
+        assertRendered("selection-${widthDp}-preview-saving.png")
+        val previewSavingBounds = layoutBounds(
+            nodeWithDescription(savingNodes, "Preview region"),
+        )
+        val controlsSavingBounds = layoutBounds(
+            nodeWithDescription(savingNodes, "Controls bounds"),
+        )
+        assertTrue(previewSavingBounds.second.height > 0)
+        store.completeWrite(7)
+        measureCurrentComposition()
+        val completedNodes = semanticsNodes(composeView)
+        assertFalse(session.state.value.saving)
+        assertEquals(
+            previewSavingBounds,
+            layoutBounds(nodeWithDescription(completedNodes, "Preview region")),
+        )
+        assertEquals(
+            controlsSavingBounds,
+            layoutBounds(nodeWithDescription(completedNodes, "Controls bounds")),
+        )
+    }
+
+    private fun layoutBounds(node: SemanticsNode) = node.positionInRoot to node.size
+
+    private fun selectionBounds(
+        nodes: List<SemanticsNode>,
+        listA: SavedSearchList,
+        listB: SavedSearchList,
+    ): List<Pair<androidx.compose.ui.geometry.Offset, androidx.compose.ui.unit.IntSize>> =
+        listOf(
+            nodeWithDescription(nodes, "Controls bounds"),
+            nodeWithDescription(nodes, "List bounds"),
+            nodeWithDescription(nodes, "Select ${listA.name}"),
+            nodeWithDescription(nodes, "Select ${listB.name}"),
+        ).map { node -> node.positionInRoot to node.size }
+
+    @Test
     fun compactControlsStatusAndWeightedPreviewKeepRecoveryActionReachable() {
         var resetCount = 0
+        val saving = mutableStateOf(false)
         mount(widthDp = 360, heightDp = 700, fontScale = 1.25f) {
             LiveTextFinderTheme(darkThemeOverride = false, dynamicColor = false) {
                 Surface(Modifier.fillMaxSize()) {
@@ -1537,6 +1787,7 @@ class StatusFeedbackTest {
                                 onSearchLists = ::ignoreAction,
                                 searchContext = "Manual search",
                                 onOptions = ::ignoreAction,
+                                savingLabel = if (saving.value) "Saving…" else null,
                                 captureLabel = "Freeze frame",
                                 captureEnabled = true,
                                 onCapture = ::ignoreAction,
@@ -1587,6 +1838,17 @@ class StatusFeedbackTest {
         assertTrue(recovery.size.width > 0 && recovery.size.height > 0)
         assertWithinViewport(recovery)
         assertTouchBounds(recovery, composeView)
+        assertRendered("status-light-idle-caption.png")
+        val previewTop = preview.positionInRoot.y
+        saving.value = true
+        measureCurrentComposition()
+        val savingNodes = semanticsNodes(composeView)
+        assertTrue(savingNodes.any { it.textValues().contains("Saving…") })
+        assertEquals(
+            previewTop,
+            nodeWithDescription(savingNodes, "Preview region").positionInRoot.y,
+        )
+        assertRendered("status-light-saving-caption.png")
         click(recovery)
         assertEquals(1, resetCount)
     }
@@ -2179,6 +2441,31 @@ class StatusFeedbackTest {
             }
         }
         bitmap.recycle()
+    }
+
+    private class ControlledSearchSessionStore : SearchSessionStore {
+        private var loadCallback: ((Result<PersistedSearchState?>) -> Unit)? = null
+        val writes = mutableListOf<Pair<PersistedSearchState, (Result<Unit>) -> Unit>>()
+
+        override fun load(callback: (Result<PersistedSearchState?>) -> Unit) {
+            loadCallback = callback
+        }
+
+        override fun save(value: PersistedSearchState, callback: (Result<Unit>) -> Unit) {
+            writes += value to callback
+        }
+
+        override fun reset(callback: (Result<Unit>) -> Unit) {
+            callback(Result.success(Unit))
+        }
+
+        fun completeLoad(value: PersistedSearchState?) {
+            checkNotNull(loadCallback).invoke(Result.success(value))
+        }
+
+        fun completeWrite(index: Int, result: Result<Unit> = Result.success(Unit)) {
+            writes[index].second(result)
+        }
     }
 
     private fun ignoreAction() = Unit

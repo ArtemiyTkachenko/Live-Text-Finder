@@ -252,6 +252,9 @@ class SearchSessionController(private val store: SearchSessionStore) {
         if (id != null && state.value.persisted.lists.none { it.id == id }) {
             return
         }
+        if (state.value.persisted.activeListId == id) {
+            return
+        }
         update(state.value.persisted.copy(activeListId = id))
     }
 
@@ -486,4 +489,21 @@ class SearchSessionController(private val store: SearchSessionStore) {
     private companion object {
         var nextId = 1L
     }
+}
+
+/** Selects a loaded list and invalidates pending transfers only for a changed selection. */
+internal fun dispatchSearchListSelection(
+    session: SearchSessionController,
+    id: String?,
+    onDifferentSelection: () -> Unit,
+): Boolean {
+    val current = session.state.value
+    if (!current.loaded || current.persisted.activeListId == id ||
+        (id != null && current.persisted.lists.none { it.id == id })
+    ) {
+        return false
+    }
+    onDifferentSelection()
+    session.selectList(id)
+    return true
 }

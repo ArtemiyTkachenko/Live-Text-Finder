@@ -1,5 +1,14 @@
 # Validation
 
+## Repeated saved-list selection and save feedback — 2026-10-31
+
+Selecting the active list is now a no-op, so duplicate card taps do not enqueue writes or invalidate transfer context. The App selection dispatcher validates live loaded state and only advances transfer ownership for a valid changed selection. Routine save progress occupies a reserved single line in the search-context row; loading, write errors, retry and recovery remain in the status region.
+
+A native Android host integration fixture composes the production controls, status region, list cards and `AppContentColumn` around a real controller and controlled asynchronous store. It clicks production cards, checks invalid/unloaded/null and duplicate selections, confirms serialized queued writes and retry after failure, and compares control, card and preview bounds across saving and completion. The 320dp/1.4× dark and 360dp/1.25× light renders were inspected. The full host suite passed with **317 tests and zero failures, errors or skips**. Android compile, lint and iOS simulator shared compile also passed; lint reported **14 warnings**. The aggregate command had 17 tasks execute and 56 up-to-date.
+
+`git diff --check`, changed-line length and import-order checks pass. No Kotlin formatter is configured; modified Kotlin was reviewed manually. Logs and native renders remain under the local `work/save-reflow/` scratch directory. Physical-device behavior was not tested.
+
+
 ## Still-image inspection and matched-text copying — 2026-10-29
 
 Scope 3 adds retained-image zoom/pan and a selectable occurrence dialog with explicit matched-text copying. Image and highlights share one transformed subtree inside the fixed clip; source/request and viewport changes reset the view. Matching and rows share normalized element text, preserving OCR casing and occurrence identities. Clipboard writes revalidate source/content ownership, search and selection; annotated sharing still uses the whole source.

@@ -46,6 +46,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import com.artkachenko.livetextfinder.adjacentStillMatchRow
 import com.artkachenko.livetextfinder.camera.CameraPreview
 import com.artkachenko.livetextfinder.camera.FreezeMode
 import com.artkachenko.livetextfinder.camera.FrozenFrameFit
@@ -62,33 +63,33 @@ import com.artkachenko.livetextfinder.camera.rememberImageShareOwner
 import com.artkachenko.livetextfinder.camera.rememberImportedImageOwner
 import com.artkachenko.livetextfinder.camera.shareFrozen
 import com.artkachenko.livetextfinder.camera.shareImported
+import com.artkachenko.livetextfinder.effectiveStillMatchRows
 import com.artkachenko.livetextfinder.ocr.OcrStatus
 import com.artkachenko.livetextfinder.ocr.OcrUiState
+import com.artkachenko.livetextfinder.performStillMatchLocate
+import com.artkachenko.livetextfinder.rememberStillMatchNavigationCoordinator
+import com.artkachenko.livetextfinder.search.Highlights
 import com.artkachenko.livetextfinder.search.LiveSearchAreaOwner
 import com.artkachenko.livetextfinder.search.NormalizedSearchArea
 import com.artkachenko.livetextfinder.search.PreviewPoint
 import com.artkachenko.livetextfinder.search.SearchHighlightPalette
-import com.artkachenko.livetextfinder.search.Highlights
 import com.artkachenko.livetextfinder.search.SearchListEditorState
 import com.artkachenko.livetextfinder.search.SearchListTransferCopy
-import com.artkachenko.livetextfinder.search.rememberSearchListTransferOwner
 import com.artkachenko.livetextfinder.search.SearchPresentationOwner
 import com.artkachenko.livetextfinder.search.SearchSessionController
 import com.artkachenko.livetextfinder.search.StillMatchRow
-import com.artkachenko.livetextfinder.rememberStillMatchNavigationCoordinator
-import com.artkachenko.livetextfinder.adjacentStillMatchRow
-import com.artkachenko.livetextfinder.effectiveStillMatchRows
-import com.artkachenko.livetextfinder.performStillMatchLocate
+import com.artkachenko.livetextfinder.search.dispatchSearchListSelection
 import com.artkachenko.livetextfinder.search.drawHighlightOutlines
+import com.artkachenko.livetextfinder.search.drawSelectedOccurrenceMarker
 import com.artkachenko.livetextfinder.search.drawableElementsForSession
 import com.artkachenko.livetextfinder.search.importedHighlightsForDraw
 import com.artkachenko.livetextfinder.search.inMemorySearchSessionController
 import com.artkachenko.livetextfinder.search.isPresentationCurrentAreaRevision
+import com.artkachenko.livetextfinder.search.occurrenceBounds
 import com.artkachenko.livetextfinder.search.projectFrozenHighlights
 import com.artkachenko.livetextfinder.search.projectHighlights
 import com.artkachenko.livetextfinder.search.projectImportedHighlights
-import com.artkachenko.livetextfinder.search.occurrenceBounds
-import com.artkachenko.livetextfinder.search.drawSelectedOccurrenceMarker
+import com.artkachenko.livetextfinder.search.rememberSearchListTransferOwner
 import com.artkachenko.livetextfinder.search.searchRecognizedContent
 import com.artkachenko.livetextfinder.search.searchRecognizedText
 import com.artkachenko.livetextfinder.search.searchTermSummaries
@@ -103,8 +104,8 @@ import com.artkachenko.livetextfinder.ui.HighlightColorDialog
 import com.artkachenko.livetextfinder.ui.LiveTextFinderTheme
 import com.artkachenko.livetextfinder.ui.SearchTermResultsDialog
 import com.artkachenko.livetextfinder.ui.StillInspectionControls
-import com.artkachenko.livetextfinder.ui.StillMatchNavigationControls
 import com.artkachenko.livetextfinder.ui.StillInspectionViewport
+import com.artkachenko.livetextfinder.ui.StillMatchNavigationControls
 import com.artkachenko.livetextfinder.ui.StillMatchesDialog
 import com.artkachenko.livetextfinder.ui.rememberStillViewTransform
 import com.artkachenko.livetextfinder.utils.MonotonicClock
@@ -112,28 +113,29 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import livetextfinder.shared.generated.resources.Res
 import livetextfinder.shared.generated.resources.finder_options_highlight
+import livetextfinder.shared.generated.resources.search_list_import_fallback_name
+import livetextfinder.shared.generated.resources.search_list_transfer_another_busy
+import livetextfinder.shared.generated.resources.search_list_transfer_cancel
+import livetextfinder.shared.generated.resources.search_list_transfer_choose_destination
+import livetextfinder.shared.generated.resources.search_list_transfer_choose_file
+import livetextfinder.shared.generated.resources.search_list_transfer_export_canceled
+import livetextfinder.shared.generated.resources.search_list_transfer_export_complete
+import livetextfinder.shared.generated.resources.search_list_transfer_export_failed
+import livetextfinder.shared.generated.resources.search_list_transfer_export_unavailable
+import livetextfinder.shared.generated.resources.search_list_transfer_help
+import livetextfinder.shared.generated.resources.search_list_transfer_import_canceled
+import livetextfinder.shared.generated.resources.search_list_transfer_import_failed
+import livetextfinder.shared.generated.resources.search_list_transfer_import_ready
+import livetextfinder.shared.generated.resources.search_list_transfer_import_unavailable
+import livetextfinder.shared.generated.resources.search_list_transfer_list_invalid
+import livetextfinder.shared.generated.resources.search_list_transfer_reading
+import livetextfinder.shared.generated.resources.search_list_transfer_saving
 import livetextfinder.shared.generated.resources.search_results
 import livetextfinder.shared.generated.resources.search_results_locate_hint
 import livetextfinder.shared.generated.resources.status_cancel
+import livetextfinder.shared.generated.resources.status_saving
 import livetextfinder.shared.generated.resources.status_share_image
 import livetextfinder.shared.generated.resources.status_share_preparing
-import livetextfinder.shared.generated.resources.search_list_import_fallback_name
-import livetextfinder.shared.generated.resources.search_list_transfer_cancel
-import livetextfinder.shared.generated.resources.search_list_transfer_help
-import livetextfinder.shared.generated.resources.search_list_transfer_choose_file
-import livetextfinder.shared.generated.resources.search_list_transfer_reading
-import livetextfinder.shared.generated.resources.search_list_transfer_choose_destination
-import livetextfinder.shared.generated.resources.search_list_transfer_saving
-import livetextfinder.shared.generated.resources.search_list_transfer_import_canceled
-import livetextfinder.shared.generated.resources.search_list_transfer_export_canceled
-import livetextfinder.shared.generated.resources.search_list_transfer_import_ready
-import livetextfinder.shared.generated.resources.search_list_transfer_export_complete
-import livetextfinder.shared.generated.resources.search_list_transfer_another_busy
-import livetextfinder.shared.generated.resources.search_list_transfer_import_unavailable
-import livetextfinder.shared.generated.resources.search_list_transfer_export_unavailable
-import livetextfinder.shared.generated.resources.search_list_transfer_list_invalid
-import livetextfinder.shared.generated.resources.search_list_transfer_import_failed
-import livetextfinder.shared.generated.resources.search_list_transfer_export_failed
 import livetextfinder.shared.generated.resources.still_match_copied
 import livetextfinder.shared.generated.resources.still_match_copy_failed
 import org.jetbrains.compose.resources.stringResource
@@ -651,6 +653,11 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                             "${it.name} · ${it.terms.size} terms"
                         } ?: "Manual search",
                         onOptions = { optionsOpen = true },
+                        savingLabel = if (sessionState.saving) {
+                            stringResource(Res.string.status_saving)
+                        } else {
+                            null
+                        },
                         captureLabel = captureLabel,
                         captureEnabled = freezeState.mode != FreezeMode.Live ||
                             state.status == OcrStatus.Scanning ||
@@ -863,9 +870,10 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                             editor = editor.startNew()
                         },
                         onSelect = { id ->
-                            transferOwner.contextChanged()
-                            transferContextRevision++
-                            session.selectList(id)
+                            dispatchSearchListSelection(session, id) {
+                                transferOwner.contextChanged()
+                                transferContextRevision++
+                            }
                         },
                         onEdit = { list ->
                             transferOwner.contextChanged()

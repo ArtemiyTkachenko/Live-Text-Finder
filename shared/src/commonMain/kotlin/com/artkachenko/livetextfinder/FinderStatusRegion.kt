@@ -165,7 +165,6 @@ internal fun FinderStatusRegion(
         !sessionState.loaded -> ContextMessage(
             stringResource(Res.string.status_loading_searches),
         )
-        sessionState.saving -> ContextMessage(stringResource(Res.string.status_saving))
     }
     if (importedState.phase == ImportedImagePhase.Error) {
         ContextMessage(
