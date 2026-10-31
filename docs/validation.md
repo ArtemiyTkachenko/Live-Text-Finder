@@ -8,6 +8,14 @@ A native Android host integration fixture composes the production controls, stat
 
 `git diff --check`, changed-line length and import-order checks pass. No Kotlin formatter is configured; modified Kotlin was reviewed manually. Logs and native renders remain under the local `work/save-reflow/` scratch directory. Physical-device behavior was not tested.
 
+## Retained still-image inspection layout — 2026-10-31
+
+Frozen and imported results now keep a compact context header, reserved Saving caption, source return action, Results menu and More menu. Edit expands the existing search controls; the manager and its Close action remain reachable. Zoom/reset and selected-match navigation/copy sit below the weighted image viewport, while the hidden-preview scroll policy remains in place. Live-search controls keep their existing `Manual search` label; the retained header includes the current manual query.
+
+The baseline and retained branches use one shared 360×800, default-font production-component fixture with the same frozen/imported source state, query, result count, status, image target, selection and insets. Measured viewport heights were 252→528dp for frozen and imported unselected cases, and 184→460dp for frozen and imported selected cases: a 276dp gain in each comparison. Saving on/off preserved the measured bounds. Paired native renders and narrow, enlarged-text, dark and landscape hidden-preview fixtures were inspected.
+
+Robolectric tests click the actual separate dropdown roots and exercise Results mutual exclusion, occurrence-entry focus/keyboard dismissal, Options/Share/Lists routing, manager open/close, preparing cancellation, share-error feedback and both frozen/imported return callbacks through the production action dispatcher. Existing status/recovery and image-share boundary tests remain in the host suite. The focused still-inspection class passed **11 tests**; the final aggregate passed **321 host tests across 46 suites, zero failures/errors/skips**, Android debug compilation, Android lint (**0 errors, 14 warnings**) and iOS simulator shared compilation. The final aggregate ran 9 tasks with 64 up-to-date. `git diff --check`, import sorting and the 100-character changed-Kotlin-line limit pass; no Kotlin formatter is configured. Logs and renders are in local `work/frozen-canvas/`. No APK or device test was run.
+
 
 ## Still-image inspection and matched-text copying — 2026-10-29
 

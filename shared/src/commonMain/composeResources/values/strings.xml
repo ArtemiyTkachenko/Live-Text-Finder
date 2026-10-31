@@ -42,6 +42,14 @@
     <string name="search_list_save">Save list</string>
     <string name="search_list_cancel">Cancel</string>
     <string name="finder_options">Options</string>
+    <string name="inspection_edit_search">Edit search</string>
+    <string name="inspection_done">Done</string>
+    <string name="inspection_more">More</string>
+    <string name="inspection_results_terms">Terms</string>
+    <string name="inspection_results_occurrences">Occurrences</string>
+    <string name="inspection_results">Results (%1$d)</string>
+    <string name="inspection_return_frozen">Resume scanning</string>
+    <string name="inspection_lists">Lists</string>
     <string name="finder_options_title">Options</string>
     <string name="finder_options_highlight">Highlight color: %1$s</string>
     <string name="finder_options_matching">Matching</string>

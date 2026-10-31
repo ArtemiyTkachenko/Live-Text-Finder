@@ -6,7 +6,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -96,12 +95,15 @@ import com.artkachenko.livetextfinder.search.searchTermSummaries
 import com.artkachenko.livetextfinder.search.stillMatchRows
 import com.artkachenko.livetextfinder.search.stillMatchText
 import com.artkachenko.livetextfinder.ui.ContextMessage
+import com.artkachenko.livetextfinder.ui.FinderContentAssembly
 import com.artkachenko.livetextfinder.ui.FinderOptionsSheet
 import com.artkachenko.livetextfinder.ui.FinderSearchControls
 import com.artkachenko.livetextfinder.ui.FinderSearchLists
 import com.artkachenko.livetextfinder.ui.FinderSpacing
 import com.artkachenko.livetextfinder.ui.HighlightColorDialog
 import com.artkachenko.livetextfinder.ui.LiveTextFinderTheme
+import com.artkachenko.livetextfinder.ui.RetainedInspectionActionDispatcher
+import com.artkachenko.livetextfinder.ui.RetainedInspectionHeader
 import com.artkachenko.livetextfinder.ui.SearchTermResultsDialog
 import com.artkachenko.livetextfinder.ui.StillInspectionControls
 import com.artkachenko.livetextfinder.ui.StillInspectionViewport
@@ -113,6 +115,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import livetextfinder.shared.generated.resources.Res
 import livetextfinder.shared.generated.resources.finder_options_highlight
+import livetextfinder.shared.generated.resources.inspection_return_frozen
 import livetextfinder.shared.generated.resources.search_list_import_fallback_name
 import livetextfinder.shared.generated.resources.search_list_transfer_another_busy
 import livetextfinder.shared.generated.resources.search_list_transfer_cancel
@@ -132,10 +135,7 @@ import livetextfinder.shared.generated.resources.search_list_transfer_reading
 import livetextfinder.shared.generated.resources.search_list_transfer_saving
 import livetextfinder.shared.generated.resources.search_results
 import livetextfinder.shared.generated.resources.search_results_locate_hint
-import livetextfinder.shared.generated.resources.status_cancel
 import livetextfinder.shared.generated.resources.status_saving
-import livetextfinder.shared.generated.resources.status_share_image
-import livetextfinder.shared.generated.resources.status_share_preparing
 import livetextfinder.shared.generated.resources.still_match_copied
 import livetextfinder.shared.generated.resources.still_match_copy_failed
 import org.jetbrains.compose.resources.stringResource
@@ -289,6 +289,9 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                 freezeState.mode == FreezeMode.Frozen ->
                     "${sourceIdentity}:${freezeState.frame?.requestId}"
                 else -> null
+            }
+            var retainedSearchExpanded by remember(inspectionIdentity) {
+                mutableStateOf(false)
             }
             val stillSnapshot = when {
                 importedState.phase == ImportedImagePhase.Imported -> importedState.snapshot
@@ -619,413 +622,423 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                 ImportedImagePhase.Live,
                 ImportedImagePhase.Error -> null
             }
-            AppContentColumn(
+            val shareCurrentStillImage: () -> Unit = {
+                if (importedState.phase == ImportedImagePhase.Imported) {
+                    shareOwner.shareImported(
+                        importedOwner,
+                        search,
+                        currentSourceIdentity = {
+                            importedOwner.state.value.snapshot?.let {
+                                "import:${it.sourceIdentity}"
+                            }
+                        },
+                        currentSearchIdentity = {
+                            session.state.value.activeSearch.identity
+                        },
+                        currentHighlightColor = {
+                            session.state.value.persisted.highlightColor
+                        },
+                    )
+                } else {
+                    shareOwner.shareFrozen(
+                        frozenOwner,
+                        search,
+                        currentSourceIdentity = {
+                            frozenOwner.state.value.frame?.let { "frozen:${it.identity}" }
+                        },
+                        currentSearchIdentity = {
+                            session.state.value.activeSearch.identity
+                        },
+                        currentHighlightColor = {
+                            session.state.value.persisted.highlightColor
+                        },
+                    )
+                }
+            }
+            FinderContentAssembly(
                 scrollState = contentScrollState,
                 scrollable = !shouldShowViews,
                 modifier = Modifier.fillMaxSize()
                     .safeDrawingPadding()
                     .imePadding()
                     .onSizeChanged { rootSize = it },
-            ) {
-                Column(
-                    Modifier.fillMaxWidth().padding(
-                        horizontal = FinderSpacing.large,
-                        vertical = FinderSpacing.extraSmall,
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(FinderSpacing.extraSmall),
-                ) {
-                    FinderSearchControls(
-                        showTitle = shouldShowViews,
-                        query = query,
-                        onQueryChange = { value ->
-                            transferOwner.contextChanged()
-                            transferContextRevision++
-                            session.setManualQuery(value)
-                        },
-                        searchListsLabel = if (managerOpen) "Close lists" else "Search lists",
-                        onSearchLists = {
-                            transferOwner.contextChanged()
-                            transferContextRevision++
-                            managerOpen = !managerOpen
-                            editor = editor.close()
-                        },
-                        searchContext = selectedList?.let {
+                topContent = {
+                    Column(
+                        Modifier.fillMaxWidth().padding(
+                            horizontal = FinderSpacing.large,
+                            vertical = FinderSpacing.extraSmall,
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(FinderSpacing.extraSmall),
+                    ) {
+                        val searchContext = selectedList?.let {
                             "${it.name} · ${it.terms.size} terms"
-                        } ?: "Manual search",
-                        onOptions = { optionsOpen = true },
-                        savingLabel = if (sessionState.saving) {
-                            stringResource(Res.string.status_saving)
+                        } ?: "Manual search"
+                        val retainedSearchContext = if (selectedList != null || query.isBlank()) {
+                            searchContext
                         } else {
-                            null
-                        },
-                        captureLabel = captureLabel,
-                        captureEnabled = freezeState.mode != FreezeMode.Live ||
-                            state.status == OcrStatus.Scanning ||
-                            state.status == OcrStatus.TextRecognized,
-                        onCapture = {
-                            when (freezeState.mode) {
-                                FreezeMode.Live -> {
-                                    resetLiveArea()
-                                    frozenOwner.freeze(
-                                        cameraReady = state.status == OcrStatus.Scanning ||
-                                            state.status == OcrStatus.TextRecognized,
-                                    )
-                                }
-                                FreezeMode.Frozen -> {
-                                    resetLiveArea()
-                                    frozenOwner.resume()
-                                }
-                                FreezeMode.Freezing -> Unit
-                            }
-                        },
-                        pendingCaptureLabel = pendingCaptureLabel,
-                        onCancelCapture = frozenOwner::cancel,
-                        secondaryActionLabel = directSecondaryActionLabel,
-                        onSecondaryAction = {
-                            when (importedState.phase) {
-                                ImportedImagePhase.Unsupported -> Unit
-                                ImportedImagePhase.Imported -> {
-                                    resetLiveArea()
-                                    importedOwner.cancel()
-                                }
-                                ImportedImagePhase.Picking,
-                                ImportedImagePhase.Reading,
-                                ImportedImagePhase.Recognizing -> importedOwner.cancel()
-                                ImportedImagePhase.Live,
-                                ImportedImagePhase.Error -> Unit
-                            }
-                        },
-                    )
-                    if (transferState.message != null) {
-                        ContextMessage(
-                            message = transferState.message,
-                            actionLabel = if (transferState.busy) {
-                                stringResource(Res.string.search_list_transfer_cancel)
-                            } else {
-                                null
-                            },
-                            onAction = if (transferState.busy) transferOwner::cancel else null,
-                            isError = transferState.isError,
-                        )
-                    }
-                    FinderStatusRegion(
-                        state = state,
-                        importedState = importedState,
-                        freezeState = freezeState,
-                        sessionState = sessionState,
-                        search = search,
-                        presentation = presentation,
-                        highlights = highlights,
-                        areaSelected = areaState != null,
-                        shouldShowViews = shouldShowViews,
-                        onRetrySavedData = {
-                            transferOwner.contextChanged()
-                            transferContextRevision++
-                            session.retry()
-                        },
-                        onRequestReset = { resetConfirm = true },
-                    )
-                    if (activeSearch.terms.isNotEmpty()) {
-                        TextButton(onClick = { searchResultsDialogOpen = true }) {
-                            Text(stringResource(Res.string.search_results, search.occurrences.size))
-                        }
-                    }
-                    if (sourceIdentity != null) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            TextButton(
-                                onClick = {
-                                    if (importedState.phase == ImportedImagePhase.Imported) {
-                                        shareOwner.shareImported(
-                                            importedOwner,
-                                            search,
-                                            currentSourceIdentity = {
-                                                importedOwner.state.value.snapshot?.let {
-                                                    "import:${it.sourceIdentity}"
-                                                }
-                                            },
-                                            currentSearchIdentity = {
-                                                session.state.value.activeSearch.identity
-                                            },
-                                            currentHighlightColor = {
-                                                session.state.value.persisted.highlightColor
-                                            },
-                                        )
-                                    } else {
-                                        shareOwner.shareFrozen(
-                                            frozenOwner,
-                                            search,
-                                            currentSourceIdentity = {
-                                                frozenOwner.state.value.frame?.let {
-                                                    "frozen:${it.identity}"
-                                                }
-                                            },
-                                            currentSearchIdentity = {
-                                                session.state.value.activeSearch.identity
-                                            },
-                                            currentHighlightColor = {
-                                                session.state.value.persisted.highlightColor
-                                            },
-                                        )
-                                    }
-                                },
-                                enabled = shareOwner.state.value.status !=
-                                    ImageShareStatus.Preparing,
-                            ) {
-                                Text(
-                                    if (shareOwner.state.value.status ==
-                                        ImageShareStatus.Preparing
-                                    ) {
-                                        stringResource(Res.string.status_share_preparing)
-                                    } else {
-                                        stringResource(Res.string.status_share_image)
-                                    },
-                                )
-                            }
-                            if (shareOwner.state.value.status == ImageShareStatus.Preparing) {
-                                TextButton(onClick = shareOwner::cancel) {
-                                    Text(stringResource(Res.string.status_cancel))
-                                }
-                            }
-                        }
-                        shareOwner.state.value.message?.let { message ->
-                            ContextMessage(message = message)
+                            "Manual search · $query"
                         }
                         val focusManager = LocalFocusManager.current
                         val keyboardController = LocalSoftwareKeyboardController.current
-                        StillInspectionControls(
-                            matchCount = matchRows.size,
-                            zoom = stillTransform.zoom,
-                            canZoom = shouldShowViews && stillFit?.isValid == true,
-                            onZoomIn = {
-                                stillTransform = stillTransform.zoomBy(
-                                    1.25f,
-                                    PreviewPoint(
-                                        previewSize.width / 2f,
-                                        previewSize.height / 2f,
-                                    ),
-                                    previewSize.width.toFloat(),
-                                    previewSize.height.toFloat(),
-                                    checkNotNull(stillFit),
-                                )
-                            },
-                            onZoomOut = {
-                                stillTransform = stillTransform.zoomBy(
-                                    0.8f,
-                                    PreviewPoint(
-                                        previewSize.width / 2f,
-                                        previewSize.height / 2f,
-                                    ),
-                                    previewSize.width.toFloat(),
-                                    previewSize.height.toFloat(),
-                                    checkNotNull(stillFit),
-                                )
-                            },
-                            onReset = { stillTransform = StillViewTransform() },
-                            onMatches = {
-                                focusManager.clearFocus()
-                                keyboardController?.hide()
-                                matchesDialogOpen = true
-                            },
-                        )
-                        val selectedRow = selectedNavigationRow
-                        if (selectedPosition > 0 && selectedRow != null) {
-                            val canLocate = shouldShowViews &&
-                                stillActionIsCurrent(selectedRow, expectedSelectedIndex)
-                            if (!canLocate) {
-                                ContextMessage(
-                                    message = stringResource(Res.string.search_results_locate_hint),
-                                )
-                            }
-                            StillMatchNavigationControls(
-                                position = selectedPosition,
-                                count = effectiveMatchRows.size,
-                                matchedTerm = selectedRow.termLabel,
-                                matchedText = selectedRow.matchedText,
-                                canLocate = canLocate,
-                                onPrevious = {
-                                    adjacentStillMatchRow(
-                                        effectiveMatchRows, selectedPosition, -1
-                                    )?.let { locateMatch(it, expectedSelectedIndex) }
+                        if (sourceIdentity != null) {
+                            RetainedInspectionHeader(
+                                searchContext = retainedSearchContext,
+                                saving = sessionState.saving,
+                                editing = retainedSearchExpanded || managerOpen,
+                                managerOpen = managerOpen,
+                                returnLabel = if (importedState.phase ==
+                                    ImportedImagePhase.Imported
+                                ) {
+                                    "Return to camera"
+                                } else {
+                                    stringResource(Res.string.inspection_return_frozen)
                                 },
-                                onNext = {
-                                    adjacentStillMatchRow(
-                                        effectiveMatchRows, selectedPosition, 1
-                                    )?.let { locateMatch(it, expectedSelectedIndex) }
+                                resultCount = search.occurrences.size,
+                                occurrenceCount = matchRows.size,
+                                sharePreparing = shareOwner.state.value.status ==
+                                    ImageShareStatus.Preparing,
+                                onEditSearch = {
+                                    RetainedInspectionActionDispatcher.toggleSearchEditing(
+                                        retainedSearchExpanded,
+                                        { retainedSearchExpanded = it },
+                                        focusManager::clearFocus,
+                                        { keyboardController?.hide() },
+                                    )
                                 },
-                                onCopy = copySelectedMatch,
+                                onReturn = {
+                                    RetainedInspectionActionDispatcher.returnToSource(
+                                        importedState.phase == ImportedImagePhase.Imported,
+                                        ::resetLiveArea,
+                                        importedOwner::cancel,
+                                        frozenOwner::resume,
+                                    )
+                                },
+                                onTerms = {
+                                    RetainedInspectionActionDispatcher.showTerms(
+                                        { searchResultsDialogOpen = it },
+                                        { matchesDialogOpen = it },
+                                    )
+                                },
+                                onOccurrences = {
+                                    RetainedInspectionActionDispatcher.showOccurrences(
+                                        focusManager::clearFocus,
+                                        { keyboardController?.hide() },
+                                        { searchResultsDialogOpen = it },
+                                        { matchesDialogOpen = it },
+                                    )
+                                },
+                                onLists = {
+                                    RetainedInspectionActionDispatcher.toggleLists(
+                                        managerOpen,
+                                        {
+                                            transferOwner.contextChanged()
+                                            transferContextRevision++
+                                        },
+                                        { managerOpen = it },
+                                        { retainedSearchExpanded = false },
+                                        { editor = editor.close() },
+                                    )
+                                },
+                                onOptions = { optionsOpen = true },
+                                onShare = shareCurrentStillImage,
+                                onCancelShare = shareOwner::cancel,
                             )
                         }
-                        copyMessage?.let { message -> ContextMessage(message = message) }
-                    }
-                }
-                if (managerOpen) {
-                    FinderSearchLists(
-                        lists = sessionState.persisted.lists,
-                        activeListId = sessionState.persisted.activeListId,
-                        editor = editor,
-                        canSave = sessionState.loaded && !sessionState.recoveryRequired,
-                        onNew = {
-                            transferOwner.contextChanged()
-                            transferContextRevision++
-                            editor = editor.startNew()
-                        },
-                        onSelect = { id ->
-                            dispatchSearchListSelection(session, id) {
+                        if (sourceIdentity == null || retainedSearchExpanded || managerOpen) {
+                            FinderSearchControls(
+                                showTitle = shouldShowViews,
+                                query = query,
+                                onQueryChange = { value ->
+                                    transferOwner.contextChanged()
+                                    transferContextRevision++
+                                    session.setManualQuery(value)
+                                },
+                                searchListsLabel = if (managerOpen) {
+                                    "Close lists"
+                                } else {
+                                    "Search lists"
+                                },
+                                onSearchLists = {
+                                    RetainedInspectionActionDispatcher.toggleLists(
+                                        managerOpen,
+                                        {
+                                            transferOwner.contextChanged()
+                                            transferContextRevision++
+                                        },
+                                        { managerOpen = it },
+                                        { retainedSearchExpanded = false },
+                                        { editor = editor.close() },
+                                    )
+                                },
+                                searchContext = searchContext,
+                                onOptions = { optionsOpen = true },
+                                savingLabel = if (sessionState.saving) {
+                                    stringResource(Res.string.status_saving)
+                                } else {
+                                    null
+                                },
+                                captureLabel = captureLabel,
+                                captureEnabled = freezeState.mode != FreezeMode.Live ||
+                                    state.status == OcrStatus.Scanning ||
+                                    state.status == OcrStatus.TextRecognized,
+                                onCapture = {
+                                    when (freezeState.mode) {
+                                        FreezeMode.Live -> {
+                                            resetLiveArea()
+                                            frozenOwner.freeze(
+                                                cameraReady = state.status == OcrStatus.Scanning ||
+                                                    state.status == OcrStatus.TextRecognized,
+                                            )
+                                        }
+                                        FreezeMode.Frozen -> {
+                                            resetLiveArea()
+                                            frozenOwner.resume()
+                                        }
+                                        FreezeMode.Freezing -> Unit
+                                    }
+                                },
+                                pendingCaptureLabel = pendingCaptureLabel,
+                                onCancelCapture = frozenOwner::cancel,
+                                secondaryActionLabel = directSecondaryActionLabel,
+                                onSecondaryAction = {
+                                    when (importedState.phase) {
+                                        ImportedImagePhase.Unsupported -> Unit
+                                        ImportedImagePhase.Imported -> {
+                                            resetLiveArea()
+                                            importedOwner.cancel()
+                                        }
+                                        ImportedImagePhase.Picking,
+                                        ImportedImagePhase.Reading,
+                                        ImportedImagePhase.Recognizing -> importedOwner.cancel()
+                                        ImportedImagePhase.Live,
+                                        ImportedImagePhase.Error -> Unit
+                                    }
+                                },
+                            )
+                        }
+                        if (transferState.message != null) {
+                            ContextMessage(
+                                message = transferState.message,
+                                actionLabel = if (transferState.busy) {
+                                    stringResource(Res.string.search_list_transfer_cancel)
+                                } else {
+                                    null
+                                },
+                                onAction = if (transferState.busy) transferOwner::cancel else null,
+                                isError = transferState.isError,
+                            )
+                        }
+                        FinderStatusRegion(
+                            state = state,
+                            importedState = importedState,
+                            freezeState = freezeState,
+                            sessionState = sessionState,
+                            search = search,
+                            presentation = presentation,
+                            highlights = highlights,
+                            areaSelected = areaState != null,
+                            shouldShowViews = shouldShowViews,
+                            onRetrySavedData = {
                                 transferOwner.contextChanged()
                                 transferContextRevision++
+                                session.retry()
+                            },
+                            onRequestReset = { resetConfirm = true },
+                        )
+                        if (activeSearch.terms.isNotEmpty() && sourceIdentity == null) {
+                            TextButton(onClick = { searchResultsDialogOpen = true }) {
+                                Text(
+                                    stringResource(
+                                        Res.string.search_results,
+                                        search.occurrences.size,
+                                    ),
+                                )
                             }
-                        },
-                        onEdit = { list ->
-                            transferOwner.contextChanged()
-                            transferContextRevision++
-                            editor = editor.edit(list)
-                        },
-                        onDelete = { list -> deleteId = list.id },
-                        onNameChange = {
-                            transferOwner.contextChanged()
-                            transferContextRevision++
-                            editor = editor.copy(name = it)
-                        },
-                        onTermsChange = {
-                            transferOwner.contextChanged()
-                            transferContextRevision++
-                            editor = editor.copy(terms = it)
-                        },
-                        onSave = {
-                            transferOwner.contextChanged()
-                            transferContextRevision++
-                            val error = session.saveList(
-                                editor.editingId,
-                                editor.name,
-                                editor.terms,
-                            )
-                            editor = if (error == null) {
-                                editor.close()
-                            } else {
-                                editor.copy(error = error)
-                            }
-                        },
-                        onCancel = {
-                            transferOwner.contextChanged()
-                            transferContextRevision++
-                            editor = editor.close()
-                        },
-                    )
-                }
-                if (shouldShowViews) {
-                    StillInspectionViewport(
-                        sourceIdentity = inspectionIdentity,
-                        fit = stillFit,
-                        viewportSize = previewSize,
-                        transform = stillTransform,
-                        onTransformChange = { stillTransform = it },
-                        modifier = Modifier.weight(1f)
-                            .fillMaxWidth()
-                            .background(Color.Black)
-                            .onSizeChanged { previewSize = it },
-                    ) {
-                        when (importedState.phase) {
-                            ImportedImagePhase.Imported -> ImportedImagePreview(
-                                importedOwner,
-                                Modifier.fillMaxSize(),
-                                isContentVisible,
-                            )
-                            ImportedImagePhase.Picking,
-                            ImportedImagePhase.Reading,
-                            ImportedImagePhase.Recognizing -> Unit
-                            else -> CameraPreview(
-                                Modifier.fillMaxSize(),
-                                frozenOwner,
-                                isContentVisible,
-                            ) { state = it }
                         }
-                        Canvas(Modifier.matchParentSize()) {
-                            val currentFreezeState = frozenOwner.state.value
-                            val currentSearchIdentity = session.state.value.activeSearch.identity
-                            val currentImportState = importedOwner.state.value
-                            val areaIsCurrent =
-                                isPresentationCurrentAreaRevision(
-                                    presentation,
-                                    areaOwner.revision,
-                                ) &&
-                                areaRevision == presentation.areaRevision
-                            val liveAreaIsDisplayed = areaIsCurrent && areaState != null &&
-                                importedState.phase != ImportedImagePhase.Imported &&
-                                importedState.phase != ImportedImagePhase.Picking &&
-                                importedState.phase != ImportedImagePhase.Reading &&
-                                importedState.phase != ImportedImagePhase.Recognizing &&
-                                currentFreezeState.mode == FreezeMode.Live &&
-                                currentImportState.phase != ImportedImagePhase.Imported &&
-                                currentImportState.phase != ImportedImagePhase.Picking &&
-                                currentImportState.phase != ImportedImagePhase.Reading &&
-                                currentImportState.phase != ImportedImagePhase.Recognizing &&
-                                areaOwner.area == areaState &&
-                                isContentVisible() &&
-                                size.width == previewSize.width.toFloat() &&
-                                size.height == previewSize.height.toFloat() &&
-                                size.width > 0f && size.height > 0f
-                            val outlines = if (!areaIsCurrent) {
-                                emptyList()
-                            } else if (
-                                importedState.phase == ImportedImagePhase.Imported ||
-                                currentImportState.phase == ImportedImagePhase.Imported
-                            ) {
-                                importedHighlightsForDraw(
-                                    search,
-                                    importedState.snapshot,
-                                    currentImportState,
-                                    activeSearch.identity,
-                                    currentSearchIdentity,
-                                    size.width,
-                                    size.height,
-                                    isContentVisible(),
-                                ).outlines
-                            } else if (!isContentVisible()) {
-                                emptyList()
-                            } else if (
-                                importedState.phase == ImportedImagePhase.Picking ||
-                                importedState.phase == ImportedImagePhase.Reading ||
-                                importedState.phase == ImportedImagePhase.Recognizing
-                            ) {
-                                emptyList()
-                            } else if (freezeState.mode == FreezeMode.Frozen) {
-                                if (currentFreezeState.mode == FreezeMode.Frozen &&
-                                    currentFreezeState.frame === frozenFrame &&
-                                    currentSearchIdentity == activeSearch.identity
-                                ) {
-                                    projectFrozenHighlights(
-                                        search,
-                                        size.width,
-                                        size.height,
-                                    ).outlines
-                                } else {
-                                    emptyList()
+                    }
+                },
+                managerContent = {
+                    if (managerOpen) {
+                        FinderSearchLists(
+                            lists = sessionState.persisted.lists,
+                            activeListId = sessionState.persisted.activeListId,
+                            editor = editor,
+                            canSave = sessionState.loaded && !sessionState.recoveryRequired,
+                            onNew = {
+                                transferOwner.contextChanged()
+                                transferContextRevision++
+                                editor = editor.startNew()
+                            },
+                            onSelect = { id ->
+                                dispatchSearchListSelection(session, id) {
+                                    transferOwner.contextChanged()
+                                    transferContextRevision++
                                 }
-                            } else {
-                                if (currentFreezeState.mode == FreezeMode.Live ||
-                                    currentFreezeState.mode == FreezeMode.Freezing
-                                ) {
-                                    drawableElementsForSession(
-                                        session,
-                                        activeSearch,
-                                        presentation,
-                                        state,
-                                        MonotonicClock.nowMillis(),
-                                        size.width,
-                                        size.height,
-                                    ).map { it.displayOutline }
+                            },
+                            onEdit = { list ->
+                                transferOwner.contextChanged()
+                                transferContextRevision++
+                                editor = editor.edit(list)
+                            },
+                            onDelete = { list -> deleteId = list.id },
+                            onNameChange = {
+                                transferOwner.contextChanged()
+                                transferContextRevision++
+                                editor = editor.copy(name = it)
+                            },
+                            onTermsChange = {
+                                transferOwner.contextChanged()
+                                transferContextRevision++
+                                editor = editor.copy(terms = it)
+                            },
+                            onSave = {
+                                transferOwner.contextChanged()
+                                transferContextRevision++
+                                val error = session.saveList(
+                                    editor.editingId,
+                                    editor.name,
+                                    editor.terms,
+                                )
+                                editor = if (error == null) {
+                                    editor.close()
                                 } else {
-                                    emptyList()
+                                    editor.copy(error = error)
                                 }
+                            },
+                            onCancel = {
+                                transferOwner.contextChanged()
+                                transferContextRevision++
+                                editor = editor.close()
+                            },
+                        )
+                    }
+                },
+                viewportContent = {
+                    if (shouldShowViews) {
+                        StillInspectionViewport(
+                            sourceIdentity = inspectionIdentity,
+                            fit = stillFit,
+                            viewportSize = previewSize,
+                            transform = stillTransform,
+                            onTransformChange = { stillTransform = it },
+                            modifier = Modifier.weight(1f)
+                                .fillMaxWidth()
+                                .background(Color.Black)
+                                .onSizeChanged { previewSize = it },
+                        ) {
+                            when (importedState.phase) {
+                                ImportedImagePhase.Imported -> ImportedImagePreview(
+                                    importedOwner,
+                                    Modifier.fillMaxSize(),
+                                    isContentVisible,
+                                )
+                                ImportedImagePhase.Picking,
+                                ImportedImagePhase.Reading,
+                                ImportedImagePhase.Recognizing -> Unit
+                                else -> CameraPreview(
+                                    Modifier.fillMaxSize(),
+                                    frozenOwner,
+                                    isContentVisible,
+                                ) { state = it }
                             }
-                            if (liveAreaIsDisplayed) {
-                                val area = checkNotNull(areaState)
-                                clipRect(
-                                    left = area.left * size.width,
-                                    top = area.top * size.height,
-                                    right = area.right * size.width,
-                                    bottom = area.bottom * size.height,
+                            Canvas(Modifier.matchParentSize()) {
+                                val currentFreezeState = frozenOwner.state.value
+                                val currentSearchIdentity =
+                                    session.state.value.activeSearch.identity
+                                val currentImportState = importedOwner.state.value
+                                val areaIsCurrent =
+                                    isPresentationCurrentAreaRevision(
+                                        presentation,
+                                        areaOwner.revision,
+                                    ) &&
+                                    areaRevision == presentation.areaRevision
+                                val liveAreaIsDisplayed = areaIsCurrent && areaState != null &&
+                                    importedState.phase != ImportedImagePhase.Imported &&
+                                    importedState.phase != ImportedImagePhase.Picking &&
+                                    importedState.phase != ImportedImagePhase.Reading &&
+                                    importedState.phase != ImportedImagePhase.Recognizing &&
+                                    currentFreezeState.mode == FreezeMode.Live &&
+                                    currentImportState.phase != ImportedImagePhase.Imported &&
+                                    currentImportState.phase != ImportedImagePhase.Picking &&
+                                    currentImportState.phase != ImportedImagePhase.Reading &&
+                                    currentImportState.phase != ImportedImagePhase.Recognizing &&
+                                    areaOwner.area == areaState &&
+                                    isContentVisible() &&
+                                    size.width == previewSize.width.toFloat() &&
+                                    size.height == previewSize.height.toFloat() &&
+                                    size.width > 0f && size.height > 0f
+                                val outlines = if (!areaIsCurrent) {
+                                    emptyList()
+                                } else if (
+                                    importedState.phase == ImportedImagePhase.Imported ||
+                                    currentImportState.phase == ImportedImagePhase.Imported
                                 ) {
+                                    importedHighlightsForDraw(
+                                        search,
+                                        importedState.snapshot,
+                                        currentImportState,
+                                        activeSearch.identity,
+                                        currentSearchIdentity,
+                                        size.width,
+                                        size.height,
+                                        isContentVisible(),
+                                    ).outlines
+                                } else if (!isContentVisible()) {
+                                    emptyList()
+                                } else if (
+                                    importedState.phase == ImportedImagePhase.Picking ||
+                                    importedState.phase == ImportedImagePhase.Reading ||
+                                    importedState.phase == ImportedImagePhase.Recognizing
+                                ) {
+                                    emptyList()
+                                } else if (freezeState.mode == FreezeMode.Frozen) {
+                                    if (currentFreezeState.mode == FreezeMode.Frozen &&
+                                        currentFreezeState.frame === frozenFrame &&
+                                        currentSearchIdentity == activeSearch.identity
+                                    ) {
+                                        projectFrozenHighlights(
+                                            search,
+                                            size.width,
+                                            size.height,
+                                        ).outlines
+                                    } else {
+                                        emptyList()
+                                    }
+                                } else {
+                                    if (currentFreezeState.mode == FreezeMode.Live ||
+                                        currentFreezeState.mode == FreezeMode.Freezing
+                                    ) {
+                                        drawableElementsForSession(
+                                            session,
+                                            activeSearch,
+                                            presentation,
+                                            state,
+                                            MonotonicClock.nowMillis(),
+                                            size.width,
+                                            size.height,
+                                        ).map { it.displayOutline }
+                                    } else {
+                                        emptyList()
+                                    }
+                                }
+                                if (liveAreaIsDisplayed) {
+                                    val area = checkNotNull(areaState)
+                                    clipRect(
+                                        left = area.left * size.width,
+                                        top = area.top * size.height,
+                                        right = area.right * size.width,
+                                        bottom = area.bottom * size.height,
+                                    ) {
+                                        drawHighlightOutlines(
+                                            outlines,
+                                            session.state.value.persisted.highlightColor,
+                                            SearchHighlightPalette.colorsByTerm(
+                                                activeSearch,
+                                                session.state.value.persisted.highlightColor,
+                                            ),
+                                        )
+                                    }
+                                } else {
                                     drawHighlightOutlines(
                                         outlines,
                                         session.state.value.persisted.highlightColor,
@@ -1035,64 +1048,149 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                                         ),
                                     )
                                 }
-                            } else {
-                                drawHighlightOutlines(
-                                    outlines,
-                                    session.state.value.persisted.highlightColor,
-                                    SearchHighlightPalette.colorsByTerm(
-                                        activeSearch,
-                                        session.state.value.persisted.highlightColor,
-                                    ),
-                                )
-                            }
-                            val selectedRow = matchRows.firstOrNull { it.index == selectedMatch }
-                            val selectedBounds = selectedRow?.takeIf {
-                                stillActionIsCurrent(it, expectedSelectedIndex)
-                            }?.let { row ->
-                                occurrenceBounds(row.occurrence, Highlights(true, outlines))
-                            }
-                            selectedBounds?.let { bounds -> drawSelectedOccurrenceMarker(bounds) }
-                            if (liveAreaIsDisplayed) {
-                                val area = checkNotNull(areaState)
-                                drawRect(
-                                    color = Color.White,
-                                    topLeft = Offset(
-                                        area.left * size.width,
-                                        area.top * size.height,
-                                    ),
-                                    size = Size(
-                                        (area.right - area.left) * size.width,
-                                        (area.bottom - area.top) * size.height,
-                                    ),
-                                    style = Stroke(
-                                        width = 3.dp.toPx(),
-                                        pathEffect = PathEffect.dashPathEffect(
-                                            floatArrayOf(10.dp.toPx(), 6.dp.toPx()),
+                                val selectedRow = matchRows.firstOrNull {
+                                    it.index == selectedMatch
+                                }
+                                val selectedBounds = selectedRow?.takeIf {
+                                    stillActionIsCurrent(it, expectedSelectedIndex)
+                                }?.let { row ->
+                                    occurrenceBounds(row.occurrence, Highlights(true, outlines))
+                                }
+                                selectedBounds?.let { bounds ->
+                                    drawSelectedOccurrenceMarker(bounds)
+                                }
+                                if (liveAreaIsDisplayed) {
+                                    val area = checkNotNull(areaState)
+                                    drawRect(
+                                        color = Color.White,
+                                        topLeft = Offset(
+                                            area.left * size.width,
+                                            area.top * size.height,
                                         ),
-                                    ),
+                                        size = Size(
+                                            (area.right - area.left) * size.width,
+                                            (area.bottom - area.top) * size.height,
+                                        ),
+                                        style = Stroke(
+                                            width = 3.dp.toPx(),
+                                            pathEffect = PathEffect.dashPathEffect(
+                                                floatArrayOf(10.dp.toPx(), 6.dp.toPx()),
+                                            ),
+                                        ),
+                                    )
+                                }
+                            }
+                            if (areaState != null &&
+                                areaOwner.revision == presentation.areaRevision &&
+                                areaOwner.area == areaState &&
+                                importedState.phase != ImportedImagePhase.Imported &&
+                                importedOwner.state.value.phase != ImportedImagePhase.Imported &&
+                                frozenOwner.state.value.mode == FreezeMode.Live &&
+                                isContentVisible()
+                            ) {
+                                Text(
+                                    "Live area",
+                                    modifier = Modifier.align(Alignment.TopStart)
+                                        .padding(8.dp)
+                                        .background(Color.Black.copy(alpha = 0.7f))
+                                        .padding(horizontal = 6.dp, vertical = 3.dp),
+                                    color = Color.White,
                                 )
                             }
-                        }
-                        if (areaState != null &&
-                            areaOwner.revision == presentation.areaRevision &&
-                            areaOwner.area == areaState &&
-                            importedState.phase != ImportedImagePhase.Imported &&
-                            importedOwner.state.value.phase != ImportedImagePhase.Imported &&
-                            frozenOwner.state.value.mode == FreezeMode.Live &&
-                            isContentVisible()
-                        ) {
-                            Text(
-                                "Live area",
-                                modifier = Modifier.align(Alignment.TopStart)
-                                    .padding(8.dp)
-                                    .background(Color.Black.copy(alpha = 0.7f))
-                                    .padding(horizontal = 6.dp, vertical = 3.dp),
-                                color = Color.White,
-                            )
                         }
                     }
-                }
-            }
+                },
+                footerContent = {
+                    if (sourceIdentity != null) {
+                        Column(
+                            Modifier.fillMaxWidth().padding(
+                                horizontal = FinderSpacing.large,
+                                vertical = FinderSpacing.extraSmall,
+                            ),
+                            verticalArrangement = Arrangement.spacedBy(
+                                FinderSpacing.extraSmall,
+                            ),
+                        ) {
+                            shareOwner.state.value.message?.let { message ->
+                                ContextMessage(message = message)
+                            }
+                            val focusManager = LocalFocusManager.current
+                            val keyboardController = LocalSoftwareKeyboardController.current
+                            StillInspectionControls(
+                                matchCount = matchRows.size,
+                                showMatchesAction = false,
+                                zoom = stillTransform.zoom,
+                                canZoom = shouldShowViews && stillFit?.isValid == true,
+                                onZoomIn = {
+                                    stillTransform = stillTransform.zoomBy(
+                                        1.25f,
+                                        PreviewPoint(
+                                            previewSize.width / 2f,
+                                            previewSize.height / 2f,
+                                        ),
+                                        previewSize.width.toFloat(),
+                                        previewSize.height.toFloat(),
+                                        checkNotNull(stillFit),
+                                    )
+                                },
+                                onZoomOut = {
+                                    stillTransform = stillTransform.zoomBy(
+                                        0.8f,
+                                        PreviewPoint(
+                                            previewSize.width / 2f,
+                                            previewSize.height / 2f,
+                                        ),
+                                        previewSize.width.toFloat(),
+                                        previewSize.height.toFloat(),
+                                        checkNotNull(stillFit),
+                                    )
+                                },
+                                onReset = { stillTransform = StillViewTransform() },
+                                onMatches = {
+                                    focusManager.clearFocus()
+                                    keyboardController?.hide()
+                                    matchesDialogOpen = true
+                                },
+                            )
+                            val selectedRow = selectedNavigationRow
+                            if (selectedPosition > 0 && selectedRow != null) {
+                                val canLocate = shouldShowViews &&
+                                    stillActionIsCurrent(selectedRow, expectedSelectedIndex)
+                                if (!canLocate) {
+                                    ContextMessage(
+                                        message = stringResource(
+                                            Res.string.search_results_locate_hint,
+                                        ),
+                                    )
+                                }
+                                StillMatchNavigationControls(
+                                    position = selectedPosition,
+                                    count = effectiveMatchRows.size,
+                                    matchedTerm = selectedRow.termLabel,
+                                    matchedText = selectedRow.matchedText,
+                                    canLocate = canLocate,
+                                    onPrevious = {
+                                        adjacentStillMatchRow(
+                                            effectiveMatchRows,
+                                            selectedPosition,
+                                            -1,
+                                        )?.let { locateMatch(it, expectedSelectedIndex) }
+                                    },
+                                    onNext = {
+                                        adjacentStillMatchRow(
+                                            effectiveMatchRows,
+                                            selectedPosition,
+                                            1,
+                                        )?.let { locateMatch(it, expectedSelectedIndex) }
+                                    },
+                                    onCopy = copySelectedMatch,
+                                )
+                            }
+                            copyMessage?.let { message -> ContextMessage(message = message) }
+                        }
+                    }
+                },
+            )
             if (matchesDialogOpen && sourceIdentity != null) {
                 val selectedDialogRow = matchRows.firstOrNull { it.index == selectedMatch }
                 StillMatchesDialog(

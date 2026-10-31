@@ -34,8 +34,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selectableGroup
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -47,18 +47,18 @@ import com.artkachenko.livetextfinder.search.StillMatchRow
 import livetextfinder.shared.generated.resources.Res
 import livetextfinder.shared.generated.resources.search_result_count_description
 import livetextfinder.shared.generated.resources.search_results_done
+import livetextfinder.shared.generated.resources.search_results_locate_hint
 import livetextfinder.shared.generated.resources.search_results_title
 import livetextfinder.shared.generated.resources.status_cancel
 import livetextfinder.shared.generated.resources.still_copy_match
-import livetextfinder.shared.generated.resources.still_matches
-import livetextfinder.shared.generated.resources.still_matches_title
+import livetextfinder.shared.generated.resources.still_match_copy_short
 import livetextfinder.shared.generated.resources.still_match_next
-import livetextfinder.shared.generated.resources.still_match_previous
-import livetextfinder.shared.generated.resources.still_match_show
 import livetextfinder.shared.generated.resources.still_match_position
 import livetextfinder.shared.generated.resources.still_match_position_description
-import livetextfinder.shared.generated.resources.still_match_copy_short
-import livetextfinder.shared.generated.resources.search_results_locate_hint
+import livetextfinder.shared.generated.resources.still_match_previous
+import livetextfinder.shared.generated.resources.still_match_show
+import livetextfinder.shared.generated.resources.still_matches
+import livetextfinder.shared.generated.resources.still_matches_title
 import livetextfinder.shared.generated.resources.still_reset_view
 import livetextfinder.shared.generated.resources.still_zoom_in
 import livetextfinder.shared.generated.resources.still_zoom_out
@@ -133,6 +133,7 @@ internal fun StillInspectionViewport(
 @Composable
 internal fun StillInspectionControls(
     matchCount: Int,
+    showMatchesAction: Boolean = true,
     zoom: Float,
     canZoom: Boolean,
     onZoomIn: () -> Unit,
@@ -145,17 +146,35 @@ internal fun StillInspectionControls(
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalArrangement = Arrangement.Center,
     ) {
-        TextButton(onClick = onZoomIn, enabled = canZoom && zoom < 4f) {
+        TextButton(
+            onClick = onZoomIn,
+            enabled = canZoom && zoom < 4f,
+            modifier = Modifier.heightIn(min = 48.dp),
+        ) {
             Text(stringResource(Res.string.still_zoom_in))
         }
-        TextButton(onClick = onZoomOut, enabled = canZoom && zoom > 1f) {
+        TextButton(
+            onClick = onZoomOut,
+            enabled = canZoom && zoom > 1f,
+            modifier = Modifier.heightIn(min = 48.dp),
+        ) {
             Text(stringResource(Res.string.still_zoom_out))
         }
-        TextButton(onClick = onReset, enabled = canZoom && zoom != 1f) {
+        TextButton(
+            onClick = onReset,
+            enabled = canZoom && zoom != 1f,
+            modifier = Modifier.heightIn(min = 48.dp),
+        ) {
             Text(stringResource(Res.string.still_reset_view))
         }
-        TextButton(onClick = onMatches, enabled = matchCount > 0) {
-            Text(stringResource(Res.string.still_matches, matchCount))
+        if (showMatchesAction) {
+            TextButton(
+                onClick = onMatches,
+                enabled = matchCount > 0,
+                modifier = Modifier.heightIn(min = 48.dp),
+            ) {
+                Text(stringResource(Res.string.still_matches, matchCount))
+            }
         }
     }
 }
@@ -323,7 +342,11 @@ internal fun StillMatchNavigationControls(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalArrangement = Arrangement.Center,
         ) {
-            TextButton(onClick = onPrevious, enabled = canLocate && position > 1) {
+            TextButton(
+                onClick = onPrevious,
+                enabled = canLocate && position > 1,
+                modifier = Modifier.heightIn(min = 48.dp),
+            ) {
                 Text(stringResource(Res.string.still_match_previous))
             }
             Text(
@@ -332,10 +355,18 @@ internal fun StillMatchNavigationControls(
                     contentDescription = positionDescription
                 },
             )
-            TextButton(onClick = onNext, enabled = canLocate && position in 1 until count) {
+            TextButton(
+                onClick = onNext,
+                enabled = canLocate && position in 1 until count,
+                modifier = Modifier.heightIn(min = 48.dp),
+            ) {
                 Text(stringResource(Res.string.still_match_next))
             }
-            TextButton(onClick = onCopy, enabled = position > 0) {
+            TextButton(
+                onClick = onCopy,
+                enabled = position > 0,
+                modifier = Modifier.heightIn(min = 48.dp),
+            ) {
                 Text(stringResource(Res.string.still_match_copy_short))
             }
         }
