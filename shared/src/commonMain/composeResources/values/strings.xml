@@ -105,6 +105,8 @@
     <string name="status_retained_outlines">Some outlines are retained briefly</string>
     <string name="status_permission">Allow camera access to scan printed Latin text</string>
     <string name="status_starting">Starting camera and text recognition</string>
+    <string name="camera_preview_starting">Starting camera…</string>
+    <string name="camera_preview_paused">Camera paused</string>
     <string name="status_scanning">Scanning for Latin text</string>
     <string name="status_paused">Scanning paused</string>
     <string name="status_unavailable">Live camera recognition is unavailable</string>

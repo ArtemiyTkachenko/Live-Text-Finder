@@ -11,6 +11,7 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.activity.ComponentActivity
 import androidx.activity.ComponentDialog
+import androidx.camera.view.PreviewView
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -44,11 +45,13 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
+import androidx.lifecycle.MutableLiveData
 import com.artkachenko.livetextfinder.AppContentColumn
 import com.artkachenko.livetextfinder.FinderStatusRegion
 import com.artkachenko.livetextfinder.SearchFeedback
 import com.artkachenko.livetextfinder.SearchFeedbackKind
 import com.artkachenko.livetextfinder.StatusSource
+import com.artkachenko.livetextfinder.camera.CameraPreviewFeedbackLayer
 import com.artkachenko.livetextfinder.camera.FreezeMode
 import com.artkachenko.livetextfinder.camera.FreezePresentationState
 import com.artkachenko.livetextfinder.camera.FrozenSearchFrame
@@ -137,6 +140,122 @@ class StatusFeedbackTest {
         frameClock = null
         recomposer = null
         recomposerScope = null
+    }
+
+    @Test
+    fun cameraPreviewFeedbackTracksStreamWithoutChangingViewportBounds() {
+        val streamState = MutableLiveData(PreviewView.StreamState.IDLE)
+        val ocrState = OcrUiState(OcrStatus.Starting)
+        mount(widthDp = 320, heightDp = 180) {
+            LiveTextFinderTheme(darkThemeOverride = false, dynamicColor = false) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .semantics { contentDescription = "Preview viewport" },
+                ) {
+                    CameraPreviewFeedbackLayer(
+                        streamState,
+                        failed = false,
+                        onRetry = ::ignoreAction,
+                    )
+                }
+            }
+        }
+
+        var nodes = semanticsNodes(composeView)
+        assertEquals(OcrStatus.Starting, ocrState.status)
+        assertTrue(nodes.any { it.textValues().contains("Starting camera…") })
+        assertFalse(nodes.any { it.textValues().contains("Retry camera") })
+        val viewportBounds = layoutBounds(nodeWithDescription(nodes, "Preview viewport"))
+        assertRendered("camera-feedback-starting-light.png")
+
+        streamState.value = PreviewView.StreamState.STREAMING
+        measureCurrentComposition()
+        nodes = semanticsNodes(composeView)
+        assertFalse(nodes.any { it.textValues().contains("Starting camera…") })
+        assertEquals(viewportBounds, layoutBounds(nodeWithDescription(nodes, "Preview viewport")))
+        assertRendered("camera-feedback-streaming-light.png")
+
+        streamState.value = PreviewView.StreamState.IDLE
+        measureCurrentComposition()
+        nodes = semanticsNodes(composeView)
+        assertTrue(nodes.any { it.textValues().contains("Camera paused") })
+        assertEquals(viewportBounds, layoutBounds(nodeWithDescription(nodes, "Preview viewport")))
+        assertRendered("camera-feedback-paused-light.png")
+    }
+
+    @Test
+    fun cameraPreviewRetryPrecedesFeedbackAndStaysReachableWithDarkLargeText() {
+        val oldStreamState = MutableLiveData(PreviewView.StreamState.IDLE)
+        val streamState = mutableStateOf(oldStreamState)
+        val failed = mutableStateOf(false)
+        var retryCount = 0
+        mount(widthDp = 320, heightDp = 180, fontScale = 1.5f) {
+            LiveTextFinderTheme(darkThemeOverride = true, dynamicColor = false) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .semantics { contentDescription = "Preview viewport" },
+                ) {
+                    CameraPreviewFeedbackLayer(streamState.value, failed.value) {
+                        retryCount++
+                        streamState.value = MutableLiveData(PreviewView.StreamState.IDLE)
+                        failed.value = false
+                    }
+                }
+            }
+        }
+
+        var nodes = semanticsNodes(composeView)
+        assertTrue(nodes.any { it.textValues().contains("Starting camera…") })
+        val viewportBounds = layoutBounds(nodeWithDescription(nodes, "Preview viewport"))
+        assertRendered("camera-feedback-starting-dark-large-text.png")
+
+        oldStreamState.value = PreviewView.StreamState.STREAMING
+        measureCurrentComposition()
+        nodes = semanticsNodes(composeView)
+        assertFalse(nodes.any { it.textValues().contains("Starting camera…") })
+        oldStreamState.value = PreviewView.StreamState.IDLE
+        measureCurrentComposition()
+        assertTrue(semanticsNodes(composeView).any { it.textValues().contains("Camera paused") })
+
+        failed.value = true
+        measureCurrentComposition()
+        nodes = semanticsNodes(composeView)
+        assertFalse(nodes.any { it.textValues().contains("Starting camera…") })
+        val retry = nodeWithText(nodes, "Retry camera", clickable = true)
+        assertTouchBounds(retry)
+        val density = checkNotNull(composeView).resources.displayMetrics.density
+        assertTrue(retry.size.width / density >= 48f)
+        assertTrue(retry.size.height / density >= 48f)
+        assertRendered("camera-feedback-retry-dark-large-text.png")
+        click(retry)
+        assertEquals(1, retryCount)
+        measureCurrentComposition()
+        val replacementStream = streamState.value
+        assertFalse(oldStreamState.hasObservers())
+        assertTrue(replacementStream.hasObservers())
+        nodes = semanticsNodes(composeView)
+        assertTrue(nodes.any { it.textValues().contains("Starting camera…") })
+        assertFalse(nodes.any { it.textValues().contains("Retry camera") })
+        assertRendered("camera-feedback-retry-reset-dark-large-text.png")
+
+        oldStreamState.value = PreviewView.StreamState.STREAMING
+        oldStreamState.value = PreviewView.StreamState.IDLE
+        measureCurrentComposition()
+        assertTrue(semanticsNodes(composeView).any { it.textValues().contains("Starting camera…") })
+
+        replacementStream.value = PreviewView.StreamState.STREAMING
+        measureCurrentComposition()
+        nodes = semanticsNodes(composeView)
+        assertFalse(nodes.any { it.textValues().contains("Starting camera…") })
+        assertFalse(nodes.any { it.textValues().contains("Camera paused") })
+
+        failed.value = true
+        measureCurrentComposition()
+        nodes = semanticsNodes(composeView)
+        assertTrue(nodes.any { it.textValues().contains("Retry camera") })
+        assertEquals(viewportBounds, layoutBounds(nodeWithDescription(nodes, "Preview viewport")))
     }
 
     @Test

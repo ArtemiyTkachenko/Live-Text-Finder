@@ -14,10 +14,14 @@ import androidx.camera.view.PreviewView
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -40,9 +44,14 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LiveData
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.artkachenko.livetextfinder.ocr.OcrStatus
 import com.artkachenko.livetextfinder.ocr.OcrUiState
+import livetextfinder.shared.generated.resources.Res
+import livetextfinder.shared.generated.resources.camera_preview_paused
+import livetextfinder.shared.generated.resources.camera_preview_starting
+import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal actual fun LiveSearchAreaLifecycle(onReset: () -> Unit) {
@@ -190,10 +199,56 @@ private fun AndroidCameraFeed(
         key(preview) {
             AndroidView(factory = { preview }, modifier = Modifier.matchParentSize())
         }
+        CameraPreviewFeedbackLayer(preview.previewStreamState, failed) { attempt++ }
+    }
+}
+
+@Composable
+internal fun CameraPreviewFeedbackLayer(
+    streamState: LiveData<PreviewView.StreamState>,
+    failed: Boolean,
+    onRetry: () -> Unit,
+) {
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var feedback by remember(streamState) {
+        mutableStateOf(PreviewStreamFeedback.Starting)
+    }
+    DisposableEffect(streamState, lifecycleOwner) {
+        val streamObserver = PreviewStreamFeedbackObserver { feedback = it }
+        streamObserver.observe(streamState, lifecycleOwner)
+        onDispose { streamObserver.close() }
+    }
+    Box(Modifier.fillMaxSize()) {
+        if (shouldShowStreamFeedback(feedback, failed)) {
+            CameraStreamFeedback(feedback)
+        }
         if (failed) {
-            Button(onClick = { attempt++ }, modifier = Modifier.align(Alignment.Center)) {
+            Button(
+                onClick = onRetry,
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .heightIn(min = CAMERA_RETRY_MIN_HEIGHT_DP.dp),
+            ) {
                 Text("Retry camera")
             }
+        }
+    }
+}
+
+@Composable
+private fun CameraStreamFeedback(feedback: PreviewStreamFeedback) {
+    val message = when (feedback) {
+        PreviewStreamFeedback.Starting -> stringResource(Res.string.camera_preview_starting)
+        PreviewStreamFeedback.Paused -> stringResource(Res.string.camera_preview_paused)
+        PreviewStreamFeedback.Streaming -> return
+    }
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Surface(
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            shape = MaterialTheme.shapes.medium,
+        ) {
+            Text(message, Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
         }
     }
 }

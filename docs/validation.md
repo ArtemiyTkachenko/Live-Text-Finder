@@ -1,5 +1,17 @@
 # Validation
 
+## Camera preview stream feedback correction — 2026-11-04
+
+Camera waiting/interruption feedback follows the preview stream state; this is state-based
+feedback, not a camera startup-latency optimization. Camera session creation, retry and teardown
+remain owned by the existing Android camera composition. Host tests exercise the production
+LiveData observer across lifecycle stop/start/destroy and retry stream replacement, including stale
+source detachment, fixed viewport bounds and the actual 48dp Retry layout. The focused tests and
+full host suite passed: **325 tests across 47 suites, zero failures, errors or skips**. Android
+debug compilation, Android lint and iOS simulator shared compilation also passed. These checks do
+not establish physical-device camera behavior; that remains pending. Logs and renders are in the
+local `work/camera-wait/correction/` scratch directory.
+
 ## Repeated saved-list selection and save feedback — 2026-10-31
 
 Selecting the active list is now a no-op, so duplicate card taps do not enqueue writes or invalidate transfer context. The App selection dispatcher validates live loaded state and only advances transfer ownership for a valid changed selection. Routine save progress occupies a reserved single line in the search-context row; loading, write errors, retry and recovery remain in the status region.
