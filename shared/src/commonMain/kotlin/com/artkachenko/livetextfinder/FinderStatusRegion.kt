@@ -236,9 +236,7 @@ private fun liveStatusMessage(
             OcrStatus.PermissionRequired -> stringResource(Res.string.status_permission)
             OcrStatus.Starting -> stringResource(Res.string.status_starting)
             OcrStatus.Paused -> stringResource(Res.string.status_paused)
-            OcrStatus.Unavailable -> state.message.ifBlank {
-                stringResource(Res.string.status_unavailable)
-            }
+            OcrStatus.Unavailable -> stringResource(Res.string.status_unavailable)
             OcrStatus.Error -> stringResource(Res.string.status_camera_error_recovery)
             OcrStatus.Scanning,
             OcrStatus.TextRecognized -> error("Handled above")

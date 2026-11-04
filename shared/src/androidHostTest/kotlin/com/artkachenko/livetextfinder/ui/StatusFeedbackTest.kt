@@ -1628,7 +1628,7 @@ class StatusFeedbackTest {
         var nodes = semanticsNodes(composeView)
         assertTrue(
             nodes.any {
-                it.textValues().contains("Allow camera access to scan printed Latin text")
+                it.textValues().contains("Allow camera access to scan text")
             },
         )
         assertTrue(nodes.any { it.textValues().contains("Image import failed.") })
@@ -1636,7 +1636,7 @@ class StatusFeedbackTest {
         state.value = OcrUiState(OcrStatus.Starting)
         measureCurrentComposition()
         nodes = semanticsNodes(composeView)
-        assertTrue(nodes.any { it.textValues().contains("Starting camera and text recognition") })
+        assertTrue(nodes.any { it.textValues().contains("Starting camera…") })
         assertTrue(nodes.any { it.textValues().contains("Image import failed.") })
 
         state.value = OcrUiState(OcrStatus.Paused)
@@ -1650,11 +1650,25 @@ class StatusFeedbackTest {
         )
         measureCurrentComposition()
         nodes = semanticsNodes(composeView)
-        assertTrue(
+        assertTrue(nodes.any { it.textValues().contains("Camera unavailable") })
+        assertFalse(
             nodes.any {
                 it.textValues().contains("No rear camera is available on this device.")
             },
         )
+        assertRendered("status-camera-unavailable-light.png")
+        click(nodeWithText(nodes, "Details"))
+        settleDialog()
+        val unavailableDialog = checkNotNull(ShadowDialog.getLatestDialog())
+        val unavailableDialogNodes = semanticsNodes(
+            findViewRoot(unavailableDialog.window?.decorView),
+        )
+        assertTrue(
+            unavailableDialogNodes.any {
+                it.textValues().contains("No rear camera is available on this device.")
+            },
+        )
+        click(nodeWithText(unavailableDialogNodes, "Close"))
 
         state.value = OcrUiState(OcrStatus.Error, "Camera is unavailable (code 77). Retry.")
         measureCurrentComposition()
@@ -1711,7 +1725,7 @@ class StatusFeedbackTest {
         var nodes = semanticsNodes(composeView)
         assertTrue(
             nodes.any {
-                it.textValues().contains("Imported image · No matches in recognized text")
+                it.textValues().contains("Imported image · No matches")
             },
         )
         click(nodeWithText(nodes, "Details"))
@@ -2145,7 +2159,7 @@ class StatusFeedbackTest {
         assertTrue(recoveryText.size.width > 0 && recoveryText.size.height > 0)
         assertTextIsLaidOut(recoveryText)
         assertWithinViewport(recoveryText)
-        val statusText = nodeWithText(nodes, "Scanning for Latin text · 2 matches")
+        val statusText = nodeWithText(nodes, "Scanning · 2 matches")
         assertTrue(preview.positionInRoot.y > recoveryText.positionInRoot.y)
         assertTrue(preview.positionInRoot.y > statusText.positionInRoot.y)
         assertWithinViewport(preview)

@@ -394,3 +394,19 @@ The retained-only viewport fixture uses immutable Stage 2 reference heights from
 cases. The earlier Stage 2 report's 276dp gain is historical and is reported separately. The
 iOS task checks shared-source compatibility only. No APK was generated or device runtime test was
 run; real-device, TalkBack and camera behavior remain unverified. Aggregate log and host captures are under `work/search-context/`.
+
+## Stage 5 status microcopy — 2026-11-04
+
+Status labels now use concise wording while preserving source prefixes and distinct waiting, empty,
+zero-match, highlight-waiting and retained-outline meanings. Unavailable camera summaries show
+“Camera unavailable”; the original technical reason remains in Recognition Details. The focused
+production status UI suite passed, including the summary-to-Details assertion. Light unavailable,
+dark error/details, light combined-preview and dark large-text renders were inspected from the
+local `work/status-words/` captures. No status rows or layout policy changed.
+
+The final aggregate command passed: Android debug compilation, **332 host tests across 48 suites
+with zero failures/errors/skips**, Android lint (**zero errors, 14 warnings**) and shared iOS
+simulator compilation. The focused UI suite passed after the final test edit. `git diff --check`
+passed; no configured Kotlin formatter exists. iOS validation checks shared-source compatibility
+only. No APK or device/runtime check was run; screen-reader and physical-device behavior remain
+unverified.
