@@ -410,3 +410,11 @@ simulator compilation. The focused UI suite passed after the final test edit. `g
 passed; no configured Kotlin formatter exists. iOS validation checks shared-source compatibility
 only. No APK or device/runtime check was run; screen-reader and physical-device behavior remain
 unverified.
+
+## Phase 2 design foundation — 2026-11-04
+
+The shared theme now uses a branded charcoal and mint dark palette, coordinated light palette, explicit Material typography/shape tokens, and the added 20dp screen-margin and 32dp section-spacing values. System light/dark selection and explicit overrides remain supported; Android dynamic color remains available by opt-in while the default uses the branded palette. The primary action is filled with a 52dp minimum height and 48dp minimum width. App root Surface explicitly paints `colorScheme.background`.
+
+Focused `LiveTextFinderThemeTest` passed on Android API 35: **6 tests, 0 failures/errors/skips**, including dynamic-color opt-in, branded fallback roles, contrast, primary-action measurement/click, and native light/dark controls. Render captures saved under `work/redesign/foundation/` were inspected. The final aggregate validation is recorded in the appended follow-up after it runs. No APK/device run was performed; this foundation stage does not complete the screen redesign.
+
+The final aggregate command `./gradlew :androidApp:compileDebugKotlin :shared:testAndroidHostTest :androidApp:lintDebug :shared:compileKotlinIosSimulatorArm64 --console=plain` passed in 30s (73 tasks; 21 executed). Host XML confirms **333 tests across 48 suites, zero failures/errors/skips**. Android lint reported **14 warnings, zero errors**. Shared iOS simulator compilation passed. Full log: `work/redesign/foundation/final-checks.log`.

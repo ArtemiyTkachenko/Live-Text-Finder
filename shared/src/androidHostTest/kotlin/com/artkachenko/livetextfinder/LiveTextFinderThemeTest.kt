@@ -118,6 +118,32 @@ class LiveTextFinderThemeTest {
         assertEquals(expectedDark.surfaceContainer, dark.value?.surfaceContainer)
     }
 
+
+    @Test
+    @Config(sdk = [35])
+    fun defaultThemeUsesBrandedPaletteAndKeepsLightDarkOverride() {
+        val light = mutableStateOf<ColorScheme?>(null)
+        val dark = mutableStateOf<ColorScheme?>(null)
+        mount(widthDp = 360, heightDp = 800) {
+            LiveTextFinderTheme(darkThemeOverride = false) {
+                light.value = MaterialTheme.colorScheme
+            }
+            LiveTextFinderTheme(darkThemeOverride = true) {
+                dark.value = MaterialTheme.colorScheme
+            }
+        }
+
+        assertEquals(Color(0xFF006B58), light.value?.primary)
+        assertEquals(Color(0xFF0C1016), dark.value?.background)
+        assertEquals(Color(0xFF171D25), dark.value?.surfaceContainer)
+        assertEquals(Color(0xFF232B36), dark.value?.surfaceContainerHigh)
+        assertEquals(Color(0xFF334155), dark.value?.outlineVariant)
+        assertEquals(Color(0xFFF4F7FA), dark.value?.onSurface)
+        assertEquals(Color(0xFFA5B2C0), dark.value?.onSurfaceVariant)
+        assertEquals(Color(0xFF60E1C1), dark.value?.primary)
+        assertEquals(Color(0xFF09221C), dark.value?.onPrimary)
+    }
+
     @Test
     @Config(sdk = [35])
     fun fallbackSchemesKeepUsedRolesReadableAndActionTouchTargetLargeEnough() {
@@ -135,18 +161,23 @@ class LiveTextFinderThemeTest {
         assertTrue(contrastRatio(dark.onSecondaryContainer, dark.secondaryContainer) >= 4.5)
 
         val actionSize = mutableStateOf(IntSize.Zero)
+        val clicks = mutableIntStateOf(0)
         mount(widthDp = 360, heightDp = 160) {
-            LiveTextFinderTheme(darkThemeOverride = false, dynamicColor = false) {
+            LiveTextFinderTheme(darkThemeOverride = false) {
                 FinderPrimaryAction(
                     label = "Freeze frame",
                     enabled = true,
                     modifier = Modifier.onSizeChanged { actionSize.value = it },
-                    onClick = ::ignoreAction,
+                    onClick = { clicks.intValue++ },
                 )
             }
         }
         val density = checkNotNull(composeView).resources.displayMetrics.density
-        assertTrue(actionSize.value.height / density >= 48f)
+        assertTrue(actionSize.value.height / density >= 52f)
+        assertTrue(actionSize.value.width / density >= 48f)
+        val action = nodeWithText(semanticsNodes(), "Freeze frame", clickable = true)
+        assertTrue(checkNotNull(action.config.getOrNull(SemanticsActions.OnClick)?.action)())
+        assertEquals(1, clicks.intValue)
     }
 
     @Test
@@ -323,7 +354,10 @@ class LiveTextFinderThemeTest {
                     CompositionLocalProvider(
                         LocalDensity provides Density(density = 1f, fontScale = fixture.fontScale),
                     ) {
-                        Surface(Modifier.fillMaxSize()) {
+                        Surface(
+                            modifier = Modifier.fillMaxSize(),
+                            color = MaterialTheme.colorScheme.background,
+                        ) {
                             AppContentColumn(
                                 scrollState = scrollState,
                                 scrollable = fixture.scrollable,
@@ -434,6 +468,11 @@ class LiveTextFinderThemeTest {
             }
             val bitmap = captureRenderedBitmap()
             assertTrue(countDistinctColors(bitmap) > 16)
+            val expectedBackground = if (fixture.dark) Color(0xFF0C1016) else Color(0xFFF5F8F7)
+            assertEquals(expectedBackground.toArgb(), bitmap.getPixel(0, 0))
+            val expectedPrimary = if (fixture.dark) Color(0xFF60E1C1) else Color(0xFF006B58)
+            val primaryPixels = countPixels(bitmap, expectedPrimary.toArgb())
+            assertTrue(primaryPixels > 100)
             if (outputDirectory != null) {
                 saveRenderedFixture(outputDirectory, fixture.fileName, bitmap)
             }
@@ -561,6 +600,16 @@ class LiveTextFinderThemeTest {
         )
         composeView.draw(Canvas(bitmap))
         return bitmap
+    }
+
+    private fun countPixels(bitmap: Bitmap, targetColor: Int): Int {
+        var count = 0
+        for (y in 0 until bitmap.height) {
+            for (x in 0 until bitmap.width) {
+                if (bitmap.getPixel(x, y) == targetColor) count++
+            }
+        }
+        return count
     }
 
     private fun countDistinctColors(bitmap: Bitmap): Int {
