@@ -13,10 +13,11 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
+import com.artkachenko.livetextfinder.search.SearchMatchMode
 import livetextfinder.shared.generated.resources.Res
 import livetextfinder.shared.generated.resources.finder_options
+import livetextfinder.shared.generated.resources.search_context_manual_inactive
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
@@ -26,8 +27,14 @@ internal fun FinderSearchControls(
     onQueryChange: (String) -> Unit,
     searchListsLabel: String,
     onSearchLists: () -> Unit,
-    searchContext: String,
+    activeListName: String? = null,
+    activeListTermCount: Int = 0,
+    matchMode: SearchMatchMode = SearchMatchMode.Substring,
+    onTerms: () -> Unit = {},
+    onUseManual: () -> Unit = {},
+    searchContext: String? = null,
     onOptions: () -> Unit,
+    saving: Boolean = false,
     savingLabel: String? = null,
     captureLabel: String?,
     captureEnabled: Boolean,
@@ -63,6 +70,11 @@ internal fun FinderSearchControls(
                 label = {
                     Text("Find in recognized text")
                 },
+                supportingText = if (activeListName != null) {
+                    { Text(stringResource(Res.string.search_context_manual_inactive)) }
+                } else {
+                    null
+                },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
                 shape = MaterialTheme.shapes.medium,
@@ -75,22 +87,19 @@ internal fun FinderSearchControls(
                 TextButton(onClick = onSearchLists) {
                     Text(searchListsLabel)
                 }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        searchContext,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(
-                        savingLabel ?: " ",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (savingLabel == null) Color.Transparent else
-                            MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
             }
+            SearchContext(
+                activeListName = activeListName,
+                termCount = activeListTermCount,
+                manualQuery = query,
+                matchMode = matchMode,
+                saving = saving,
+                compact = false,
+                onTerms = onTerms,
+                onUseManual = onUseManual,
+                contextOverride = searchContext,
+                savingLabel = savingLabel,
+            )
             TextButton(onClick = onOptions) {
                 Text(stringResource(Res.string.finder_options))
             }

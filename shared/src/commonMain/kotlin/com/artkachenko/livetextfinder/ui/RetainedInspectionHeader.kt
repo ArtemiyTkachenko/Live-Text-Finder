@@ -17,9 +17,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.artkachenko.livetextfinder.search.SearchMatchMode
 import livetextfinder.shared.generated.resources.Res
 import livetextfinder.shared.generated.resources.finder_options
 import livetextfinder.shared.generated.resources.inspection_done
@@ -29,8 +28,8 @@ import livetextfinder.shared.generated.resources.inspection_more
 import livetextfinder.shared.generated.resources.inspection_results
 import livetextfinder.shared.generated.resources.inspection_results_occurrences
 import livetextfinder.shared.generated.resources.inspection_results_terms
+import livetextfinder.shared.generated.resources.inspection_results_unavailable
 import livetextfinder.shared.generated.resources.status_cancel
-import livetextfinder.shared.generated.resources.status_saving
 import livetextfinder.shared.generated.resources.status_share_image
 import livetextfinder.shared.generated.resources.status_share_preparing
 import org.jetbrains.compose.resources.stringResource
@@ -95,17 +94,22 @@ internal object RetainedInspectionActionDispatcher {
 
 @Composable
 internal fun RetainedInspectionHeader(
-    searchContext: String,
+    activeListName: String? = null,
+    activeListTermCount: Int = 0,
+    manualQuery: String = "",
+    matchMode: SearchMatchMode = SearchMatchMode.Substring,
+    searchContext: String? = null,
     saving: Boolean,
     editing: Boolean,
     managerOpen: Boolean,
     returnLabel: String?,
-    resultCount: Int,
+    resultCount: Int?,
     occurrenceCount: Int,
     sharePreparing: Boolean,
     onEditSearch: () -> Unit,
     onReturn: () -> Unit,
     onTerms: () -> Unit,
+    onUseManual: () -> Unit = {},
     onOccurrences: () -> Unit,
     onLists: () -> Unit,
     onOptions: () -> Unit,
@@ -119,20 +123,16 @@ internal fun RetainedInspectionHeader(
         verticalArrangement = Arrangement.spacedBy(FinderSpacing.extraSmall),
     ) {
         if (!editing) {
-            Text(
-                text = searchContext,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = if (saving) stringResource(Res.string.status_saving) else " ",
-                style = MaterialTheme.typography.labelSmall,
-                color = if (saving) MaterialTheme.colorScheme.onSurfaceVariant else
-                    Color.Transparent,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+            SearchContext(
+                activeListName = activeListName,
+                termCount = activeListTermCount,
+                manualQuery = manualQuery,
+                matchMode = matchMode,
+                saving = saving,
+                compact = true,
+                onTerms = onTerms,
+                onUseManual = onUseManual,
+                contextOverride = searchContext,
             )
         }
         FlowRow(
@@ -162,7 +162,13 @@ internal fun RetainedInspectionHeader(
                     onClick = { resultsExpanded = true },
                     modifier = Modifier.heightIn(min = 48.dp),
                 ) {
-                    Text(stringResource(Res.string.inspection_results, resultCount))
+                    Text(
+                        if (resultCount == null) {
+                            stringResource(Res.string.inspection_results_unavailable)
+                        } else {
+                            stringResource(Res.string.inspection_results, resultCount)
+                        },
+                    )
                 }
                 DropdownMenu(
                     expanded = resultsExpanded,
@@ -179,7 +185,7 @@ internal fun RetainedInspectionHeader(
                     DropdownMenuItem(
                         modifier = Modifier.heightIn(min = 48.dp),
                         text = { Text(stringResource(Res.string.inspection_results_occurrences)) },
-                        enabled = occurrenceCount > 0,
+                        enabled = resultCount != null && occurrenceCount > 0,
                         onClick = {
                             resultsExpanded = false
                             onOccurrences()

@@ -461,6 +461,31 @@ class SearchSessionControllerTest {
     }
 
     @Test
+    fun dispatchingManualSearchInvalidatesBeforeMutationAndTypingLeavesListMode() {
+        val store = ControlledStore()
+        val session = SearchSessionController(store)
+        val list = SavedSearchList("parts", "Parts", listOf("bolt"))
+        store.completeLoad(PersistedSearchState("saved query", listOf(list), list.id))
+        var invalidations = 0
+
+        assertTrue(dispatchSearchListSelection(session, null) {
+            assertEquals(list.id, session.state.value.persisted.activeListId)
+            invalidations++
+        })
+        assertNull(session.state.value.persisted.activeListId)
+        assertEquals("saved query", session.state.value.persisted.manualQuery)
+        assertEquals(1, invalidations)
+
+        assertFalse(dispatchSearchListSelection(session, null) { invalidations++ })
+        assertEquals(1, invalidations)
+
+        session.selectList(list.id)
+        session.setManualQuery("typed query")
+        assertNull(session.state.value.persisted.activeListId)
+        assertEquals("typed query", session.state.value.persisted.manualQuery)
+    }
+
+    @Test
     fun acceptedQuerySurvivesOversizeRejectionAndStoredLoad() {
         val store = ControlledStore()
         val session = SearchSessionController(store)

@@ -43,6 +43,7 @@ import livetextfinder.shared.generated.resources.status_no_text_sample
 import livetextfinder.shared.generated.resources.status_outlined_count
 import livetextfinder.shared.generated.resources.status_retained_outlines
 import livetextfinder.shared.generated.resources.status_retention
+import livetextfinder.shared.generated.resources.status_results_unavailable
 import livetextfinder.shared.generated.resources.status_scanning
 import livetextfinder.shared.generated.resources.status_source_frozen
 import livetextfinder.shared.generated.resources.status_source_imported
@@ -103,6 +104,10 @@ internal fun sourceStatusMessage(
         SearchFeedbackKind.WaitingForFreshText -> stringResource(Res.string.status_waiting_fresh)
         SearchFeedbackKind.WaitingForContent -> stringResource(Res.string.status_empty_content)
         SearchFeedbackKind.WaitingForAreaMapping -> stringResource(Res.string.status_area_waiting)
+        SearchFeedbackKind.ResultsUnavailable -> retainedMessage(
+            stringResource(Res.string.status_results_unavailable),
+            feedback.retainedOutlines,
+        )
         SearchFeedbackKind.NoReadableText -> retainedMessage(
             stringResource(Res.string.status_no_readable_text),
             feedback.retainedOutlines,

@@ -19,6 +19,7 @@ internal enum class SearchFeedbackKind {
     WaitingForFreshText,
     WaitingForContent,
     WaitingForAreaMapping,
+    ResultsUnavailable,
     NoReadableText,
     NoMatches,
     NoMatchesInArea,
@@ -31,6 +32,23 @@ internal data class SearchFeedback(
     val matchCount: Int = 0,
     val retainedOutlines: Boolean = false,
 )
+
+internal fun suppressUnavailableResultFeedback(
+    feedback: SearchFeedback,
+    resultsAvailable: Boolean,
+    hasQuery: Boolean,
+): SearchFeedback {
+    if (resultsAvailable || !hasQuery || feedback.kind in setOf(
+            SearchFeedbackKind.EnterQuery,
+            SearchFeedbackKind.WaitingForFreshText,
+            SearchFeedbackKind.WaitingForContent,
+            SearchFeedbackKind.WaitingForAreaMapping,
+        )
+    ) {
+        return feedback
+    }
+    return feedback.copy(kind = SearchFeedbackKind.ResultsUnavailable, matchCount = 0)
+}
 
 internal data class RecognitionDetails(
     val source: StatusSource,

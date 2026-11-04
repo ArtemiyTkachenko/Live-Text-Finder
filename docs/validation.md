@@ -378,3 +378,19 @@ The iOS task checks shared-source compilation only; no iOS application runtime o
 The final aggregate command passed: Android debug Kotlin compilation, **315 Android host tests across 46 suites with zero failures/errors/skips**, Android lint (**zero errors, 14 findings**) and shared iOS simulator compilation. The 14 lint findings are existing tool/dependency update, SDK_INT and monochrome-icon warnings. Focused transfer suites include 15 Android owner tests and 11 common-format tests. Native Options coverage verifies the actual Import/Export action node bounds meet 48dp at 320×360 with 1.4× font scale, and scroll reachability of the terms-only help. The rendered fixture and aggregate logs are in the local scratch directory `work/list-transfer/`; they are not product files.
 
 The iOS task confirms shared-source compatibility only; iOS transfer actions remain unsupported. No APK or device/provider run was performed. Actual system-picker/provider metadata, permissions, stream stalls and external destination behavior remain device acceptance checks. Exports contain terms only; no provider-specific behavior or external-file completion is claimed beyond fake resolver/stream host coverage. Correction regressions cover delivered-result invalidation after STOP/URI, picker-result consumption across owner recreation, duplicate callbacks, worker-dispatch failure, direct editor/session changes before provider open and while input/output open is blocked, returned-stream closure, actual owner gates, and the production import-draft helper through Cancel, name collision and ordinary Save. Correction aggregate log: `work/list-transfer/correction-checks.log`.
+
+## Search context and result availability — 2026-11-04
+
+The required aggregate command passed: Android debug Kotlin compilation, **332 Android host tests
+across 48 suites with zero failures/errors/skips**, Android lint (**zero errors, 14 existing
+warnings**) and shared iOS simulator compilation. Focused context, status, controller and source
+availability tests passed (70 tests). Host captures for the light/dark large-text context and
+unavailable Terms dialog were inspected; they are local evidence under
+`work/search-context/renders/`.
+
+The retained-only viewport fixture uses immutable Stage 2 reference heights from HEAD `a015704`
+(252dp unselected, 184dp selected), not the changed full controls. Its current fixture measured
+476dp unselected and 408dp selected for frozen and imported sources, a 224dp increase in both
+cases. The earlier Stage 2 report's 276dp gain is historical and is reported separately. The
+iOS task checks shared-source compatibility only. No APK was generated or device runtime test was
+run; real-device, TalkBack and camera behavior remain unverified. Aggregate log and host captures are under `work/search-context/`.

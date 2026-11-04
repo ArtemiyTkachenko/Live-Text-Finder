@@ -980,6 +980,203 @@ class StatusFeedbackTest {
     }
 
     @Test
+    fun sharedSearchContextKeepsControllerAndUnavailableTermDisclosureInSync() {
+        val session = SearchSessionController(InMemorySearchSessionStore())
+        val listName = "A very long saved search list name for narrow screens"
+        session.saveList(null, listName, "bolt\nnut")
+        val listId = checkNotNull(session.state.value.persisted.lists.singleOrNull()).id
+        session.setManualQuery("preserved query")
+        session.selectList(listId)
+        val darkTheme = mutableStateOf(false)
+        val saving = mutableStateOf(false)
+        val termsOpen = mutableStateOf(false)
+        val matchesOpen = mutableStateOf(true)
+        var invalidationCount = 0
+        var invalidatedBeforeMutation = false
+        val queryChange: (String) -> Unit = { text -> session.setManualQuery(text) }
+
+        mount(widthDp = 320, heightDp = 1_000, fontScale = 1.2f) {
+            LiveTextFinderTheme(darkThemeOverride = darkTheme.value, dynamicColor = false) {
+                Surface(Modifier.fillMaxSize()) {
+                    Column {
+                        FinderSearchControls(
+                            showTitle = false,
+                            query = session.state.value.persisted.manualQuery,
+                            onQueryChange = queryChange,
+                            searchListsLabel = "Lists",
+                            onSearchLists = ::ignoreAction,
+                            activeListName = session.state.value.activeList?.name,
+                            activeListTermCount = 2,
+                            matchMode = session.state.value.persisted.matchMode,
+                            onTerms = {
+                                RetainedInspectionActionDispatcher.showTerms(
+                                    { termsOpen.value = it },
+                                    { matchesOpen.value = it },
+                                )
+                            },
+                            onUseManual = {
+                                dispatchSearchListSelection(session, null) {
+                                    invalidatedBeforeMutation =
+                                        session.state.value.persisted.activeListId == listId
+                                    invalidationCount++
+                                }
+                            },
+                            onOptions = ::ignoreAction,
+                            saving = saving.value,
+                            captureLabel = null,
+                            captureEnabled = false,
+                            onCapture = ::ignoreAction,
+                            pendingCaptureLabel = null,
+                            onCancelCapture = ::ignoreAction,
+                            secondaryActionLabel = null,
+                            onSecondaryAction = ::ignoreAction,
+                        )
+                        RetainedInspectionHeader(
+                            activeListName = session.state.value.activeList?.name,
+                            activeListTermCount = 2,
+                            manualQuery = session.state.value.persisted.manualQuery,
+                            matchMode = session.state.value.persisted.matchMode,
+                            saving = saving.value,
+                            editing = false,
+                            managerOpen = false,
+                            returnLabel = null,
+                            resultCount = null,
+                            occurrenceCount = 0,
+                            sharePreparing = false,
+                            onEditSearch = ::ignoreAction,
+                            onReturn = ::ignoreAction,
+                            onTerms = {
+                                RetainedInspectionActionDispatcher.showTerms(
+                                    { termsOpen.value = it },
+                                    { matchesOpen.value = it },
+                                )
+                            },
+                            onUseManual = {
+                                dispatchSearchListSelection(session, null) {
+                                    invalidatedBeforeMutation =
+                                        session.state.value.persisted.activeListId == listId
+                                    invalidationCount++
+                                }
+                            },
+                            onOccurrences = ::ignoreAction,
+                            onLists = ::ignoreAction,
+                            onOptions = ::ignoreAction,
+                            onShare = ::ignoreAction,
+                            onCancelShare = ::ignoreAction,
+                        )
+                        if (termsOpen.value) {
+                            SearchTermResultsDialog(
+                                terms = listOf(
+                                    SearchTermSummary(
+                                        "bolt",
+                                        "bolt",
+                                        com.artkachenko.livetextfinder.search.SearchHighlightPalette
+                                            .colors.first(),
+                                        3,
+                                    ),
+                                ),
+                                resultsAvailable = false,
+                                canLocate = false,
+                                onDismiss = { termsOpen.value = false },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        var nodes = semanticsNodes(composeView)
+        assertTrue(nodes.count { it.textValues().contains("Substring") } >= 2)
+        assertTrue(nodes.count { it.textValues().contains("2 terms") } >= 2)
+        assertTrue(nodes.count { it.textValues().contains("Use manual search") } >= 2)
+        assertTrue(nodes.any { it.textValues().contains("Results") })
+        assertFalse(nodes.any { it.textValues().contains("Results (0)") })
+        fun assertActionSize(label: String) {
+            val density = composeView!!.resources.displayMetrics.density
+            val actions = nodes.filter { node ->
+                node.textValues().contains(label) &&
+                    node.config.getOrNull(SemanticsActions.OnClick) != null
+            }
+            assertEquals(2, actions.size, "$label action count")
+            actions.forEach { node ->
+                assertTrue(node.size.width / density >= 48f, "$label width: ${node.size}")
+                assertTrue(node.size.height / density >= 48f, "$label height: ${node.size}")
+            }
+        }
+        assertActionSize("Terms")
+        assertActionSize("Use manual search")
+        assertRendered("search-context-list-light-large-text.png")
+        val contextBeforeSave = nodes.first {
+            it.textValues().any { text -> text.contains(listName) }
+        }.positionInRoot
+
+        saving.value = true
+        measureCurrentComposition()
+        nodes = semanticsNodes(composeView)
+        assertTrue(nodes.any { it.textValues().contains("Saving…") })
+        assertEquals(
+            contextBeforeSave,
+            nodes.first { it.textValues().any { text -> text.contains(listName) } }.positionInRoot,
+        )
+        assertRendered("search-context-saving-light-large-text.png")
+        saving.value = false
+        measureCurrentComposition()
+        nodes = semanticsNodes(composeView)
+        assertTrue(nodes.count { it.textValues().contains("Substring") } >= 2)
+        assertRendered("search-context-idle-light-large-text.png")
+
+        val identityBeforeModeChange = session.state.value.activeSearch.identity
+        session.setMatchMode(SearchMatchMode.WholeWord)
+        measureCurrentComposition()
+        nodes = semanticsNodes(composeView)
+        assertTrue(nodes.count { it.textValues().contains("Whole words") } >= 2)
+        assertTrue(identityBeforeModeChange != session.state.value.activeSearch.identity)
+        darkTheme.value = true
+        measureCurrentComposition()
+        nodes = semanticsNodes(composeView)
+        assertTrue(nodes.count { it.textValues().contains("Whole words") } >= 2)
+        assertRendered("search-context-list-dark-large-text.png")
+
+        click(nodeWithText(nodes, "Use manual search", clickable = true))
+        assertTrue(invalidatedBeforeMutation)
+        assertEquals(1, invalidationCount)
+        assertNull(session.state.value.persisted.activeListId)
+        assertEquals("preserved query", session.state.value.persisted.manualQuery)
+        assertFalse(dispatchSearchListSelection(session, null) { invalidationCount++ })
+        assertEquals(1, invalidationCount)
+
+        session.selectList(listId)
+        measureCurrentComposition()
+        nodes = semanticsNodes(composeView)
+        val queryField = nodes.single {
+            it.config.getOrNull(SemanticsProperties.EditableText)?.text == "preserved query"
+        }
+        val setQuery = checkNotNull(
+            queryField.config.getOrNull(SemanticsActions.SetText)?.action,
+        )
+        assertTrue(setQuery(AnnotatedString("typed query")))
+        Snapshot.sendApplyNotifications()
+        measureCurrentComposition()
+        assertNull(session.state.value.persisted.activeListId)
+        assertEquals("typed query", session.state.value.persisted.manualQuery)
+
+        nodes = semanticsNodes(composeView)
+        click(nodeWithText(nodes, "Terms", clickable = true))
+        settleDialog()
+        assertFalse(matchesOpen.value)
+        assertTrue(termsOpen.value)
+        val dialog = checkNotNull(ShadowDialog.getLatestDialog())
+        val dialogNodes = semanticsNodes(findViewRoot(dialog.window?.decorView))
+        assertTrue(dialogNodes.any {
+            it.textValues().contains("Results are not current for this search and image.")
+        })
+        assertTrue(dialogNodes.any { it.textValues().contains("—") })
+        assertTrue(dialogNodes.none { it.textValues().contains("3") })
+        assertDialogRendered(dialog, "search-context-terms-unavailable.png")
+        assertTouchBounds(nodeWithText(dialogNodes, "Done"), dialog.window?.decorView)
+    }
+
+    @Test
     fun productionHighlightPaletteKeepsRowsDisabledUntilSessionIsReady() {
         val selectedColor = mutableStateOf(HighlightColor.Yellow)
         val selectedColors = mutableListOf<HighlightColor>()

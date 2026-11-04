@@ -45,10 +45,12 @@ import com.artkachenko.livetextfinder.search.PreviewPoint
 import com.artkachenko.livetextfinder.search.SearchTermSummary
 import com.artkachenko.livetextfinder.search.StillMatchRow
 import livetextfinder.shared.generated.resources.Res
+import livetextfinder.shared.generated.resources.search_context_count_unavailable
 import livetextfinder.shared.generated.resources.search_result_count_description
 import livetextfinder.shared.generated.resources.search_results_done
 import livetextfinder.shared.generated.resources.search_results_locate_hint
 import livetextfinder.shared.generated.resources.search_results_title
+import livetextfinder.shared.generated.resources.search_results_unavailable_explanation
 import livetextfinder.shared.generated.resources.status_cancel
 import livetextfinder.shared.generated.resources.still_copy_match
 import livetextfinder.shared.generated.resources.still_match_copy_short
@@ -250,6 +252,7 @@ internal fun StillMatchesDialog(
 @Composable
 internal fun SearchTermResultsDialog(
     terms: List<SearchTermSummary>,
+    resultsAvailable: Boolean = true,
     canLocate: Boolean = true,
     onSelect: (String) -> Unit = {},
     onDismiss: () -> Unit,
@@ -259,7 +262,14 @@ internal fun SearchTermResultsDialog(
         title = { Text(stringResource(Res.string.search_results_title)) },
         text = {
             Column {
-                if (!canLocate) {
+                if (!resultsAvailable) {
+                    Text(
+                        stringResource(Res.string.search_results_unavailable_explanation),
+                        modifier = Modifier.padding(bottom = 8.dp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (resultsAvailable && !canLocate) {
                     Text(
                         stringResource(Res.string.search_results_locate_hint),
                         modifier = Modifier.padding(bottom = 8.dp),
@@ -279,7 +289,8 @@ internal fun SearchTermResultsDialog(
                         Row(
                             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).selectable(
                                 selected = false,
-                                enabled = canLocate && term.occurrenceCount > 0,
+                                enabled = resultsAvailable && canLocate &&
+                                    term.occurrenceCount > 0,
                                 role = Role.Button,
                                 onClick = { onSelect(term.termId) },
                             ),
@@ -299,12 +310,16 @@ internal fun SearchTermResultsDialog(
                                     ),
                             )
                             Text(term.label, modifier = Modifier.weight(1f))
-                            Text(
-                                term.occurrenceCount.toString(),
-                                modifier = Modifier.semantics {
-                                    contentDescription = "$countDescription ${term.occurrenceCount}"
-                                },
-                            )
+                            if (resultsAvailable) {
+                                Text(
+                                    term.occurrenceCount.toString(),
+                                    modifier = Modifier.semantics {
+                                        contentDescription = "$countDescription ${term.occurrenceCount}"
+                                    },
+                                )
+                            } else {
+                                Text(stringResource(Res.string.search_context_count_unavailable))
+                            }
                         }
                     }
                 }

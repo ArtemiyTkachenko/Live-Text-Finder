@@ -49,6 +49,7 @@ internal fun FinderStatusRegion(
     search: TextSearchResult,
     presentation: SearchPresentation,
     highlights: Highlights,
+    resultsAvailable: Boolean = true,
     areaSelected: Boolean,
     shouldShowViews: Boolean,
     onRetrySavedData: () -> Unit,
@@ -123,6 +124,7 @@ internal fun FinderStatusRegion(
                 selectedContent,
                 presentation,
                 highlights,
+                resultsAvailable,
                 areaSelected,
             ),
         )
@@ -133,6 +135,7 @@ internal fun FinderStatusRegion(
             selectedContent,
             presentation,
             highlights,
+            resultsAvailable,
             areaSelected,
         )
     }
@@ -196,19 +199,27 @@ private fun statusFeedback(
     content: RecognizedTextContent?,
     presentation: SearchPresentation,
     highlights: Highlights,
+    resultsAvailable: Boolean,
     areaSelected: Boolean,
-): SearchFeedback = searchFeedback(
-    query = search.query,
-    content = content,
-    matchCount = search.occurrences.size,
-    hasLiveSnapshot = source != StatusSource.LiveCamera || search.snapshot != null,
-    areaSelected = source == StatusSource.LiveCamera && areaSelected,
-    areaReady = presentation.areaReady,
-    highlightsReady = highlights.ready,
-    retainedOutlines = source == StatusSource.LiveCamera &&
-        presentation.outlinedElements.isNotEmpty() &&
-        presentation.occurrences.any { it.firstMissingAtMillis != null },
-)
+): SearchFeedback {
+    val feedback = searchFeedback(
+        query = search.query,
+        content = content,
+        matchCount = search.occurrences.size,
+        hasLiveSnapshot = source != StatusSource.LiveCamera || search.snapshot != null,
+        areaSelected = source == StatusSource.LiveCamera && areaSelected,
+        areaReady = presentation.areaReady,
+        highlightsReady = highlights.ready,
+        retainedOutlines = source == StatusSource.LiveCamera &&
+            presentation.outlinedElements.isNotEmpty() &&
+            presentation.occurrences.any { it.firstMissingAtMillis != null },
+    )
+    return suppressUnavailableResultFeedback(
+        feedback = feedback,
+        resultsAvailable = resultsAvailable,
+        hasQuery = search.query.isNotEmpty(),
+    )
+}
 
 @Composable
 private fun liveStatusMessage(
@@ -217,6 +228,7 @@ private fun liveStatusMessage(
     content: RecognizedTextContent?,
     presentation: SearchPresentation,
     highlights: Highlights,
+    resultsAvailable: Boolean,
     areaSelected: Boolean,
 ): String {
     if (state.status != OcrStatus.Scanning && state.status != OcrStatus.TextRecognized) {
@@ -240,6 +252,7 @@ private fun liveStatusMessage(
             content,
             presentation,
             highlights,
+            resultsAvailable,
             areaSelected,
         ),
         scanning = true,

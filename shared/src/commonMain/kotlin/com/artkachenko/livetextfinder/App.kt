@@ -135,6 +135,7 @@ import livetextfinder.shared.generated.resources.search_list_transfer_reading
 import livetextfinder.shared.generated.resources.search_list_transfer_saving
 import livetextfinder.shared.generated.resources.search_results
 import livetextfinder.shared.generated.resources.search_results_locate_hint
+import livetextfinder.shared.generated.resources.search_results_unavailable
 import livetextfinder.shared.generated.resources.status_saving
 import livetextfinder.shared.generated.resources.still_match_copied
 import livetextfinder.shared.generated.resources.still_match_copy_failed
@@ -532,6 +533,18 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
             // This is the only IME inset owner. The weighted preview receives the remaining
             // height directly, so OCR status changes do not recalculate its available space.
             val shouldShowViews = isContentVisible()
+            val resultsAvailable = hasAvailableSearchResults(
+                search = search,
+                currentIdentity = activeSearch.identity,
+                importedState = importedState,
+                freezeState = freezeState,
+                ocrState = state,
+                presentation = presentation,
+                areaSelected = areaState != null,
+                currentAreaRevision = areaRevision,
+                shouldShowViews = shouldShowViews,
+                nowMillis = MonotonicClock.nowMillis(),
+            )
             val copyFailedMessage = stringResource(Res.string.still_match_copy_failed)
             val copiedMessage = stringResource(Res.string.still_match_copied)
             val copySelectedMatch: () -> Unit = {
@@ -670,19 +683,14 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                         ),
                         verticalArrangement = Arrangement.spacedBy(FinderSpacing.extraSmall),
                     ) {
-                        val searchContext = selectedList?.let {
-                            "${it.name} · ${it.terms.size} terms"
-                        } ?: "Manual search"
-                        val retainedSearchContext = if (selectedList != null || query.isBlank()) {
-                            searchContext
-                        } else {
-                            "Manual search · $query"
-                        }
                         val focusManager = LocalFocusManager.current
                         val keyboardController = LocalSoftwareKeyboardController.current
                         if (sourceIdentity != null) {
                             RetainedInspectionHeader(
-                                searchContext = retainedSearchContext,
+                                activeListName = selectedList?.name,
+                                activeListTermCount = selectedList?.terms?.size ?: 0,
+                                manualQuery = query,
+                                matchMode = activeSearch.matchMode,
                                 saving = sessionState.saving,
                                 editing = retainedSearchExpanded || managerOpen,
                                 managerOpen = managerOpen,
@@ -693,7 +701,9 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                                 } else {
                                     stringResource(Res.string.inspection_return_frozen)
                                 },
-                                resultCount = search.occurrences.size,
+                                resultCount = search.occurrences.size.takeIf {
+                                    resultsAvailable
+                                },
                                 occurrenceCount = matchRows.size,
                                 sharePreparing = shareOwner.state.value.status ==
                                     ImageShareStatus.Preparing,
@@ -718,6 +728,12 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                                         { searchResultsDialogOpen = it },
                                         { matchesDialogOpen = it },
                                     )
+                                },
+                                onUseManual = {
+                                    dispatchSearchListSelection(session, null) {
+                                        transferOwner.contextChanged()
+                                        transferContextRevision++
+                                    }
                                 },
                                 onOccurrences = {
                                     RetainedInspectionActionDispatcher.showOccurrences(
@@ -770,13 +786,23 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                                         { editor = editor.close() },
                                     )
                                 },
-                                searchContext = searchContext,
-                                onOptions = { optionsOpen = true },
-                                savingLabel = if (sessionState.saving) {
-                                    stringResource(Res.string.status_saving)
-                                } else {
-                                    null
+                                activeListName = selectedList?.name,
+                                activeListTermCount = selectedList?.terms?.size ?: 0,
+                                matchMode = activeSearch.matchMode,
+                                onTerms = {
+                                    RetainedInspectionActionDispatcher.showTerms(
+                                        { searchResultsDialogOpen = it },
+                                        { matchesDialogOpen = it },
+                                    )
                                 },
+                                onUseManual = {
+                                    dispatchSearchListSelection(session, null) {
+                                        transferOwner.contextChanged()
+                                        transferContextRevision++
+                                    }
+                                },
+                                onOptions = { optionsOpen = true },
+                                saving = sessionState.saving,
                                 captureLabel = captureLabel,
                                 captureEnabled = freezeState.mode != FreezeMode.Live ||
                                     state.status == OcrStatus.Scanning ||
@@ -836,6 +862,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                             search = search,
                             presentation = presentation,
                             highlights = highlights,
+                            resultsAvailable = resultsAvailable,
                             areaSelected = areaState != null,
                             shouldShowViews = shouldShowViews,
                             onRetrySavedData = {
@@ -845,13 +872,17 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                             },
                             onRequestReset = { resetConfirm = true },
                         )
-                        if (activeSearch.terms.isNotEmpty() && sourceIdentity == null) {
+                        if (search.query.isNotEmpty() && sourceIdentity == null) {
                             TextButton(onClick = { searchResultsDialogOpen = true }) {
                                 Text(
-                                    stringResource(
-                                        Res.string.search_results,
-                                        search.occurrences.size,
-                                    ),
+                                    if (resultsAvailable) {
+                                        stringResource(
+                                            Res.string.search_results,
+                                            search.occurrences.size,
+                                        )
+                                    } else {
+                                        stringResource(Res.string.search_results_unavailable)
+                                    },
                                 )
                             }
                         }
@@ -1155,6 +1186,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                             val selectedRow = selectedNavigationRow
                             if (selectedPosition > 0 && selectedRow != null) {
                                 val canLocate = shouldShowViews &&
+                                    resultsAvailable &&
                                     stillActionIsCurrent(selectedRow, expectedSelectedIndex)
                                 if (!canLocate) {
                                     ContextMessage(
@@ -1220,13 +1252,14 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                     },
                     canLocate = shouldShowViews && selectedDialogRow?.let {
                         stillActionIsCurrent(it, expectedSelectedIndex)
-                    } == true,
+                    } == true && resultsAvailable,
                 )
             }
             if (searchResultsDialogOpen) {
                 SearchTermResultsDialog(
                     terms = termSummaries,
-                    canLocate = shouldShowViews && sourceIdentity != null,
+                    resultsAvailable = resultsAvailable,
+                    canLocate = shouldShowViews && sourceIdentity != null && resultsAvailable,
                     onSelect = { termId ->
                         val row = matchRows.firstOrNull {
                             it.occurrence.termId == termId && stillMatchText(it, search) != null

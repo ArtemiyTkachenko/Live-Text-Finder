@@ -14,6 +14,8 @@
     <string name="search_results_done">Done</string>
     <string name="search_result_count_description">Occurrences</string>
     <string name="search_results_locate_hint">Show the still image to locate a match.</string>
+    <string name="search_results_unavailable">Results unavailable</string>
+    <string name="search_results_unavailable_explanation">Results are not current for this search and image.</string>
     <string name="highlight_color_preview">Color preview</string>
     <string name="highlight_color_red">Red</string>
     <string name="highlight_color_green">Green</string>
@@ -48,6 +50,7 @@
     <string name="inspection_results_terms">Terms</string>
     <string name="inspection_results_occurrences">Occurrences</string>
     <string name="inspection_results">Results (%1$d)</string>
+    <string name="inspection_results_unavailable">Results</string>
     <string name="inspection_return_frozen">Resume scanning</string>
     <string name="inspection_lists">Lists</string>
     <string name="finder_options_title">Options</string>
@@ -56,6 +59,11 @@
     <string name="finder_match_substring">Substring</string>
     <string name="finder_match_whole_words">Whole words</string>
     <string name="finder_match_help">Searches literal text. Whole words require non-letter, number, mark, or underscore boundaries.</string>
+    <string name="search_context_manual">Manual search</string>
+    <string name="search_context_manual_inactive">Inactive while a list is selected. Typing switches to manual search.</string>
+    <string name="search_context_terms">Terms</string>
+    <string name="search_context_use_manual">Use manual search</string>
+    <string name="search_context_count_unavailable">—</string>
     <string name="finder_options_import">Import image</string>
     <string name="search_list_import">Import search list</string>
     <string name="search_list_export">Export selected list</string>
@@ -98,6 +106,7 @@
     <string name="status_waiting_fresh">Waiting for fresh text</string>
     <string name="status_enter_query">Enter text to search</string>
     <string name="status_area_waiting">Waiting for live area mapping</string>
+    <string name="status_results_unavailable">Waiting for current search results</string>
     <string name="status_no_readable_text">No readable text detected</string>
     <string name="status_no_matches">No matches in recognized text</string>
     <string name="status_no_area_matches">No matches in live area</string>

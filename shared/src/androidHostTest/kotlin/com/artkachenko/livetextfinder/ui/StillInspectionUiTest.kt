@@ -145,11 +145,10 @@ class StillInspectionUiTest {
     }
 
     @Test
-    fun retainedLayoutComparesAgainstIdenticalFrozenAndImportedFixtures() {
+    fun retainedLayoutExceedsPreservedStage2ViewportBaselines() {
         listOf("frozen", "imported").forEach { source ->
             listOf(false, true).forEach { selected ->
                 disposeComposition()
-                val compact = mutableStateOf(false)
                 val saving = mutableStateOf(false)
                 val previewSize = mutableStateOf(IntSize.Zero)
                 val previewBounds = mutableStateOf<Rect?>(null)
@@ -207,56 +206,30 @@ class StillInspectionUiTest {
                                             FinderSpacing.extraSmall,
                                         ),
                                     ) {
-                                        if (compact.value) {
-                                            RetainedInspectionHeader(
-                                                searchContext = "Manual search · invoice",
-                                                saving = saving.value,
-                                                editing = false,
-                                                managerOpen = false,
-                                                returnLabel = if (source == "frozen") {
-                                                    "Resume scanning"
-                                                } else {
-                                                    "Return to camera"
-                                                },
-                                                resultCount = search.occurrences.size,
-                                                occurrenceCount = rows.size,
-                                                sharePreparing = false,
-                                                onEditSearch = {},
-                                                onReturn = {},
-                                                onTerms = {},
-                                                onOccurrences = {},
-                                                onLists = {},
-                                                onOptions = {},
-                                                onShare = {},
-                                                onCancelShare = {},
-                                            )
-                                        } else {
-                                            FinderSearchControls(
-                                                showTitle = true,
-                                                query = "invoice",
-                                                onQueryChange = {},
-                                                searchListsLabel = "Search lists",
-                                                onSearchLists = {},
-                                                searchContext = "Manual search",
-                                                onOptions = {},
-                                                captureLabel = if (source == "frozen") {
-                                                    "Resume live"
-                                                } else {
-                                                    null
-                                                },
-                                                captureEnabled = true,
-                                                onCapture = {},
-                                                pendingCaptureLabel = null,
-                                                onCancelCapture = {},
-                                                secondaryActionLabel = if (source == "imported") {
-                                                    "Return to camera"
-                                                } else {
-                                                    null
-                                                },
-                                                onSecondaryAction = {},
-                                                savingLabel = if (saving.value) "Saving…" else null,
-                                            )
-                                        }
+                                        RetainedInspectionHeader(
+                                            activeListName = null,
+                                            manualQuery = "invoice",
+                                            matchMode = search.spec.matchMode,
+                                            saving = saving.value,
+                                            editing = false,
+                                            managerOpen = false,
+                                            returnLabel = if (source == "frozen") {
+                                                "Resume scanning"
+                                            } else {
+                                                "Return to camera"
+                                            },
+                                            resultCount = search.occurrences.size,
+                                            occurrenceCount = rows.size,
+                                            sharePreparing = false,
+                                            onEditSearch = {},
+                                            onReturn = {},
+                                            onTerms = {},
+                                            onOccurrences = {},
+                                            onLists = {},
+                                            onOptions = {},
+                                            onShare = {},
+                                            onCancelShare = {},
+                                        )
                                         FinderStatusRegion(
                                             state = cameraState,
                                             importedState = importedState,
@@ -273,33 +246,6 @@ class StillInspectionUiTest {
                                             onRetrySavedData = {},
                                             onRequestReset = {},
                                         )
-                                        if (!compact.value) {
-                                            TextButton(onClick = {}) {
-                                                Text("Search results (${search.occurrences.size})")
-                                            }
-                                            TextButton(onClick = {}) { Text("Share image") }
-                                            StillInspectionControls(
-                                                matchCount = rows.size,
-                                                zoom = 1f,
-                                                canZoom = true,
-                                                onZoomIn = {},
-                                                onZoomOut = {},
-                                                onReset = {},
-                                                onMatches = {},
-                                            )
-                                            if (selected) {
-                                                StillMatchNavigationControls(
-                                                    position = 1,
-                                                    count = rows.size,
-                                                    matchedTerm = selectedRow.termLabel,
-                                                    matchedText = selectedRow.matchedText,
-                                                    canLocate = true,
-                                                    onPrevious = {},
-                                                    onNext = {},
-                                                    onCopy = {},
-                                                )
-                                            }
-                                        }
                                     }
                                 },
                                 managerContent = {},
@@ -334,38 +280,36 @@ class StillInspectionUiTest {
                                     }
                                 },
                                 footerContent = {
-                                    if (compact.value) {
-                                        Column(
-                                            Modifier.fillMaxWidth().padding(
-                                                horizontal = FinderSpacing.large,
-                                                vertical = FinderSpacing.extraSmall,
-                                            ),
-                                            verticalArrangement = Arrangement.spacedBy(
-                                                FinderSpacing.extraSmall,
-                                            ),
-                                        ) {
-                                            StillInspectionControls(
-                                                matchCount = rows.size,
-                                                showMatchesAction = false,
-                                                zoom = 1f,
-                                                canZoom = true,
-                                                onZoomIn = {},
-                                                onZoomOut = {},
-                                                onReset = {},
-                                                onMatches = {},
+                                    Column(
+                                        Modifier.fillMaxWidth().padding(
+                                            horizontal = FinderSpacing.large,
+                                            vertical = FinderSpacing.extraSmall,
+                                        ),
+                                        verticalArrangement = Arrangement.spacedBy(
+                                            FinderSpacing.extraSmall,
+                                        ),
+                                    ) {
+                                        StillInspectionControls(
+                                            matchCount = rows.size,
+                                            showMatchesAction = false,
+                                            zoom = 1f,
+                                            canZoom = true,
+                                            onZoomIn = {},
+                                            onZoomOut = {},
+                                            onReset = {},
+                                            onMatches = {},
+                                        )
+                                        if (selected) {
+                                            StillMatchNavigationControls(
+                                                position = 1,
+                                                count = rows.size,
+                                                matchedTerm = selectedRow.termLabel,
+                                                matchedText = selectedRow.matchedText,
+                                                canLocate = true,
+                                                onPrevious = {},
+                                                onNext = {},
+                                                onCopy = {},
                                             )
-                                            if (selected) {
-                                                StillMatchNavigationControls(
-                                                    position = 1,
-                                                    count = rows.size,
-                                                    matchedTerm = selectedRow.termLabel,
-                                                    matchedText = selectedRow.matchedText,
-                                                    canLocate = true,
-                                                    onPrevious = {},
-                                                    onNext = {},
-                                                    onCopy = {},
-                                                )
-                                            }
                                         }
                                     }
                                 },
@@ -374,19 +318,19 @@ class StillInspectionUiTest {
                     }
                 }
 
-                val baselineBounds = checkNotNull(previewBounds.value)
-                assertTrue(baselineBounds.height > 0f)
-                saveRenderedFixture("baseline-$source-selected-$selected.png")
-                compact.value = true
-                measureCurrentComposition()
                 val retainedBounds = checkNotNull(previewBounds.value)
+                // Immutable Stage 2 evidence from HEAD a015704 measured 252dp unselected,
+                // 184dp selected; this fixture measures only the current retained assembly.
+                val historicalStage2Baseline = if (selected) 184f else 252f
+                assertTrue(retainedBounds.height > 0f)
                 println(
-                    "COMPARE $source selected=$selected baseline=${baselineBounds.height}dp " +
-                        "retained=${retainedBounds.height}dp",
+                    "COMPARE $source selected=$selected stage2Baseline=" +
+                        "$historicalStage2Baseline dp retainedCurrent=${retainedBounds.height}dp",
                 )
                 assertTrue(
-                    retainedBounds.height - baselineBounds.height >= 96f,
-                    "$source selected=$selected: $baselineBounds -> $retainedBounds",
+                    retainedBounds.height - historicalStage2Baseline >= 96f,
+                    "$source selected=$selected: historical Stage 2=" +
+                        "$historicalStage2Baseline dp, retained current=$retainedBounds",
                 )
                 saveRenderedFixture("retained-$source-selected-$selected.png")
 
@@ -1513,10 +1457,14 @@ class StillInspectionUiTest {
     }
 
     private fun clickPopupText(text: String) {
-        val node = popupRoots().asSequence().flatMap { nodes(it).asSequence() }.first { popupNode ->
-            nodeText(popupNode) == text &&
-                popupNode.config.getOrNull(SemanticsActions.OnClick) != null
-        }
+        val mainRoot = composeRoot()
+        val node = popupRoots().asSequence()
+            .filter { root -> root !== mainRoot }
+            .flatMap { nodes(it).asSequence() }
+            .first { popupNode ->
+                nodeText(popupNode) == text &&
+                    popupNode.config.getOrNull(SemanticsActions.OnClick) != null
+            }
         assertTrue(checkNotNull(node.config.getOrNull(SemanticsActions.OnClick)?.action)())
         advancePopupFrames()
     }

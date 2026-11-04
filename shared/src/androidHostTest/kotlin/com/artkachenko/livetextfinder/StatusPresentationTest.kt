@@ -146,6 +146,55 @@ class StatusPresentationTest {
     }
 
     @Test
+    fun unavailableCountsPreserveWaitingFeedbackAndRetainedOutlineContext() {
+        val mappingWait = searchFeedback(
+            "invoice",
+            recognized,
+            matchCount = 0,
+            areaSelected = true,
+            areaReady = false,
+        )
+        assertEquals(
+            SearchFeedbackKind.WaitingForAreaMapping,
+            suppressUnavailableResultFeedback(
+                mappingWait,
+                resultsAvailable = false,
+                hasQuery = true,
+            ).kind,
+        )
+
+        val waitingForFresh = searchFeedback(
+            "invoice",
+            null,
+            matchCount = 0,
+            hasLiveSnapshot = false,
+        )
+        assertEquals(
+            SearchFeedbackKind.WaitingForFreshText,
+            suppressUnavailableResultFeedback(
+                waitingForFresh,
+                resultsAvailable = false,
+                hasQuery = true,
+            ).kind,
+        )
+
+        val currentMatches = searchFeedback(
+            "invoice",
+            recognized,
+            matchCount = 2,
+            retainedOutlines = true,
+        )
+        val unavailable = suppressUnavailableResultFeedback(
+            currentMatches,
+            resultsAvailable = false,
+            hasQuery = true,
+        )
+        assertEquals(SearchFeedbackKind.ResultsUnavailable, unavailable.kind)
+        assertEquals(0, unavailable.matchCount)
+        assertTrue(unavailable.retainedOutlines)
+    }
+
+    @Test
     fun detailsUseOnlyTheSelectedSourceAndBoundTheTextSample() {
         val imported = recognitionDetails(
             source = StatusSource.ImportedImage,
