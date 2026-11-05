@@ -365,27 +365,54 @@ class StatusFeedbackTest {
         assertTrue(wholeWordsNode.size.height / density >= 48f)
         assertEquals(true, substringNode.config.getOrNull(SemanticsProperties.Selected))
         assertEquals(false, wholeWordsNode.config.getOrNull(SemanticsProperties.Selected))
-        assertTouchBounds(
-            nodeWithText(nodes, "Live area: Full frame", clickable = true),
-            optionsDialog().window?.decorView,
-        )
-        assertTouchBounds(
-            nodeWithText(nodes, "Import image", clickable = true),
-            optionsDialog().window?.decorView,
-        )
+        assertActionLayoutSize(nodeWithText(nodes, "Live area: Full frame", clickable = true))
+        assertActionLayoutSize(nodeWithText(nodes, "Import image", clickable = true))
         val scrollViewport = nodes.firstOrNull {
             it.config.getOrNull(SemanticsActions.ScrollBy) != null
         }
         assertTrue(scrollViewport != null)
         val helpTopBeforeScroll =
             nodeWithText(nodes, "Help", clickable = true).positionInRoot.y
-        val scrollBy = checkNotNull(
-            scrollViewport?.config?.getOrNull(SemanticsActions.ScrollBy)?.action,
-        )
-        assertTrue(scrollBy(0f, 320f))
-        measureCurrentComposition()
-        nodes = optionsDialogNodes()
-        val helpAfterScroll = nodeWithText(nodes, "Help", clickable = true)
+
+        fun scrollOptionIntoView(label: String): SemanticsNode {
+            repeat(8) {
+                val target = nodeWithText(nodes, label, clickable = true)
+                val viewport = checkNotNull(
+                    nodes.firstOrNull {
+                        it.config.getOrNull(SemanticsActions.ScrollBy) != null
+                    },
+                )
+                val viewportTop = viewport.positionInRoot.y
+                val viewportBottom = viewportTop + viewport.size.height
+                val targetTop = target.positionInRoot.y
+                val targetBottom = targetTop + target.size.height
+                if (targetTop >= viewportTop && targetBottom <= viewportBottom) {
+                    return target
+                }
+                val delta = if (targetBottom > viewportBottom) {
+                    targetBottom - viewportBottom
+                } else {
+                    targetTop - viewportTop
+                }
+                val scrollBy = checkNotNull(
+                    viewport.config.getOrNull(SemanticsActions.ScrollBy)?.action,
+                )
+                assertTrue(scrollBy(0f, delta))
+                measureCurrentComposition()
+                nodes = optionsDialogNodes()
+            }
+            error("Could not scroll '$label' fully into the options sheet.")
+        }
+
+        val visibleArea = scrollOptionIntoView("Live area: Full frame")
+        assertFullyVisibleInViewport(visibleArea, checkNotNull(scrollViewport))
+        assertFullyVisibleInDialog(visibleArea, checkNotNull(optionsDialog().window?.decorView))
+        assertTouchBounds(visibleArea, optionsDialog().window?.decorView)
+        val visibleImport = scrollOptionIntoView("Import image")
+        assertFullyVisibleInViewport(visibleImport, checkNotNull(scrollViewport))
+        assertFullyVisibleInDialog(visibleImport, checkNotNull(optionsDialog().window?.decorView))
+        assertTouchBounds(visibleImport, optionsDialog().window?.decorView)
+        val helpAfterScroll = scrollOptionIntoView("Help")
         assertTrue(helpAfterScroll.positionInRoot.y < helpTopBeforeScroll)
         val firstDialog = optionsDialog()
         val helpViewport = checkNotNull(scrollViewport)
@@ -590,7 +617,20 @@ class StatusFeedbackTest {
         assertTrue(nodes.any { it.textValues().contains("Help") })
         assertFalse(nodes.any { it.textValues().contains("Import image") })
         assertDialogRendered(dialog, "options-sheet-light.png")
-        click(nodeWithText(nodes, "Help", clickable = true))
+        val viewport = checkNotNull(nodes.firstOrNull {
+            it.config.getOrNull(SemanticsActions.ScrollBy) != null
+        })
+        val scrollBy = checkNotNull(viewport.config.getOrNull(SemanticsActions.ScrollBy)?.action)
+        assertTrue(scrollBy(0f, 1_000f))
+        measureCurrentComposition()
+        val scrolledNodes = optionsDialogNodes()
+        val help = nodeWithText(scrolledNodes, "Help", clickable = true)
+        assertActionLayoutSize(help)
+        assertFullyVisibleInViewport(help, viewport)
+        assertFullyVisibleInDialog(help, checkNotNull(dialog.window?.decorView))
+        assertTouchBounds(help, dialog.window?.decorView)
+        assertDialogRendered(dialog, "options-sheet-light-bottom.png")
+        click(nodeWithText(scrolledNodes, "Help", clickable = true))
         assertEquals(1, helpCalls)
         assertFalse(optionsOpen.value)
     }
@@ -971,6 +1011,9 @@ class StatusFeedbackTest {
         val dialogRoot = findViewRoot(dialog.window?.decorView)
         var nodes = semanticsNodes(dialogRoot)
         assertTrue(nodes.any { it.textValues().contains("Search results") })
+        assertTrue(nodes.any { it.textValues().contains("Matches") })
+        assertTrue(nodes.any { it.textValues().contains("496") })
+        assertTrue(nodes.any { it.textValues().contains("31 terms matched") })
         assertTrue(nodes.any { it.textValues().contains("long search phrase label 0") })
         assertDialogRendered(dialog, "search-results-32-top-light-large-text.png")
         val scrollNode = checkNotNull(
@@ -982,8 +1025,76 @@ class StatusFeedbackTest {
         nodes = semanticsNodes(dialogRoot)
         assertTrue(nodes.any { it.textValues().contains("long search phrase label 31") })
         assertTrue(nodes.any { it.textValues().contains("0") })
+        assertTrue(nodes.any { it.textValues().contains("31 terms matched") })
         assertTouchBounds(nodeWithText(nodes, "Done"), dialog.window?.decorView)
+        assertActionLayoutSize(nodeWithText(nodes, "Done", clickable = true))
         assertDialogRendered(dialog, "search-results-32-bottom-light-large-text.png")
+    }
+
+    @Test
+    fun darkSearchResultsShowRawTotalsAndKeepZeroRowsInTermOrder() {
+        val terms = listOf(
+            SearchTermSummary("first", "First", HighlightColor.Yellow, 3),
+            SearchTermSummary("zero", "Zero", HighlightColor.Cyan, 0),
+            SearchTermSummary("last", "Last", HighlightColor.Magenta, 2),
+        )
+        mount(widthDp = 320, heightDp = 620, fontScale = 1.25f) {
+            LiveTextFinderTheme(darkThemeOverride = true, dynamicColor = false) {
+                SearchTermResultsDialog(terms = terms, onDismiss = ::ignoreAction)
+            }
+        }
+        settleDialog()
+
+        val dialog = checkNotNull(ShadowDialog.getLatestDialog())
+        val dialogRoot = findViewRoot(dialog.window?.decorView)
+        val nodes = semanticsNodes(dialogRoot)
+        assertTrue(nodes.any { it.textValues().contains("Matches") })
+        assertTrue(nodes.any { it.textValues().contains("5") })
+        assertTrue(nodes.any { it.textValues().contains("2 terms matched") })
+        val first = nodeWithText(nodes, "First")
+        val zero = nodeWithText(nodes, "Zero")
+        val last = nodeWithText(nodes, "Last")
+        assertTrue(first.positionInRoot.y < zero.positionInRoot.y)
+        assertTrue(zero.positionInRoot.y < last.positionInRoot.y)
+        assertTrue(nodes.any { it.textValues().contains("0") })
+        assertDialogRendered(dialog, "search-results-dark-large-text.png")
+    }
+
+    @Test
+    fun unavailableSearchResultsKeepExplanationAndMarkersWithoutNumericSummary() {
+        val terms = listOf(
+            SearchTermSummary("match", "match", HighlightColor.Yellow, 8),
+            SearchTermSummary("zero", "zero", HighlightColor.Cyan, 0),
+        )
+        mount(widthDp = 320, heightDp = 480) {
+            LiveTextFinderTheme(darkThemeOverride = true, dynamicColor = false) {
+                SearchTermResultsDialog(
+                    terms = terms,
+                    resultsAvailable = false,
+                    canLocate = false,
+                    onDismiss = ::ignoreAction,
+                )
+            }
+        }
+        settleDialog()
+
+        val dialog = checkNotNull(ShadowDialog.getLatestDialog())
+        val nodes = semanticsNodes(findViewRoot(dialog.window?.decorView))
+        assertTrue(
+            nodes.any {
+                it.textValues().contains(
+                    "Results are not current for this search and image.",
+                )
+            },
+        )
+        assertFalse(nodes.any { it.textValues().contains("Matches") })
+        assertFalse(nodes.any { it.textValues().contains("0 terms matched") })
+        assertTrue(nodes.any { it.textValues().contains("match") })
+        assertTrue(nodes.any { it.textValues().contains("zero") })
+        assertTrue(nodes.any { it.textValues().contains("—") })
+        assertFalse(nodes.any { it.textValues().contains("8") })
+        assertTouchBounds(nodeWithText(nodes, "Done"), dialog.window?.decorView)
+        assertDialogRendered(dialog, "search-results-unavailable-dark.png")
     }
 
     @Test
@@ -2791,12 +2902,23 @@ class StatusFeedbackTest {
 
     private fun assertTouchBounds(node: SemanticsNode, view: View? = composeView) {
         val density = checkNotNull(view).resources.displayMetrics.density
-        assertTrue(node.touchBoundsInRoot.width / density >= 48f)
+        assertTrue(
+            node.touchBoundsInRoot.width / density >= 48f,
+            "Touch ${node.touchBoundsInRoot}; layout ${node.positionInRoot} ${node.size}; " +
+                "density $density",
+        )
         assertTrue(
             node.touchBoundsInRoot.height / density >= 48f,
             "Touch ${node.touchBoundsInRoot}; layout ${node.positionInRoot} ${node.size}; " +
                 "density $density",
         )
+    }
+
+    private fun assertActionLayoutSize(node: SemanticsNode) {
+        val density = checkNotNull(optionsDialog().window?.decorView)
+            .resources.displayMetrics.density
+        assertTrue(node.size.width / density >= 48f, "Action width: ${node.size}")
+        assertTrue(node.size.height / density >= 48f, "Action height: ${node.size}")
     }
 
     private fun assertSliderLayoutHeight(node: SemanticsNode, view: View?) {

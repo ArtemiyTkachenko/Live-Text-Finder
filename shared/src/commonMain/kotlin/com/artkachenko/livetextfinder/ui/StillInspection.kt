@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
@@ -23,12 +24,15 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -49,9 +53,12 @@ import livetextfinder.shared.generated.resources.search_context_count_unavailabl
 import livetextfinder.shared.generated.resources.search_result_count_description
 import livetextfinder.shared.generated.resources.search_results_done
 import livetextfinder.shared.generated.resources.search_results_locate_hint
+import livetextfinder.shared.generated.resources.search_results_matched_terms
+import livetextfinder.shared.generated.resources.search_results_occurrences
 import livetextfinder.shared.generated.resources.search_results_title
 import livetextfinder.shared.generated.resources.search_results_unavailable_explanation
 import livetextfinder.shared.generated.resources.status_cancel
+import livetextfinder.shared.generated.resources.status_match_count
 import livetextfinder.shared.generated.resources.still_copy_match
 import livetextfinder.shared.generated.resources.still_match_copy_short
 import livetextfinder.shared.generated.resources.still_match_next
@@ -64,6 +71,7 @@ import livetextfinder.shared.generated.resources.still_matches_title
 import livetextfinder.shared.generated.resources.still_reset_view
 import livetextfinder.shared.generated.resources.still_zoom_in
 import livetextfinder.shared.generated.resources.still_zoom_out
+import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 
 /** Remembers view state only for one retained source in one measured viewport. */
@@ -196,18 +204,35 @@ internal fun StillMatchesDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(Res.string.still_matches_title)) },
         text = {
-            Column(modifier = Modifier.heightIn(max = 420.dp)) {
+            val selectedItemIndex = rows.indexOfFirst { row -> row.index == selectedIndex }
+            val listState = rememberLazyListState()
+            LaunchedEffect(selectedItemIndex) {
+                if (selectedItemIndex >= 0) {
+                    listState.scrollToItem(selectedItemIndex)
+                }
+            }
+            Column(modifier = Modifier.heightIn(max = 180.dp)) {
+                Text(
+                    pluralStringResource(
+                        Res.plurals.status_match_count,
+                        rows.size,
+                        rows.size,
+                    ),
+                    modifier = Modifier.padding(bottom = FinderSpacing.small),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 if (!canLocate) {
                     Text(
                         stringResource(Res.string.search_results_locate_hint),
-                        modifier = Modifier.padding(bottom = 8.dp),
+                        modifier = Modifier.padding(bottom = FinderSpacing.small),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 LazyColumn(
-                    modifier = Modifier.weight(1f, fill = false).semantics {
-                        selectableGroup()
-                    },
+                    state = listState,
+                    modifier = Modifier.weight(1f, fill = false).heightIn(max = 140.dp)
+                        .semantics { selectableGroup() },
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     items(rows, key = StillMatchRow::index) { row ->
@@ -228,21 +253,33 @@ internal fun StillMatchesDialog(
             }
         },
         confirmButton = {
-            TextButton(
-                enabled = selectedIndex != null && rows.any { row -> row.index == selectedIndex },
-                onClick = onCopy,
-            ) {
-                Text(stringResource(Res.string.still_copy_match))
-            }
-        },
-        dismissButton = {
-            Row {
-                TextButton(
-                    enabled = canLocate && selectedIndex != null &&
-                        rows.any { it.index == selectedIndex },
-                    onClick = onShowOnImage,
-                ) { Text(stringResource(Res.string.still_match_show)) }
-                TextButton(onClick = onDismiss) { Text(stringResource(Res.string.status_cancel)) }
+            Column(horizontalAlignment = Alignment.End) {
+                FinderPrimaryAction(
+                    label = stringResource(Res.string.still_copy_match),
+                    enabled = selectedIndex != null &&
+                        rows.any { row -> row.index == selectedIndex },
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = onCopy,
+                )
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(
+                        FinderSpacing.extraSmall,
+                        Alignment.End,
+                    ),
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    FinderSecondaryAction(
+                        label = stringResource(Res.string.still_match_show),
+                        onClick = onShowOnImage,
+                        enabled = canLocate && selectedIndex != null &&
+                            rows.any { it.index == selectedIndex },
+                    )
+                    FinderSecondaryAction(
+                        label = stringResource(Res.string.status_cancel),
+                        onClick = onDismiss,
+                    )
+                }
             }
         },
         shape = MaterialTheme.shapes.extraLarge,
@@ -261,43 +298,90 @@ internal fun SearchTermResultsDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(Res.string.search_results_title)) },
         text = {
-            Column {
+            Column(
+                modifier = Modifier.heightIn(max = 320.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                if (resultsAvailable) {
+                    val occurrenceTotal = terms.sumOf(SearchTermSummary::occurrenceCount)
+                    val matchedTermCount = terms.count { term -> term.occurrenceCount > 0 }
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceContainer,
+                        shape = MaterialTheme.shapes.medium,
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(FinderSpacing.large),
+                            horizontalArrangement = Arrangement.spacedBy(FinderSpacing.medium),
+                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    stringResource(Res.string.search_results_occurrences),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Text(
+                                    occurrenceTotal.toString(),
+                                    style = MaterialTheme.typography.headlineMedium,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                            Text(
+                                pluralStringResource(
+                                    Res.plurals.search_results_matched_terms,
+                                    matchedTermCount,
+                                    matchedTermCount,
+                                ),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
                 if (!resultsAvailable) {
                     Text(
                         stringResource(Res.string.search_results_unavailable_explanation),
-                        modifier = Modifier.padding(bottom = 8.dp),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 if (resultsAvailable && !canLocate) {
                     Text(
                         stringResource(Res.string.search_results_locate_hint),
-                        modifier = Modifier.padding(bottom = 8.dp),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 LazyColumn(
-                    modifier = Modifier.heightIn(max = 320.dp).semantics {
-                        selectableGroup()
-                    },
+                    modifier = Modifier.weight(1f, fill = false).heightIn(max = 220.dp)
+                        .semantics { selectableGroup() },
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     items(terms, key = SearchTermSummary::termId) { term ->
                         val countDescription = stringResource(
                             Res.string.search_result_count_description,
                         )
+                        val positive = resultsAvailable && term.occurrenceCount > 0
                         Row(
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).selectable(
-                                selected = false,
-                                enabled = resultsAvailable && canLocate &&
-                                    term.occurrenceCount > 0,
-                                role = Role.Button,
-                                onClick = { onSelect(term.termId) },
-                            ),
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                                .clip(MaterialTheme.shapes.medium)
+                                .background(
+                                    if (positive) MaterialTheme.colorScheme.surfaceContainer
+                                    else MaterialTheme.colorScheme.surface,
+                                )
+                                .selectable(
+                                    selected = false,
+                                    enabled = resultsAvailable && canLocate &&
+                                        term.occurrenceCount > 0,
+                                    role = Role.Button,
+                                    onClick = { onSelect(term.termId) },
+                                )
+                                .padding(
+                                    horizontal = FinderSpacing.medium,
+                                    vertical = FinderSpacing.small,
+                                ),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
                         ) {
-                            androidx.compose.foundation.layout.Box(
+                            Box(
                                 modifier = Modifier.size(20.dp)
                                     .background(
                                         term.color.composeColor,
@@ -309,16 +393,40 @@ internal fun SearchTermResultsDialog(
                                         MaterialTheme.shapes.extraSmall,
                                     ),
                             )
-                            Text(term.label, modifier = Modifier.weight(1f))
-                            if (resultsAvailable) {
+                            Text(
+                                term.label,
+                                modifier = Modifier.weight(1f),
+                                style = if (positive) MaterialTheme.typography.bodyLarge
+                                else MaterialTheme.typography.bodyMedium,
+                                color = if (positive) MaterialTheme.colorScheme.onSurface
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Surface(
+                                color = if (positive) MaterialTheme.colorScheme.secondaryContainer
+                                else MaterialTheme.colorScheme.surfaceContainerHigh,
+                                shape = MaterialTheme.shapes.small,
+                            ) {
                                 Text(
-                                    term.occurrenceCount.toString(),
+                                    text = if (resultsAvailable) term.occurrenceCount.toString()
+                                    else stringResource(
+                                        Res.string.search_context_count_unavailable,
+                                    ),
                                     modifier = Modifier.semantics {
-                                        contentDescription = "$countDescription ${term.occurrenceCount}"
+                                        if (resultsAvailable) {
+                                            contentDescription =
+                                                "$countDescription ${term.occurrenceCount}"
+                                        }
+                                    }.padding(
+                                        horizontal = FinderSpacing.small,
+                                        vertical = FinderSpacing.extraSmall,
+                                    ),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = if (positive) {
+                                        MaterialTheme.colorScheme.onSecondaryContainer
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
                                     },
                                 )
-                            } else {
-                                Text(stringResource(Res.string.search_context_count_unavailable))
                             }
                         }
                     }
@@ -326,9 +434,10 @@ internal fun SearchTermResultsDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(Res.string.search_results_done))
-            }
+            FinderSecondaryAction(
+                label = stringResource(Res.string.search_results_done),
+                onClick = onDismiss,
+            )
         },
     )
 }
@@ -415,38 +524,37 @@ private fun StillMatchRowItem(
     ) {
         Column(
             modifier = Modifier.defaultMinSize(minHeight = 48.dp)
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+                .padding(
+                    horizontal = FinderSpacing.medium,
+                    vertical = FinderSpacing.small,
+                ),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-            ) {
-                androidx.compose.foundation.layout.Box(
-                    modifier = Modifier.size(16.dp)
-                        .background(
-                            row.termColor.composeColor,
-                            MaterialTheme.shapes.extraSmall,
-                        )
-                        .border(
-                            1.dp,
-                            MaterialTheme.colorScheme.outline,
-                            MaterialTheme.shapes.extraSmall,
-                        ),
-                )
-                Text(row.termLabel, style = MaterialTheme.typography.labelMedium)
-            }
             Text(
                 text = row.matchedText,
                 style = MaterialTheme.typography.bodyLarge,
                 color = if (selected) MaterialTheme.colorScheme.onSecondaryContainer
                 else MaterialTheme.colorScheme.onSurface,
             )
-            Text(
-                text = row.lineContext,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+            ) {
+                Box(
+                    modifier = Modifier.size(16.dp)
+                        .background(row.termColor.composeColor, MaterialTheme.shapes.extraSmall)
+                        .border(
+                            1.dp,
+                            MaterialTheme.colorScheme.outline,
+                            MaterialTheme.shapes.extraSmall,
+                        ),
+                )
+                Text(
+                    text = "${row.termLabel} · ${row.lineContext}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }

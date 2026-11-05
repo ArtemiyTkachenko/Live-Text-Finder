@@ -469,3 +469,25 @@ simulator compilation. The warnings are the existing AGP (3), library update (8)
 monochrome icon (2) findings. `git diff --check` and the 100-column changed-Kotlin line check passed;
 no Kotlin formatter is configured. The iOS task verifies shared-source compilation only. No APK or
 device/runtime test was run. Full aggregate log: `work/redesign/lists/final-checks.log`.
+
+## Phase 5 Results and options — 2026-11-05
+
+Search results now summarize the raw occurrence total from per-term counts and the number of terms
+with matches, while unavailable results retain their explanation and unavailable markers without
+numeric totals. Term rows remain in original order, retain every term/color/count, and give positive
+counts restrained emphasis. Matches now surfaces its occurrence total, keeps matched text primary,
+and presents term/line context secondarily. Its selected occurrence scrolls into view; Copy is the
+52dp primary action, with reachable 48dp Show and Cancel actions. Options are grouped by search,
+camera/images, and import/export gates, with left-aligned Material action rows and a local radio
+group. Existing callbacks, enablement, visibility, and dismissal paths remain intact.
+
+Focused production fixtures passed for 32-term scrolling, available zero counts, unavailable
+results, options visibility/enablement/dismissal, transfer actions, and selected occurrence copy and
+locate behavior. Native 320dp large-text captures cover results at the first and last terms, dark
+positive/zero and unavailable results, selected Matches in light and dark, and Options in light,
+dark, and transfer states. Captures were visually inspected in `work/redesign/results-options/`.
+The final aggregate passed Android debug Kotlin compilation, **338 host tests across 48 suites with
+zero failures/errors/skips**, Android lint (**14 warnings, zero errors**) and shared iOS simulator
+compilation. `git diff --check` passed; no Kotlin formatter is configured. The iOS task verifies
+shared-source compilation only. No APK or device/runtime test was run. Full aggregate log:
+`work/redesign/results-options/final-checks.log`.

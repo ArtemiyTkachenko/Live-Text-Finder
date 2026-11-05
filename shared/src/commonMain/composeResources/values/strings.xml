@@ -11,11 +11,16 @@
     <string name="highlight_color_selected">Selected</string>
     <string name="search_results">Search results (%1$d)</string>
     <string name="search_results_title">Search results</string>
+    <string name="search_results_occurrences">Matches</string>
     <string name="search_results_done">Done</string>
     <string name="search_result_count_description">Occurrences</string>
     <string name="search_results_locate_hint">Show the still image to locate a match.</string>
     <string name="search_results_unavailable">Results unavailable</string>
     <string name="search_results_unavailable_explanation">Results are not current for this search and image.</string>
+    <plurals name="search_results_matched_terms">
+        <item quantity="one">%1$d term matched</item>
+        <item quantity="other">%1$d terms matched</item>
+    </plurals>
     <string name="highlight_color_preview">Color preview</string>
     <string name="highlight_color_red">Red</string>
     <string name="highlight_color_green">Green</string>
@@ -57,6 +62,9 @@
     <string name="finder_options_title">Options</string>
     <string name="finder_options_highlight">Highlight color: %1$s</string>
     <string name="finder_options_matching">Matching</string>
+    <string name="finder_options_search_group">Search and matching</string>
+    <string name="finder_options_camera_group">Camera and images</string>
+    <string name="finder_options_transfer_group">Import and export</string>
     <string name="finder_match_substring">Substring</string>
     <string name="finder_match_whole_words">Whole words</string>
     <string name="finder_match_help">Searches literal text. Whole words require non-letter, number, mark, or underscore boundaries.</string>

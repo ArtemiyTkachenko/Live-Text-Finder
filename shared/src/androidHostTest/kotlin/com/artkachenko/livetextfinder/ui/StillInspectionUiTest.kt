@@ -1245,6 +1245,7 @@ class StillInspectionUiTest {
 
     @Test
     fun dialogSelectionEnablesCopyAndUsesScrollableOccurrenceRows() {
+        val darkTheme = mutableStateOf(false)
         val selected = mutableStateOf<Int?>(null)
         val session = inMemorySearchSessionController()
         val snapshot = importedSnapshot((0 until 30).map { "match $it context" })
@@ -1284,8 +1285,8 @@ class StillInspectionUiTest {
         )
         val copyMessage = mutableStateOf<String?>(null)
         var showCount = 0
-        mount(360, 520) {
-            LiveTextFinderTheme(darkThemeOverride = false, dynamicColor = false) {
+        mount(320, 480, fontScale = 1.5f) {
+            LiveTextFinderTheme(darkThemeOverride = darkTheme.value, dynamicColor = false) {
                 StillMatchesDialog(
                     rows = rows,
                     selectedIndex = selected.value,
@@ -1319,6 +1320,23 @@ class StillInspectionUiTest {
         }
 
         val dialogRoot = dialogComposeRoot()
+        val dialogView = checkNotNull(ShadowDialog.getLatestDialog()?.window?.decorView)
+        val density = dialogView.resources.displayMetrics.density
+        fun assertDialogActionSize(label: String, minimumHeight: Float) {
+            val action = nodes(dialogRoot).first { node ->
+                nodeText(node).contains(label) &&
+                    node.config.getOrNull(SemanticsActions.OnClick) != null
+            }
+            assertTrue(action.size.width / density >= 48f, "$label width: ${action.size}")
+            assertTrue(
+                action.size.height / density >= minimumHeight,
+                "$label height: ${action.size}",
+            )
+            assertTrue(
+                action.positionInRoot.y + action.size.height <= dialogView.height,
+                "$label extends below dialog: ${action.positionInRoot} ${action.size}",
+            )
+        }
         val scrollable = nodes(dialogRoot).single { node ->
             node.config.getOrNull(SemanticsActions.ScrollBy) != null
         }
@@ -1331,6 +1349,13 @@ class StillInspectionUiTest {
             nodeText(node) == "Show on image"
         }
         assertNotNull(disabledShow.config.getOrNull(SemanticsProperties.Disabled))
+        assertDialogActionSize("Copy matched text", 52f)
+        assertDialogActionSize("Show on image", 48f)
+        assertDialogActionSize("Cancel", 48f)
+        assertTrue(
+            nodes(dialogRoot).any { node -> nodeText(node) == "50 matches" },
+            "Dialog text: ${nodes(dialogRoot).map(::nodeText)}",
+        )
         val rowNode = nodes(dialogRoot).first { node ->
             nodeText(node).contains("match 2") &&
                 node.config.getOrNull(SemanticsActions.OnClick) != null
@@ -1342,7 +1367,14 @@ class StillInspectionUiTest {
         }
         assertTrue(checkNotNull(show.config.getOrNull(SemanticsActions.OnClick)?.action)())
         assertEquals(1, showCount)
-        saveDialog("still-matches-dialog-light.png")
+        saveDialog("still-matches-dialog-light-large-text.png")
+        darkTheme.value = true
+        Snapshot.sendApplyNotifications()
+        measureCurrentComposition()
+        assertDialogActionSize("Copy matched text", 52f)
+        assertDialogActionSize("Show on image", 48f)
+        assertDialogActionSize("Cancel", 48f)
+        saveDialog("still-matches-dialog-dark-large-text.png")
         assertTrue(
             nodes(dialogComposeRoot()).any { node ->
                 node.config.getOrNull(SemanticsProperties.Selected) == true
