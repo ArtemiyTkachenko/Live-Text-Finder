@@ -9,12 +9,10 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,6 +47,7 @@ import livetextfinder.shared.generated.resources.search_list_terms_help
 import livetextfinder.shared.generated.resources.search_list_terms_label
 import livetextfinder.shared.generated.resources.search_list_terms_more
 import livetextfinder.shared.generated.resources.search_list_terms_preview
+import livetextfinder.shared.generated.resources.search_lists_empty
 import livetextfinder.shared.generated.resources.search_lists_heading
 import livetextfinder.shared.generated.resources.search_lists_new
 import org.jetbrains.compose.resources.pluralStringResource
@@ -73,13 +72,37 @@ internal fun FinderSearchLists(
         modifier = Modifier.fillMaxWidth().padding(FinderSpacing.large),
         verticalArrangement = Arrangement.spacedBy(FinderSpacing.large),
     ) {
-        Text(
-            text = stringResource(Res.string.search_lists_heading),
-            modifier = Modifier.semantics { heading() },
-            style = MaterialTheme.typography.titleMedium,
-        )
-        TextButton(onClick = onNew, enabled = canSave) {
-            Text(stringResource(Res.string.search_lists_new))
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalArrangement = Arrangement.spacedBy(FinderSpacing.small),
+            itemVerticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = stringResource(Res.string.search_lists_heading),
+                modifier = Modifier.semantics { heading() },
+                style = MaterialTheme.typography.titleMedium,
+            )
+            if (editor.isOpen) {
+                FinderSecondaryAction(
+                    label = stringResource(Res.string.search_lists_new),
+                    onClick = onNew,
+                    enabled = canSave,
+                )
+            } else {
+                FinderPrimaryAction(
+                    label = stringResource(Res.string.search_lists_new),
+                    enabled = canSave,
+                    onClick = onNew,
+                )
+            }
+        }
+        if (lists.isEmpty() && !editor.isOpen) {
+            Text(
+                text = stringResource(Res.string.search_lists_empty),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
         Column(
             modifier = Modifier.selectableGroup().fillMaxWidth(),
@@ -123,63 +146,64 @@ private fun SearchListRow(
         Surface(
             modifier = Modifier.fillMaxWidth(),
             color = if (selected) {
-                MaterialTheme.colorScheme.secondaryContainer
+                MaterialTheme.colorScheme.primaryContainer
             } else {
-                MaterialTheme.colorScheme.surface
+                MaterialTheme.colorScheme.surfaceContainer
             },
-            shape = MaterialTheme.shapes.medium,
+            shape = MaterialTheme.shapes.large,
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .selectable(selected = selected, role = Role.RadioButton, onClick = onSelect)
-                    .semantics { contentDescription = selectLabel }
-                    .padding(FinderSpacing.large),
-                verticalArrangement = Arrangement.spacedBy(FinderSpacing.extraSmall),
-            ) {
-                Text(
-                    text = list.name,
-                    modifier = Modifier.fillMaxWidth(),
-                    style = MaterialTheme.typography.titleSmall,
-                )
-                Text(
-                    text = pluralStringResource(
-                        Res.plurals.search_list_term_count,
-                        list.terms.size,
-                        list.terms.size,
-                    ),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (selected) {
-                        MaterialTheme.colorScheme.onSecondaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                )
-                if (selected) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .selectable(
+                            selected = selected,
+                            role = Role.RadioButton,
+                            onClick = onSelect,
+                        )
+                        .semantics { contentDescription = selectLabel }
+                        .padding(FinderSpacing.large),
+                    verticalArrangement = Arrangement.spacedBy(FinderSpacing.extraSmall),
+                ) {
                     Text(
-                        text = stringResource(Res.string.search_list_selected),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        text = list.name,
+                        modifier = Modifier.fillMaxWidth(),
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    Text(
+                        text = pluralStringResource(
+                            Res.plurals.search_list_term_count,
+                            list.terms.size,
+                            list.terms.size,
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (selected) {
+                        Text(
+                            text = stringResource(Res.string.search_list_selected),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = FinderSpacing.small),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    FinderSecondaryAction(
+                        label = stringResource(Res.string.search_list_edit),
+                        onClick = onEdit,
+                        modifier = Modifier.semantics { contentDescription = editLabel },
+                    )
+                    FinderSecondaryAction(
+                        label = stringResource(Res.string.search_list_delete),
+                        onClick = onDelete,
+                        modifier = Modifier.semantics { contentDescription = deleteLabel },
+                        destructive = true,
                     )
                 }
-            }
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            TextButton(
-                onClick = onEdit,
-                modifier = Modifier.semantics { contentDescription = editLabel },
-            ) {
-                Text(stringResource(Res.string.search_list_edit))
-            }
-            TextButton(
-                onClick = onDelete,
-                modifier = Modifier.semantics { contentDescription = deleteLabel },
-            ) {
-                Text(stringResource(Res.string.search_list_delete))
             }
         }
     }
@@ -222,6 +246,13 @@ private fun SearchListEditor(
                 modifier = Modifier.fillMaxWidth(),
                 shape = MaterialTheme.shapes.medium,
             )
+            OutlinedTextField(
+                value = editor.terms,
+                onValueChange = onTermsChange,
+                label = { Text(stringResource(Res.string.search_list_terms_label)) },
+                modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp),
+                shape = MaterialTheme.shapes.medium,
+            )
             val preview = previewSearchListTerms(editor.terms)
             Text(
                 stringResource(Res.string.search_list_terms_help),
@@ -233,28 +264,26 @@ private fun SearchListEditor(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            OutlinedTextField(
-                value = editor.terms,
-                onValueChange = onTermsChange,
-                label = { Text(stringResource(Res.string.search_list_terms_label)) },
-                modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp),
-                shape = MaterialTheme.shapes.medium,
-            )
-            Text(
-                stringResource(Res.string.search_list_terms_preview),
-                style = MaterialTheme.typography.titleSmall,
-            )
             Text(
                 stringResource(
                     Res.string.search_list_terms_count,
                     preview.terms.size,
                     MAX_TERMS_PER_LIST,
                 ),
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             if (preview.terms.isEmpty()) {
-                Text(stringResource(Res.string.search_list_terms_empty))
+                Text(
+                    stringResource(Res.string.search_list_terms_empty),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             } else {
+                Text(
+                    stringResource(Res.string.search_list_terms_preview),
+                    style = MaterialTheme.typography.titleSmall,
+                )
                 preview.terms.take(5).forEachIndexed { index, term ->
                     Text(
                         stringResource(
@@ -289,12 +318,15 @@ private fun SearchListEditor(
                 verticalArrangement = Arrangement.spacedBy(FinderSpacing.extraSmall),
                 itemVerticalAlignment = Alignment.CenterVertically,
             ) {
-                Button(onClick = onSave, enabled = canSave) {
-                    Text(stringResource(Res.string.search_list_save))
-                }
-                TextButton(onClick = onCancel) {
-                    Text(stringResource(Res.string.search_list_cancel))
-                }
+                FinderPrimaryAction(
+                    label = stringResource(Res.string.search_list_save),
+                    enabled = canSave,
+                    onClick = onSave,
+                )
+                FinderSecondaryAction(
+                    label = stringResource(Res.string.search_list_cancel),
+                    onClick = onCancel,
+                )
             }
         }
     }

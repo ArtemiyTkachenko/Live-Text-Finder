@@ -19,6 +19,7 @@ internal fun FinderSecondaryAction(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     accessibilityLabel: String? = null,
+    destructive: Boolean = false,
 ) {
     TextButton(
         onClick = onClick,
@@ -37,7 +38,11 @@ internal fun FinderSecondaryAction(
         shape = MaterialTheme.shapes.medium,
         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
         colors = ButtonDefaults.textButtonColors(
-            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            contentColor = if (destructive) {
+                MaterialTheme.colorScheme.error
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
         ),
     ) {
         Text(label)

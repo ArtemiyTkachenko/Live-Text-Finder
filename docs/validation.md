@@ -447,3 +447,25 @@ simulator compilation. The correction aggregate log and full matrix measurements
 `work/redesign/scanner/correction/`. `git diff --check` passed; changed Kotlin lines meet the
 100-column limit. iOS validation checks shared-source compilation only. No APK or device run was
 performed.
+
+## Phase 4 Search lists and editor — 2026-11-05
+
+List cards now group a radio-selectable body with separate Edit/Delete actions inside the same
+surface. Selected lists use the primary container role; Delete uses the shared secondary action's
+semantic error color. The heading and New action wrap together, an empty list keeps a working New
+action with one concise hint, and New becomes neutral while the editor is open. The editor now
+orders name and terms before muted guidance and a nonempty parsed preview; empty terms retain a
+short hint and count, with validation messages before Save/Cancel. Existing state gates, parser,
+callbacks, warnings, and first-five-plus-remainder preview behavior are unchanged.
+
+The native host suite verifies callback isolation, selected-radio semantics, distinct nonoverlapping
+48dp Edit/Delete targets, actual measured 52dp primary New/Save buttons, and scroll-reachable fields
+and actions in a 320×420 `AppContentColumn` fixture. The existing 320×640, 1.5× font editor case
+continues to verify viewport-contained Save/Cancel. Light populated/empty/selected and dark
+invalid-editor/short-viewport renders were captured and inspected under `work/redesign/lists/`.
+The final aggregate command passed: Android debug compilation, **336 host tests across 48 suites
+with zero failures/errors/skips**, Android lint (**14 warnings, zero errors**) and shared iOS
+simulator compilation. The warnings are the existing AGP (3), library update (8), SDK_INT (1), and
+monochrome icon (2) findings. `git diff --check` and the 100-column changed-Kotlin line check passed;
+no Kotlin formatter is configured. The iOS task verifies shared-source compilation only. No APK or
+device/runtime test was run. Full aggregate log: `work/redesign/lists/final-checks.log`.

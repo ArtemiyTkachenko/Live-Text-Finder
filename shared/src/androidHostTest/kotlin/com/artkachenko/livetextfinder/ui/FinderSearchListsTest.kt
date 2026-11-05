@@ -115,14 +115,19 @@ class FinderSearchListsTest {
         val selectedRow = nodeWithDescription(nodes, "Select Parts")
         assertEquals(true, selectedRow.config.getOrNull(SemanticsProperties.Selected))
         assertTouchBounds(selectedRow)
+        assertMeasuredSize(selectedRow, minimumHeightDp = 48f)
         val editParts = nodeWithDescription(nodes, "Edit Parts")
         val deleteParts = nodeWithDescription(nodes, "Delete Parts")
         assertTouchBounds(editParts)
         assertTouchBounds(deleteParts)
+        assertMeasuredSize(editParts, minimumHeightDp = 48f)
+        assertMeasuredSize(deleteParts, minimumHeightDp = 48f)
         assertFalse(intersects(selectedRow.touchBoundsInRoot, editParts.touchBoundsInRoot))
         assertFalse(intersects(selectedRow.touchBoundsInRoot, deleteParts.touchBoundsInRoot))
         assertFalse(intersects(editParts.touchBoundsInRoot, deleteParts.touchBoundsInRoot))
-        assertTouchBounds(nodeWithText(nodes, "New list"))
+        val newList = nodeWithText(nodes, "New list")
+        assertTouchBounds(newList)
+        assertMeasuredSize(newList, minimumHeightDp = 52f)
         assertRendered("lists-light-populated.png")
 
         click(selectedRow)
@@ -141,6 +146,44 @@ class FinderSearchListsTest {
         assertEquals(listOf(second), deleteCalls)
         assertEquals(listOf("two"), selectCalls)
         assertEquals("two", selected.value)
+    }
+
+    @Test
+    fun emptyStateKeepsNewListActionAvailable() {
+        val editor = mutableStateOf(SearchListEditorState())
+        mount(widthDp = 360, heightDp = 640) {
+            LiveTextFinderTheme(darkThemeOverride = false, dynamicColor = false) {
+                Surface(Modifier.fillMaxSize()) {
+                    FinderSearchLists(
+                        lists = emptyList(),
+                        activeListId = null,
+                        editor = editor.value,
+                        canSave = true,
+                        onNew = { editor.value = editor.value.startNew() },
+                        onSelect = ::ignoreText,
+                        onEdit = ::ignoreList,
+                        onDelete = ::ignoreList,
+                        onNameChange = ::ignoreText,
+                        onTermsChange = ::ignoreText,
+                        onSave = ::ignoreAction,
+                        onCancel = ::ignoreAction,
+                    )
+                }
+            }
+        }
+
+        val nodes = semanticsNodes()
+        assertTrue(
+            nodes.any {
+                it.textValues().contains("Create a list to reuse search terms across sessions.")
+            },
+        )
+        val newList = nodeWithText(nodes, "New list")
+        assertTouchBounds(newList)
+        assertMeasuredSize(newList, minimumHeightDp = 52f)
+        assertRendered("lists-light-empty.png")
+        click(newList)
+        assertTrue(editor.value.isOpen)
     }
 
     @Test
@@ -190,6 +233,7 @@ class FinderSearchListsTest {
         val newList = nodeWithText(nodes, "New list")
         assertTrue(newList.config.contains(SemanticsProperties.Disabled))
         assertTouchBounds(newList)
+        assertMeasuredSize(newList, minimumHeightDp = 48f)
         assertTrue(nodes.any { it.textValues().contains("Edit list") })
         assertTrue(nodes.any { it.textValues().contains("List name") })
         assertTrue(nodes.any { it.textValues().contains("Terms or phrases · one per line") })
@@ -217,15 +261,89 @@ class FinderSearchListsTest {
         val save = nodeWithText(visibleNodes, "Save list")
         assertTrue(save.config.contains(SemanticsProperties.Disabled))
         assertTouchBounds(save)
+        assertMeasuredSize(save, minimumHeightDp = 52f)
         val cancel = nodeWithText(visibleNodes, "Cancel")
         assertFalse(cancel.config.contains(SemanticsProperties.Disabled))
         assertTouchBounds(cancel)
         assertWithinViewport(save)
         assertWithinViewport(cancel)
         assertFalse(intersects(save.touchBoundsInRoot, cancel.touchBoundsInRoot))
+        assertMeasuredSize(cancel, minimumHeightDp = 48f)
         assertRendered("lists-dark-editor-error.png")
         click(cancel)
         assertEquals(1, cancelCount)
+    }
+
+    @Test
+    fun shortViewportKeepsEditorFieldsAndActionsReachable() {
+        val editorScroll = ScrollState(0)
+        contentScrollState = editorScroll
+        mount(widthDp = 320, heightDp = 420) {
+            LiveTextFinderTheme(darkThemeOverride = true, dynamicColor = false) {
+                Surface(Modifier.fillMaxSize()) {
+                    AppContentColumn(
+                        scrollState = editorScroll,
+                        scrollable = true,
+                        modifier = Modifier.fillMaxSize(),
+                    ) {
+                        FinderSearchLists(
+                            lists = emptyList(),
+                            activeListId = null,
+                            editor = SearchListEditorState(
+                                isOpen = true,
+                                name = "Compact viewport",
+                                terms = "invoice\nreceipt\ntracking",
+                            ),
+                            canSave = true,
+                            onNew = ::ignoreAction,
+                            onSelect = ::ignoreText,
+                            onEdit = ::ignoreList,
+                            onDelete = ::ignoreList,
+                            onNameChange = ::ignoreText,
+                            onTermsChange = ::ignoreText,
+                            onSave = ::ignoreAction,
+                            onCancel = ::ignoreAction,
+                        )
+                    }
+                }
+            }
+        }
+
+        assertTrue(editorScroll.maxValue > 0)
+        var nodes = semanticsNodes()
+        val nameField = nodes.single {
+            it.config.getOrNull(SemanticsProperties.EditableText)?.text == "Compact viewport"
+        }
+        scrollNodeIntoViewport(editorScroll, nameField)
+        nodes = semanticsNodes()
+        assertWithinViewport(
+            nodes.single {
+                it.config.getOrNull(SemanticsProperties.EditableText)?.text == "Compact viewport"
+            },
+        )
+
+        val termsField = nodes.single {
+            it.config.getOrNull(SemanticsProperties.EditableText)?.text ==
+                "invoice\nreceipt\ntracking"
+        }
+        scrollNodeIntoViewport(editorScroll, termsField)
+        nodes = semanticsNodes()
+        assertWithinViewport(
+            nodes.single {
+                it.config.getOrNull(SemanticsProperties.EditableText)?.text ==
+                    "invoice\nreceipt\ntracking"
+            },
+        )
+
+        runBlockingScroll(editorScroll.maxValue)
+        nodes = semanticsNodes()
+        val save = nodeWithText(nodes, "Save list")
+        val cancel = nodeWithText(nodes, "Cancel")
+        assertMeasuredSize(save, minimumHeightDp = 52f)
+        assertMeasuredSize(cancel, minimumHeightDp = 48f)
+        assertWithinViewport(save)
+        assertWithinViewport(cancel)
+        assertRendered("lists-dark-short-viewport-bottom.png")
     }
 
     @Test
@@ -344,6 +462,8 @@ class FinderSearchListsTest {
         val cancel = nodeWithText(nodes, "Cancel")
         assertTouchBounds(save)
         assertTouchBounds(cancel)
+        assertMeasuredSize(save, minimumHeightDp = 52f)
+        assertMeasuredSize(cancel, minimumHeightDp = 48f)
         assertWithinViewport(save)
         assertWithinViewport(cancel)
         assertRendered("combined-landscape-many-lists-bottom.png")
@@ -597,6 +717,16 @@ class FinderSearchListsTest {
         assertTrue(node.touchBoundsInRoot.height / density >= 48f)
     }
 
+    private fun assertMeasuredSize(
+        node: SemanticsNode,
+        minimumHeightDp: Float,
+        minimumWidthDp: Float = 48f,
+    ) {
+        val density = checkNotNull(composeView).resources.displayMetrics.density
+        assertTrue(node.size.width / density >= minimumWidthDp)
+        assertTrue(node.size.height / density >= minimumHeightDp)
+    }
+
     private fun SemanticsNode.unclippedBoundsInRoot(): Rect {
         val position = positionInRoot
         return Rect(
@@ -633,6 +763,17 @@ class FinderSearchListsTest {
             checkNotNull(contentScrollState).scrollTo(value)
         }
         measureCurrentComposition()
+    }
+
+    private fun scrollNodeIntoViewport(scrollState: ScrollState, node: SemanticsNode) {
+        val viewportHeight = checkNotNull(composeView).height.toFloat()
+        val bounds = node.unclippedBoundsInRoot()
+        val scrollDelta = when {
+            bounds.bottom > viewportHeight -> (bounds.bottom - viewportHeight).roundToInt()
+            bounds.top < 0f -> bounds.top.roundToInt()
+            else -> 0
+        }
+        runBlockingScroll((scrollState.value + scrollDelta).coerceIn(0, scrollState.maxValue))
     }
 
     private fun assertRendered(fileName: String) {
