@@ -133,43 +133,38 @@ internal fun RetainedInspectionHeader(
                 onTerms = onTerms,
                 onUseManual = onUseManual,
                 contextOverride = searchContext,
+                additionalActions = {
+                    if (!managerOpen) {
+                        FinderSecondaryAction(
+                            label = stringResource(Res.string.inspection_edit_search),
+                            onClick = onEditSearch,
+                        )
+                    }
+                },
             )
         }
         FlowRow(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(FinderSpacing.extraSmall),
         ) {
-            if (!managerOpen) {
-                TextButton(onClick = onEditSearch, modifier = Modifier.heightIn(min = 48.dp)) {
-                    Text(
-                        stringResource(
-                            if (editing) Res.string.inspection_done
-                            else Res.string.inspection_edit_search,
-                        ),
-                    )
-                }
+            if (editing && !managerOpen) {
+                FinderSecondaryAction(
+                    label = stringResource(Res.string.inspection_done),
+                    onClick = onEditSearch,
+                )
             }
             returnLabel?.let { label ->
-                TextButton(
-                    onClick = onReturn,
-                    modifier = Modifier.heightIn(min = 48.dp),
-                ) {
-                    Text(label)
-                }
+                FinderSecondaryAction(label = label, onClick = onReturn)
             }
             androidx.compose.foundation.layout.Box {
-                TextButton(
+                FinderSecondaryAction(
+                    label = if (resultCount == null) {
+                        stringResource(Res.string.inspection_results_unavailable)
+                    } else {
+                        stringResource(Res.string.inspection_results, resultCount)
+                    },
                     onClick = { resultsExpanded = true },
-                    modifier = Modifier.heightIn(min = 48.dp),
-                ) {
-                    Text(
-                        if (resultCount == null) {
-                            stringResource(Res.string.inspection_results_unavailable)
-                        } else {
-                            stringResource(Res.string.inspection_results, resultCount)
-                        },
-                    )
-                }
+                )
                 DropdownMenu(
                     expanded = resultsExpanded,
                     onDismissRequest = { resultsExpanded = false },
@@ -194,12 +189,10 @@ internal fun RetainedInspectionHeader(
                 }
             }
             androidx.compose.foundation.layout.Box {
-                TextButton(
+                FinderSecondaryAction(
+                    label = stringResource(Res.string.inspection_more),
                     onClick = { moreExpanded = true },
-                    modifier = Modifier.heightIn(min = 48.dp),
-                ) {
-                    Text(stringResource(Res.string.inspection_more))
-                }
+                )
                 DropdownMenu(
                     expanded = moreExpanded,
                     onDismissRequest = { moreExpanded = false },

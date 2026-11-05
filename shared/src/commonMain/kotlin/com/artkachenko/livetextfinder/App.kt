@@ -96,6 +96,7 @@ import com.artkachenko.livetextfinder.search.searchTermSummaries
 import com.artkachenko.livetextfinder.search.stillMatchRows
 import com.artkachenko.livetextfinder.search.stillMatchText
 import com.artkachenko.livetextfinder.ui.ContextMessage
+import com.artkachenko.livetextfinder.ui.FinderCaptureControls
 import com.artkachenko.livetextfinder.ui.FinderContentAssembly
 import com.artkachenko.livetextfinder.ui.FinderOptionsSheet
 import com.artkachenko.livetextfinder.ui.FinderSearchControls
@@ -116,6 +117,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import livetextfinder.shared.generated.resources.Res
 import livetextfinder.shared.generated.resources.finder_options_highlight
+import livetextfinder.shared.generated.resources.inspection_results
 import livetextfinder.shared.generated.resources.inspection_return_frozen
 import livetextfinder.shared.generated.resources.search_list_import_fallback_name
 import livetextfinder.shared.generated.resources.search_list_transfer_another_busy
@@ -134,7 +136,6 @@ import livetextfinder.shared.generated.resources.search_list_transfer_import_una
 import livetextfinder.shared.generated.resources.search_list_transfer_list_invalid
 import livetextfinder.shared.generated.resources.search_list_transfer_reading
 import livetextfinder.shared.generated.resources.search_list_transfer_saving
-import livetextfinder.shared.generated.resources.search_results
 import livetextfinder.shared.generated.resources.search_results_locate_hint
 import livetextfinder.shared.generated.resources.search_results_unavailable
 import livetextfinder.shared.generated.resources.status_saving
@@ -776,7 +777,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                                 searchListsLabel = if (managerOpen) {
                                     "Close lists"
                                 } else {
-                                    "Search lists"
+                                    "Lists"
                                 },
                                 onSearchLists = {
                                     RetainedInspectionActionDispatcher.toggleLists(
@@ -807,43 +808,21 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                                 },
                                 onOptions = { optionsOpen = true },
                                 saving = sessionState.saving,
-                                captureLabel = captureLabel,
-                                captureEnabled = freezeState.mode != FreezeMode.Live ||
-                                    state.status == OcrStatus.Scanning ||
-                                    state.status == OcrStatus.TextRecognized,
-                                onCapture = {
-                                    when (freezeState.mode) {
-                                        FreezeMode.Live -> {
-                                            resetLiveArea()
-                                            frozenOwner.freeze(
-                                                cameraReady = state.status == OcrStatus.Scanning ||
-                                                    state.status == OcrStatus.TextRecognized,
-                                            )
-                                        }
-                                        FreezeMode.Frozen -> {
-                                            resetLiveArea()
-                                            frozenOwner.resume()
-                                        }
-                                        FreezeMode.Freezing -> Unit
+                                resultsLabel = if (
+                                    sourceIdentity == null && search.query.isNotEmpty()
+                                ) {
+                                    if (resultsAvailable) {
+                                        stringResource(
+                                            Res.string.inspection_results,
+                                            search.occurrences.size,
+                                        )
+                                    } else {
+                                        stringResource(Res.string.search_results_unavailable)
                                     }
+                                } else {
+                                    null
                                 },
-                                pendingCaptureLabel = pendingCaptureLabel,
-                                onCancelCapture = frozenOwner::cancel,
-                                secondaryActionLabel = directSecondaryActionLabel,
-                                onSecondaryAction = {
-                                    when (importedState.phase) {
-                                        ImportedImagePhase.Unsupported -> Unit
-                                        ImportedImagePhase.Imported -> {
-                                            resetLiveArea()
-                                            importedOwner.cancel()
-                                        }
-                                        ImportedImagePhase.Picking,
-                                        ImportedImagePhase.Reading,
-                                        ImportedImagePhase.Recognizing -> importedOwner.cancel()
-                                        ImportedImagePhase.Live,
-                                        ImportedImagePhase.Error -> Unit
-                                    }
-                                },
+                                onResults = { searchResultsDialogOpen = true },
                             )
                         }
                         if (transferState.message != null) {
@@ -876,20 +855,6 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                             },
                             onRequestReset = { resetConfirm = true },
                         )
-                        if (search.query.isNotEmpty() && sourceIdentity == null) {
-                            TextButton(onClick = { searchResultsDialogOpen = true }) {
-                                Text(
-                                    if (resultsAvailable) {
-                                        stringResource(
-                                            Res.string.search_results,
-                                            search.occurrences.size,
-                                        )
-                                    } else {
-                                        stringResource(Res.string.search_results_unavailable)
-                                    },
-                                )
-                            }
-                        }
                     }
                 },
                 managerContent = {
@@ -1136,7 +1101,47 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                     }
                 },
                 footerContent = {
-                    if (sourceIdentity != null) {
+                    if (sourceIdentity == null) {
+                        FinderCaptureControls(
+                            captureLabel = captureLabel,
+                            captureEnabled = freezeState.mode != FreezeMode.Live ||
+                                state.status == OcrStatus.Scanning ||
+                                state.status == OcrStatus.TextRecognized,
+                            onCapture = {
+                                when (freezeState.mode) {
+                                    FreezeMode.Live -> {
+                                        resetLiveArea()
+                                        frozenOwner.freeze(
+                                            cameraReady = state.status == OcrStatus.Scanning ||
+                                                state.status == OcrStatus.TextRecognized,
+                                        )
+                                    }
+                                    FreezeMode.Frozen -> {
+                                        resetLiveArea()
+                                        frozenOwner.resume()
+                                    }
+                                    FreezeMode.Freezing -> Unit
+                                }
+                            },
+                            pendingCaptureLabel = pendingCaptureLabel,
+                            onCancelCapture = frozenOwner::cancel,
+                            secondaryActionLabel = directSecondaryActionLabel,
+                            onSecondaryAction = {
+                                when (importedState.phase) {
+                                    ImportedImagePhase.Imported -> {
+                                        resetLiveArea()
+                                        importedOwner.cancel()
+                                    }
+                                    ImportedImagePhase.Picking,
+                                    ImportedImagePhase.Reading,
+                                    ImportedImagePhase.Recognizing -> importedOwner.cancel()
+                                    ImportedImagePhase.Unsupported,
+                                    ImportedImagePhase.Live,
+                                    ImportedImagePhase.Error -> Unit
+                                }
+                            },
+                        )
+                    } else {
                         Column(
                             Modifier.fillMaxWidth().padding(
                                 horizontal = FinderSpacing.large,

@@ -63,6 +63,7 @@
     <string name="search_context_manual_inactive">Inactive while a list is selected. Typing switches to manual search.</string>
     <string name="search_context_terms">Terms</string>
     <string name="search_context_use_manual">Use manual search</string>
+    <string name="search_context_use_manual_short">Use manual</string>
     <string name="search_context_count_unavailable">—</string>
     <string name="finder_options_import">Import image</string>
     <string name="search_list_import">Import search list</string>

@@ -9,7 +9,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -18,6 +17,8 @@ import com.artkachenko.livetextfinder.search.SearchMatchMode
 import livetextfinder.shared.generated.resources.Res
 import livetextfinder.shared.generated.resources.finder_options
 import livetextfinder.shared.generated.resources.search_context_manual_inactive
+import livetextfinder.shared.generated.resources.search_context_use_manual
+import livetextfinder.shared.generated.resources.search_context_use_manual_short
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
@@ -36,13 +37,8 @@ internal fun FinderSearchControls(
     onOptions: () -> Unit,
     saving: Boolean = false,
     savingLabel: String? = null,
-    captureLabel: String?,
-    captureEnabled: Boolean,
-    onCapture: () -> Unit,
-    pendingCaptureLabel: String?,
-    onCancelCapture: () -> Unit,
-    secondaryActionLabel: String?,
-    onSecondaryAction: () -> Unit,
+    resultsLabel: String? = null,
+    onResults: () -> Unit = {},
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -52,24 +48,53 @@ internal fun FinderSearchControls(
         Column(
             modifier = Modifier.fillMaxWidth().padding(
                 horizontal = FinderSpacing.large,
-                vertical = FinderSpacing.small,
+                vertical = FinderSpacing.extraSmall,
             ),
             verticalArrangement = Arrangement.spacedBy(FinderSpacing.extraSmall),
         ) {
-            if (showTitle) {
-                Text(
-                    "Live Text Finder",
-                    style = MaterialTheme.typography.titleLarge,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (showTitle) {
+                    Text(
+                        text = "Live Text Finder",
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.titleLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                FinderSecondaryAction(
+                    label = stringResource(Res.string.finder_options),
+                    onClick = onOptions,
                 )
             }
             OutlinedTextField(
                 value = query,
                 onValueChange = onQueryChange,
-                label = {
-                    Text("Find in recognized text")
+                label = { Text("Find in recognized text") },
+                trailingIcon = if (activeListName != null) {
+                    {
+                        FinderSecondaryAction(
+                            label = stringResource(Res.string.search_context_use_manual_short),
+                            onClick = onUseManual,
+                            accessibilityLabel = stringResource(
+                                Res.string.search_context_use_manual,
+                            ),
+                        )
+                    }
+                } else {
+                    null
                 },
+                textStyle = MaterialTheme.typography.bodyLarge.copy(
+                    color = if (activeListName == null) {
+                        MaterialTheme.colorScheme.onSurface
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                ),
                 supportingText = if (activeListName != null) {
                     { Text(stringResource(Res.string.search_context_manual_inactive)) }
                 } else {
@@ -79,15 +104,6 @@ internal fun FinderSearchControls(
                 modifier = Modifier.fillMaxWidth(),
                 shape = MaterialTheme.shapes.medium,
             )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(FinderSpacing.extraSmall),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                TextButton(onClick = onSearchLists) {
-                    Text(searchListsLabel)
-                }
-            }
             SearchContext(
                 activeListName = activeListName,
                 termCount = activeListTermCount,
@@ -99,28 +115,14 @@ internal fun FinderSearchControls(
                 onUseManual = onUseManual,
                 contextOverride = searchContext,
                 savingLabel = savingLabel,
+                showUseManualAction = false,
+                additionalActions = {
+                    FinderSecondaryAction(searchListsLabel, onSearchLists)
+                    resultsLabel?.let { label ->
+                        FinderSecondaryAction(label, onResults)
+                    }
+                },
             )
-            TextButton(onClick = onOptions) {
-                Text(stringResource(Res.string.finder_options))
-            }
-            when {
-                captureLabel != null -> {
-                    FinderPrimaryAction(
-                        label = captureLabel,
-                        enabled = captureEnabled,
-                        modifier = Modifier.fillMaxWidth(),
-                        onClick = onCapture,
-                    )
-                }
-                pendingCaptureLabel != null -> TextButton(onClick = onCancelCapture) {
-                    Text(pendingCaptureLabel)
-                }
-            }
-            if (secondaryActionLabel != null) {
-                TextButton(onClick = onSecondaryAction) {
-                    Text(secondaryActionLabel)
-                }
-            }
         }
     }
 }

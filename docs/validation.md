@@ -418,3 +418,32 @@ The shared theme now uses a branded charcoal and mint dark palette, coordinated 
 Focused `LiveTextFinderThemeTest` passed on Android API 35: **6 tests, 0 failures/errors/skips**, including dynamic-color opt-in, branded fallback roles, contrast, primary-action measurement/click, and native light/dark controls. Render captures saved under `work/redesign/foundation/` were inspected. The final aggregate validation is recorded in the appended follow-up after it runs. No APK/device run was performed; this foundation stage does not complete the screen redesign.
 
 The final aggregate command `./gradlew :androidApp:compileDebugKotlin :shared:testAndroidHostTest :androidApp:lintDebug :shared:compileKotlinIosSimulatorArm64 --console=plain` passed in 30s (73 tasks; 21 executed). Host XML confirms **333 tests across 48 suites, zero failures/errors/skips**. Android lint reported **14 warnings, zero errors**. Shared iOS simulator compilation passed. Full log: `work/redesign/foundation/final-checks.log`.
+
+## Phase 3 Main scanner — 2026-11-05
+
+The Main scanner groups title and Options, editable query and active search context in one header;
+Terms, Lists and Results share one wrapping action band. Capture, pending-freeze cancellation and
+import cancellation sit below the weighted viewport. Retained sources use one Return/Resume entry;
+Edit search lives in their context band and Done remains available while editing. Existing owners,
+callbacks, preview-hide policy and the single root insets owner are preserved. Active-list mode
+emphasizes the list name, keeps the manual query visible as inactive guidance and places Use manual
+beside that query. Shared secondary actions use neutral colours and 48dp targets; Freeze remains a
+filled 52dp primary action. Live unavailable Results uses the explicit “Results unavailable” label
+and opens the existing Terms/results dialog without showing a zero count.
+
+The production-equivalent 360×800 fixture measured 744px of safe content and a 376px manual preview
+(50.5%, largest region); saved-list preview measured 324px in both themes and remained larger than
+the configuration card with the long list name, query guidance, count, mode, and actions visible.
+Retained frozen/imported viewport measured 520dp unselected / 452dp selected in both light and dark
+themes, against 476dp / 408dp floors. Saving false→true→false kept viewport bounds equal in every
+fixture. The host preview is an opaque layout fixture, not a live camera runtime claim. Dark/light
+manual and saved-list renders, the unavailable-results route, light/dark retained frozen/imported
+selected/unselected renders, and short/large-text fixtures were inspected under
+`work/redesign/scanner/correction/` and `work/redesign/scanner/`.
+
+The final aggregate command passed: Android debug Kotlin compilation, **334 Android host tests across
+48 suites with zero failures/errors/skips**, Android lint (**14 warnings, zero errors**) and shared iOS
+simulator compilation. The correction aggregate log and full matrix measurements are under
+`work/redesign/scanner/correction/`. `git diff --check` passed; changed Kotlin lines meet the
+100-column limit. iOS validation checks shared-source compilation only. No APK or device run was
+performed.

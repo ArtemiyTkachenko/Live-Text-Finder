@@ -240,17 +240,10 @@ class FinderSearchListsTest {
                                 showTitle = false,
                                 query = "invoice",
                                 onQueryChange = ::ignoreText,
-                                searchListsLabel = "Search lists",
+                                searchListsLabel = "Lists",
                                 onSearchLists = ::ignoreAction,
                                 searchContext = "Shopping list · 1 term",
-                                onOptions = ::ignoreAction,
-                                captureLabel = null,
-                                captureEnabled = false,
-                                onCapture = ::ignoreAction,
-                                pendingCaptureLabel = null,
-                                onCancelCapture = ::ignoreAction,
-                                secondaryActionLabel = null,
-                                onSecondaryAction = ::ignoreAction,
+                                onOptions = ::ignoreAction
                             )
                         }
                         FinderSearchLists(
@@ -322,14 +315,7 @@ class FinderSearchListsTest {
                             searchListsLabel = "Close lists",
                             onSearchLists = ::ignoreAction,
                             searchContext = "Monthly review · 2 terms",
-                            onOptions = ::ignoreAction,
-                            captureLabel = null,
-                            captureEnabled = false,
-                            onCapture = ::ignoreAction,
-                            pendingCaptureLabel = null,
-                            onCancelCapture = ::ignoreAction,
-                            secondaryActionLabel = null,
-                            onSecondaryAction = ::ignoreAction,
+                            onOptions = ::ignoreAction
                         )
                         FinderSearchLists(
                             lists = lists,
@@ -393,14 +379,7 @@ class FinderSearchListsTest {
                             searchListsLabel = "Close lists",
                             onSearchLists = ::ignoreAction,
                             searchContext = "Monthly review · 2 terms",
-                            onOptions = ::ignoreAction,
-                            captureLabel = null,
-                            captureEnabled = false,
-                            onCapture = ::ignoreAction,
-                            pendingCaptureLabel = null,
-                            onCancelCapture = ::ignoreAction,
-                            secondaryActionLabel = null,
-                            onSecondaryAction = ::ignoreAction,
+                            onOptions = ::ignoreAction
                         )
                         FinderSearchLists(
                             lists = listOf(

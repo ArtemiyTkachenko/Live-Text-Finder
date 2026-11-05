@@ -3,13 +3,13 @@ package com.artkachenko.livetextfinder.ui
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.FlowRowScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,12 +40,16 @@ internal fun SearchContext(
     onUseManual: () -> Unit,
     contextOverride: String? = null,
     savingLabel: String? = null,
+    additionalActions: @Composable FlowRowScope.() -> Unit = {},
+    showUseManualAction: Boolean = true,
 ) {
     val context = contextOverride ?: if (activeListName != null) {
         activeListName
     } else {
-        stringResource(Res.string.search_context_manual) + manualQuery.takeIf(String::isNotBlank)
-            ?.let { " · $it" }.orEmpty()
+        val manualQuerySuffix = manualQuery.takeIf {
+            compact && it.isNotBlank()
+        }?.let { query -> " · $query" }.orEmpty()
+        stringResource(Res.string.search_context_manual) + manualQuerySuffix
     }
     val termCountLabel = activeListName?.let {
         pluralStringResource(Res.plurals.search_list_term_count, termCount, termCount)
@@ -66,8 +70,16 @@ internal fun SearchContext(
             Text(
                 text = context,
                 modifier = Modifier.weight(1f),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = if (activeListName == null) {
+                    MaterialTheme.typography.bodyMedium
+                } else {
+                    MaterialTheme.typography.titleSmall
+                },
+                color = if (activeListName == null) {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                },
                 maxLines = if (compact) 1 else 2,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -85,7 +97,10 @@ internal fun SearchContext(
             ) {
                 Text(
                     text = modeLabel,
-                    modifier = Modifier,
+                    modifier = Modifier.padding(
+                        horizontal = FinderSpacing.extraSmall,
+                        vertical = 4.dp,
+                    ),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSecondaryContainer,
                 )
@@ -96,19 +111,16 @@ internal fun SearchContext(
             horizontalArrangement = Arrangement.spacedBy(FinderSpacing.extraSmall),
             verticalArrangement = Arrangement.spacedBy(FinderSpacing.extraSmall),
         ) {
-            TextButton(
+            FinderSecondaryAction(
+                label = stringResource(Res.string.search_context_terms),
                 onClick = onTerms,
-                modifier = Modifier.heightIn(min = 48.dp),
-            ) {
-                Text(stringResource(Res.string.search_context_terms))
-            }
-            if (activeListName != null) {
-                TextButton(
+            )
+            additionalActions()
+            if (activeListName != null && showUseManualAction) {
+                FinderSecondaryAction(
+                    label = stringResource(Res.string.search_context_use_manual),
                     onClick = onUseManual,
-                    modifier = Modifier.heightIn(min = 48.dp),
-                ) {
-                    Text(stringResource(Res.string.search_context_use_manual))
-                }
+                )
             }
         }
         Text(

@@ -19,7 +19,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.BroadcastFrameClock
@@ -33,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.MotionDurationScale
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.ViewRootForTest
@@ -45,6 +49,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.MutableLiveData
 import com.artkachenko.livetextfinder.AppContentColumn
 import com.artkachenko.livetextfinder.FinderStatusRegion
@@ -82,6 +88,8 @@ import com.artkachenko.livetextfinder.search.SearchTermSummary
 import com.artkachenko.livetextfinder.search.dispatchSearchListSelection
 import com.artkachenko.livetextfinder.search.searchRecognizedContent
 import com.artkachenko.livetextfinder.search.searchRecognizedText
+import com.artkachenko.livetextfinder.ui.FinderCaptureControls
+import com.artkachenko.livetextfinder.ui.FinderContentAssembly
 import com.artkachenko.livetextfinder.ui.FinderSearchControls
 import com.artkachenko.livetextfinder.ui.FinderSearchLists
 import com.artkachenko.livetextfinder.ui.HighlightColorDialog
@@ -279,18 +287,11 @@ class StatusFeedbackTest {
                             showTitle = false,
                             query = "invoice",
                             onQueryChange = ::ignoreText,
-                            searchListsLabel = "Search lists",
+                            searchListsLabel = "Lists",
                             onSearchLists = ::ignoreAction,
                             searchContext = "Manual search",
                             onOptions = { optionsOpen.value = true },
-                            savingLabel = "Saving…",
-                            captureLabel = null,
-                            captureEnabled = false,
-                            onCapture = ::ignoreAction,
-                            pendingCaptureLabel = null,
-                            onCancelCapture = ::ignoreAction,
-                            secondaryActionLabel = null,
-                            onSecondaryAction = ::ignoreAction,
+                            savingLabel = "Saving…"
                         )
                     }
                 }
@@ -470,24 +471,17 @@ class StatusFeedbackTest {
                 "Export includes the selected list terms only; colours and search settings " +
                 "are not included."
         mount(widthDp = 320, heightDp = 360, fontScale = 1.4f) {
-            LiveTextFinderTheme(darkThemeOverride = false, dynamicColor = false) {
+            LiveTextFinderTheme(darkThemeOverride = true, dynamicColor = false) {
                 Surface(Modifier.fillMaxSize()) {
                     Column {
                         FinderSearchControls(
                             showTitle = false,
                             query = "invoice",
                             onQueryChange = ::ignoreText,
-                            searchListsLabel = "Search lists",
+                            searchListsLabel = "Lists",
                             onSearchLists = ::ignoreAction,
                             searchContext = "Manual search",
-                            onOptions = { optionsOpen.value = true },
-                            captureLabel = null,
-                            captureEnabled = false,
-                            onCapture = ::ignoreAction,
-                            pendingCaptureLabel = null,
-                            onCancelCapture = ::ignoreAction,
-                            secondaryActionLabel = null,
-                            onSecondaryAction = ::ignoreAction,
+                            onOptions = { optionsOpen.value = true }
                         )
                     }
                 }
@@ -555,17 +549,10 @@ class StatusFeedbackTest {
                         showTitle = true,
                         query = "invoice",
                         onQueryChange = ::ignoreText,
-                        searchListsLabel = "Search lists",
+                        searchListsLabel = "Lists",
                         onSearchLists = ::ignoreAction,
                         searchContext = "Manual search",
-                        onOptions = { optionsOpen.value = true },
-                        captureLabel = "Freeze frame",
-                        captureEnabled = true,
-                        onCapture = ::ignoreAction,
-                        pendingCaptureLabel = null,
-                        onCancelCapture = ::ignoreAction,
-                        secondaryActionLabel = null,
-                        onSecondaryAction = ::ignoreAction,
+                        onOptions = { optionsOpen.value = true }
                     )
                 }
                 if (optionsOpen.value) {
@@ -615,33 +602,53 @@ class StatusFeedbackTest {
         mount(widthDp = 360, heightDp = 640) {
             LiveTextFinderTheme(darkThemeOverride = false, dynamicColor = false) {
                 Surface(Modifier.fillMaxSize()) {
-                    FinderSearchControls(
-                        showTitle = true,
-                        query = "invoice",
-                        onQueryChange = ::ignoreText,
-                        searchListsLabel = "Search lists",
-                        onSearchLists = ::ignoreAction,
-                        searchContext = "Manual search",
-                        onOptions = ::ignoreAction,
-                        captureLabel = null,
-                        captureEnabled = false,
-                        onCapture = ::ignoreAction,
-                        pendingCaptureLabel = if (stage.intValue == 0) "Cancel freeze" else null,
-                        onCancelCapture = {
-                            calls += "freeze"
-                            stage.intValue = 1
+                    FinderContentAssembly(
+                        scrollState = ScrollState(0),
+                        scrollable = false,
+                        modifier = Modifier.fillMaxSize(),
+                        topContent = {
+                            FinderSearchControls(
+                                showTitle = true,
+                                query = "invoice",
+                                onQueryChange = ::ignoreText,
+                                searchListsLabel = "Lists",
+                                onSearchLists = ::ignoreAction,
+                                searchContext = "Manual search",
+                                onOptions = ::ignoreAction,
+                            )
                         },
-                        secondaryActionLabel = when (stage.intValue) {
-                            1 -> "Cancel import"
-                            2 -> "Return to camera"
-                            else -> null
+                        managerContent = {},
+                        viewportContent = {
+                            Box(Modifier.weight(1f).fillMaxWidth())
                         },
-                        onSecondaryAction = {
-                            when (stage.intValue) {
-                                1 -> calls += "cancel import"
-                                2 -> calls += "return to camera"
-                            }
-                            stage.intValue++
+                        footerContent = {
+                            FinderCaptureControls(
+                                captureLabel = null,
+                                captureEnabled = false,
+                                onCapture = ::ignoreAction,
+                                pendingCaptureLabel = if (stage.intValue == 0) {
+                                    "Cancel freeze"
+                                } else {
+                                    null
+                                },
+                                onCancelCapture = {
+                                    calls += "freeze"
+                                    stage.intValue = 1
+                                },
+                                secondaryActionLabel = when (stage.intValue) {
+                                    1 -> "Cancel import"
+                                    2 -> "Return to camera"
+                                    else -> null
+                                },
+                                onSecondaryAction = {
+                                    if (stage.intValue == 1) {
+                                        calls += "cancel import"
+                                    } else {
+                                        calls += "return to camera"
+                                    }
+                                    stage.intValue++
+                                },
+                            )
                         },
                     )
                 }
@@ -1022,14 +1029,7 @@ class StatusFeedbackTest {
                                 }
                             },
                             onOptions = ::ignoreAction,
-                            saving = saving.value,
-                            captureLabel = null,
-                            captureEnabled = false,
-                            onCapture = ::ignoreAction,
-                            pendingCaptureLabel = null,
-                            onCancelCapture = ::ignoreAction,
-                            secondaryActionLabel = null,
-                            onSecondaryAction = ::ignoreAction,
+                            saving = saving.value
                         )
                         RetainedInspectionHeader(
                             activeListName = session.state.value.activeList?.name,
@@ -1088,7 +1088,15 @@ class StatusFeedbackTest {
         var nodes = semanticsNodes(composeView)
         assertTrue(nodes.count { it.textValues().contains("Substring") } >= 2)
         assertTrue(nodes.count { it.textValues().contains("2 terms") } >= 2)
-        assertTrue(nodes.count { it.textValues().contains("Use manual search") } >= 2)
+        val manualFieldAction = nodeWithText(nodes, "Use manual", clickable = true)
+        assertTrue(
+            manualFieldAction.config.getOrNull(SemanticsProperties.ContentDescription)
+                .orEmpty().contains("Use manual search"),
+        )
+        val retainedManualAction = nodeWithText(nodes, "Use manual search", clickable = true)
+        val actionDensity = checkNotNull(composeView).resources.displayMetrics.density
+        assertTrue(retainedManualAction.size.width / actionDensity >= 48f)
+        assertTrue(retainedManualAction.size.height / actionDensity >= 48f)
         assertTrue(nodes.any { it.textValues().contains("Results") })
         assertFalse(nodes.any { it.textValues().contains("Results (0)") })
         fun assertActionSize(label: String) {
@@ -1104,7 +1112,8 @@ class StatusFeedbackTest {
             }
         }
         assertActionSize("Terms")
-        assertActionSize("Use manual search")
+        assertTrue(manualFieldAction.size.width / actionDensity >= 48f)
+        assertTrue(manualFieldAction.size.height / actionDensity >= 48f)
         assertRendered("search-context-list-light-large-text.png")
         val contextBeforeSave = nodes.first {
             it.textValues().any { text -> text.contains(listName) }
@@ -1856,6 +1865,240 @@ class StatusFeedbackTest {
         runSelectionComposition(360, 1.25f, darkTheme = false)
     }
 
+    @Test
+    fun mainScannerProductionAssemblyMeasuresPreviewAndKeepsActionsReachable() {
+        runMainScannerAssemblyFixture(
+            darkTheme = true,
+            screenshot = "main-scanner-live-dark.png",
+        )
+        disposeComposition()
+        runMainScannerAssemblyFixture(
+            darkTheme = false,
+            screenshot = "main-scanner-live-light.png",
+        )
+        disposeComposition()
+        runMainScannerAssemblyFixture(
+            darkTheme = true,
+            screenshot = "main-scanner-live-list-dark.png",
+            listMode = true,
+        )
+        disposeComposition()
+        runMainScannerAssemblyFixture(
+            darkTheme = false,
+            screenshot = "main-scanner-live-list-light.png",
+            listMode = true,
+        )
+        disposeComposition()
+        runMainScannerAssemblyFixture(
+            darkTheme = true,
+            screenshot = "main-scanner-live-unavailable-dark.png",
+            resultsAvailable = false,
+        )
+    }
+
+    private fun runMainScannerAssemblyFixture(
+        darkTheme: Boolean,
+        screenshot: String,
+        listMode: Boolean = false,
+        resultsAvailable: Boolean = true,
+    ) {
+        val previewSize = mutableStateOf(IntSize.Zero)
+        val safeAreaSize = mutableStateOf(IntSize.Zero)
+        val searchListClicks = mutableIntStateOf(0)
+        val resultsClicks = mutableIntStateOf(0)
+        val captureClicks = mutableIntStateOf(0)
+        val useManualClicks = mutableIntStateOf(0)
+        val resultsDialogOpen = mutableStateOf(false)
+        val savedList = SavedSearchList(
+            id = "quarterly-review",
+            name = "Quarterly invoice and receipt audit follow-up",
+            terms = listOf("invoice", "receipt"),
+        )
+        val sessionState = SearchSessionState(
+            persisted = PersistedSearchState(
+                manualQuery = if (listMode) "manual note" else "invoice",
+                lists = listOf(savedList).takeIf { listMode }.orEmpty(),
+                activeListId = savedList.id.takeIf { listMode },
+            ),
+            loaded = true,
+        )
+        mount(widthDp = 360, heightDp = 800) {
+            LiveTextFinderTheme(darkThemeOverride = darkTheme, dynamicColor = false) {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background,
+                ) {
+                    FinderContentAssembly(
+                        scrollState = ScrollState(0),
+                        scrollable = false,
+                        modifier = Modifier.fillMaxSize().safeDrawingPadding().imePadding()
+                            .onSizeChanged { safeAreaSize.value = it },
+                        topContent = {
+                            Column(
+                                Modifier.fillMaxWidth().padding(
+                                    horizontal = FinderSpacing.large,
+                                    vertical = FinderSpacing.extraSmall,
+                                ),
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                FinderSearchControls(
+                                    showTitle = true,
+                                    query = sessionState.persisted.manualQuery,
+                                    onQueryChange = ::ignoreText,
+                                    searchListsLabel = "Lists",
+                                    onSearchLists = { searchListClicks.intValue++ },
+                                    activeListName = sessionState.activeList?.name,
+                                    activeListTermCount = sessionState.activeList?.terms?.size ?: 0,
+                                    onOptions = ::ignoreAction,
+                                    onUseManual = { useManualClicks.intValue++ },
+                                    resultsLabel = when {
+                                        !resultsAvailable -> "Results unavailable"
+                                        listMode -> "Results (2)"
+                                        else -> "Results (1)"
+                                    },
+                                    onResults = {
+                                        resultsClicks.intValue++
+                                        if (!resultsAvailable) resultsDialogOpen.value = true
+                                    },
+                                )
+                                TestFinderStatusRegion(
+                                    state = OcrUiState(
+                                        status = if (resultsAvailable) {
+                                            OcrStatus.TextRecognized
+                                        } else {
+                                            OcrStatus.Paused
+                                        },
+                                        snapshot = cameraSnapshot("invoice receipt"),
+                                    ),
+                                    importedState = ImportedImageState(),
+                                    sessionState = sessionState,
+                                    shouldShowViews = true,
+                                    useSessionSearch = true,
+                                )
+                                if (resultsDialogOpen.value) {
+                                    SearchTermResultsDialog(
+                                        terms = listOf(
+                                            SearchTermSummary(
+                                                termId = "manual",
+                                                label = "invoice",
+                                                color = HighlightColor.Yellow,
+                                                occurrenceCount = 1,
+                                            ),
+                                        ),
+                                        resultsAvailable = false,
+                                        canLocate = false,
+                                        onDismiss = { resultsDialogOpen.value = false },
+                                    )
+                                }
+                            }
+                        },
+                        managerContent = {},
+                        viewportContent = {
+                            Box(
+                                Modifier.weight(1f).fillMaxWidth().background(Color.Black)
+                                    .semantics { contentDescription = "Live preview region" }
+                                    .onSizeChanged { previewSize.value = it },
+                            )
+                        },
+                        footerContent = {
+                            FinderCaptureControls(
+                                captureLabel = "Freeze frame",
+                                captureEnabled = true,
+                                onCapture = { captureClicks.intValue++ },
+                                pendingCaptureLabel = null,
+                                onCancelCapture = ::ignoreAction,
+                                secondaryActionLabel = null,
+                                onSecondaryAction = ::ignoreAction,
+                            )
+                        },
+                    )
+                }
+            }
+        }
+
+        val nodes = semanticsNodes(composeView)
+        val query = nodes.single {
+            it.config.getOrNull(SemanticsProperties.EditableText)?.text ==
+                sessionState.persisted.manualQuery
+        }
+        val listAction = nodeWithText(nodes, "Lists", clickable = true)
+        val resultsAction = nodeWithText(
+            nodes,
+            when {
+                !resultsAvailable -> "Results unavailable"
+                listMode -> "Results (2)"
+                else -> "Results (1)"
+            },
+            clickable = true,
+        )
+        val captureAction = nodeWithText(nodes, "Freeze frame", clickable = true)
+        System.getenv("LTF_VISUAL_OUTPUT_DIR")?.let { directory ->
+            File(directory, "scanner-measurements.txt").appendText(
+                "$screenshot safe=${safeAreaSize.value.height} " +
+                    "preview=${previewSize.value.height} footer=${captureAction.boundsInRoot}\n",
+            )
+        }
+        assertTouchBounds(listAction)
+        assertTouchBounds(resultsAction)
+        assertTouchBounds(captureAction)
+        val rootHeight = checkNotNull(composeView).height.toFloat()
+        assertTrue(
+            captureAction.boundsInRoot.top >= 0f && captureAction.boundsInRoot.bottom <= rootHeight,
+            "capture=${captureAction.boundsInRoot} rootHeight=$rootHeight listMode=$listMode",
+        )
+        assertRendered(screenshot)
+        assertTrue(captureAction.boundsInRoot.height >= 52f)
+        if (!resultsAvailable) {
+            assertFalse(nodes.any { it.textValues().contains("Results (0)") })
+        }
+        if (listMode) {
+            assertTrue(nodes.any { it.textValues().contains(savedList.name) })
+            assertTrue(nodes.any { it.textValues().contains("2 terms") })
+            val useManual = nodeWithText(nodes, "Use manual", clickable = true)
+            assertTrue(
+                useManual.config.getOrNull(SemanticsProperties.ContentDescription)
+                    .orEmpty().contains("Use manual search"),
+            )
+            assertTrue(
+                nodes.any {
+                    it.textValues().contains(
+                        "Inactive while a list is selected. Typing switches to manual search.",
+                    )
+                },
+            )
+        } else {
+            assertTrue(
+                previewSize.value.height >= safeAreaSize.value.height / 2,
+                "preview=${previewSize.value.height}px safe=${safeAreaSize.value.height}px",
+            )
+        }
+        assertTrue(query.boundsInRoot.height > 0f)
+        click(listAction)
+        click(resultsAction)
+        if (!resultsAvailable) {
+            settleDialog()
+            val dialog = checkNotNull(ShadowDialog.getLatestDialog())
+            val dialogNodes = semanticsNodes(findViewRoot(dialog.window?.decorView))
+            assertTrue(dialogNodes.any { it.textValues().contains("Search results") })
+            assertTrue(
+                dialogNodes.any {
+                    it.textValues().contains("Results are not current for this search and image.")
+                },
+            )
+            assertTrue(dialogNodes.any { it.textValues().contains("invoice") })
+            assertFalse(dialogNodes.any { it.textValues().contains("0") })
+            click(nodeWithText(dialogNodes, "Done"))
+        }
+        if (listMode) {
+            click(nodeWithText(nodes, "Use manual", clickable = true))
+            assertEquals(1, useManualClicks.intValue)
+        }
+        click(captureAction)
+        assertEquals(1, searchListClicks.intValue)
+        assertEquals(1, resultsClicks.intValue)
+        assertEquals(1, captureClicks.intValue)
+    }
+
     private fun runSelectionComposition(widthDp: Int, fontScale: Float, darkTheme: Boolean) {
         val listA = SavedSearchList(
             "a",
@@ -1889,68 +2132,86 @@ class StatusFeedbackTest {
         mount(widthDp, 900, fontScale) {
             LiveTextFinderTheme(darkThemeOverride = darkTheme, dynamicColor = false) {
                 Surface(Modifier.fillMaxSize()) {
-                    AppContentColumn(
+                    FinderContentAssembly(
                         scrollState = scroll,
                         scrollable = false,
                         modifier = Modifier.fillMaxSize(),
-                    ) {
-                        Column(Modifier.fillMaxWidth()) {
-                            Box(Modifier.semantics { contentDescription = "Controls bounds" }) {
+                        topContent = {
+                            Column(Modifier.fillMaxWidth()) {
+                                Box(Modifier.semantics { contentDescription = "Controls bounds" }) {
                                 FinderSearchControls(
                                     showTitle = false,
                                     query = session.state.value.persisted.manualQuery,
                                     onQueryChange = session::setManualQuery,
-                                    searchListsLabel = "Search lists",
+                                    searchListsLabel = if (managerOpen.value) {
+                                        "Close lists"
+                                    } else {
+                                        "Lists"
+                                    },
                                     onSearchLists = { managerOpen.value = !managerOpen.value },
-                                    searchContext = session.state.value.activeList?.name
-                                        ?: "Manual search",
+                                    activeListName = session.state.value.activeList?.name,
+                                    activeListTermCount = session.state.value.activeList
+                                        ?.terms?.size ?: 0,
                                     onOptions = ::ignoreAction,
+                                    resultsLabel = "Results (0)",
+                                    onResults = ::ignoreAction,
                                     savingLabel = if (session.state.value.saving) {
                                         "Saving…"
                                     } else {
                                         null
                                     },
-                                    captureLabel = null,
-                                    captureEnabled = false,
-                                    onCapture = ::ignoreAction,
-                                    pendingCaptureLabel = null,
-                                    onCancelCapture = ::ignoreAction,
-                                    secondaryActionLabel = null,
-                                    onSecondaryAction = ::ignoreAction,
                                 )
                             }
-                            TestFinderStatusRegion(
-                                state = OcrUiState(OcrStatus.Paused),
-                                importedState = ImportedImageState(),
-                                sessionState = session.state.value,
-                                shouldShowViews = true,
-                                onRetry = session::retry,
-                            )
-                        }
-                        if (managerOpen.value) {
-                            Box(Modifier.semantics { contentDescription = "List bounds" }) {
-                                FinderSearchLists(
-                                    lists = session.state.value.persisted.lists,
-                                    activeListId = session.state.value.persisted.activeListId,
-                                    editor = SearchListEditorState(),
-                                    canSave = session.state.value.loaded,
-                                    onNew = ::ignoreAction,
-                                    onSelect = { id -> dispatch(id) },
-                                    onEdit = ::ignoreList,
-                                    onDelete = ::ignoreList,
-                                    onNameChange = ::ignoreText,
-                                    onTermsChange = ::ignoreText,
-                                    onSave = ::ignoreAction,
-                                    onCancel = ::ignoreAction,
+                                TestFinderStatusRegion(
+                                    state = OcrUiState(OcrStatus.Paused),
+                                    importedState = ImportedImageState(),
+                                    sessionState = session.state.value,
+                                    shouldShowViews = true,
+                                    useSessionSearch = true,
+                                    onRetry = session::retry,
                                 )
                             }
-                        } else {
-                            Box(
-                                Modifier.weight(1f).fillMaxWidth().background(Color.Black)
-                                    .semantics { contentDescription = "Preview region" },
+                        },
+                        managerContent = {
+                            if (managerOpen.value) {
+                                Box(Modifier.semantics { contentDescription = "List bounds" }) {
+                                    FinderSearchLists(
+                                        lists = session.state.value.persisted.lists,
+                                        activeListId = session.state.value.persisted.activeListId,
+                                        editor = SearchListEditorState(),
+                                        canSave = session.state.value.loaded,
+                                        onNew = ::ignoreAction,
+                                        onSelect = { id -> dispatch(id) },
+                                        onEdit = ::ignoreList,
+                                        onDelete = ::ignoreList,
+                                        onNameChange = ::ignoreText,
+                                        onTermsChange = ::ignoreText,
+                                        onSave = ::ignoreAction,
+                                        onCancel = ::ignoreAction,
+                                    )
+                                }
+                            }
+                        },
+                        viewportContent = {
+                            if (!managerOpen.value) {
+                                Box(
+                                    Modifier.weight(1f).fillMaxWidth().background(Color.Black)
+                                        .semantics { contentDescription = "Preview region" },
+                                )
+                            }
+                        },
+                        footerContent = {
+                            FinderCaptureControls(
+                                captureLabel = "Freeze frame",
+                                captureEnabled = false,
+                                onCapture = ::ignoreAction,
+                                pendingCaptureLabel = null,
+                                onCancelCapture = ::ignoreAction,
+                                secondaryActionLabel = null,
+                                onSecondaryAction = ::ignoreAction,
                             )
-                        }
-                    }
+                        },
+                    )
                 }
             }
         }
@@ -2113,18 +2374,11 @@ class StatusFeedbackTest {
                                 showTitle = true,
                                 query = "invoice",
                                 onQueryChange = ::ignoreText,
-                                searchListsLabel = "Search lists",
+                                searchListsLabel = "Lists",
                                 onSearchLists = ::ignoreAction,
                                 searchContext = "Manual search",
                                 onOptions = ::ignoreAction,
-                                savingLabel = if (saving.value) "Saving…" else null,
-                                captureLabel = "Freeze frame",
-                                captureEnabled = true,
-                                onCapture = ::ignoreAction,
-                                pendingCaptureLabel = null,
-                                onCancelCapture = ::ignoreAction,
-                                secondaryActionLabel = null,
-                                onSecondaryAction = ::ignoreAction,
+                                savingLabel = if (saving.value) "Saving…" else null
                             )
                             TestFinderStatusRegion(
                                 state = OcrUiState(
@@ -2203,14 +2457,7 @@ class StatusFeedbackTest {
                             searchListsLabel = "Close lists",
                             onSearchLists = ::ignoreAction,
                             searchContext = "Manual search",
-                            onOptions = ::ignoreAction,
-                            captureLabel = null,
-                            captureEnabled = false,
-                            onCapture = ::ignoreAction,
-                            pendingCaptureLabel = null,
-                            onCancelCapture = ::ignoreAction,
-                            secondaryActionLabel = null,
-                            onSecondaryAction = ::ignoreAction,
+                            onOptions = ::ignoreAction
                         )
                         repeat(4) { index -> Text("Earlier search setting $index") }
                         TestFinderStatusRegion(
@@ -2290,8 +2537,13 @@ class StatusFeedbackTest {
         freezeState: FreezePresentationState = FreezePresentationState(),
         onRetry: () -> Unit = ::ignoreAction,
         onRequestReset: () -> Unit = ::ignoreAction,
+        useSessionSearch: Boolean = false,
     ) {
-        val liveSearch = searchRecognizedText("invoice", state)
+        val liveSearch = if (useSessionSearch) {
+            searchRecognizedText(sessionState.activeSearch, state)
+        } else {
+            searchRecognizedText("invoice", state)
+        }
         val search = when {
             importedState.phase == ImportedImagePhase.Imported ->
                 searchRecognizedContent(liveSearch.spec, importedState.snapshot)

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -146,200 +147,214 @@ class StillInspectionUiTest {
 
     @Test
     fun retainedLayoutExceedsPreservedStage2ViewportBaselines() {
-        listOf("frozen", "imported").forEach { source ->
-            listOf(false, true).forEach { selected ->
-                disposeComposition()
-                val saving = mutableStateOf(false)
-                val previewSize = mutableStateOf(IntSize.Zero)
-                val previewBounds = mutableStateOf<Rect?>(null)
-                val cameraState = OcrUiState(
-                    status = OcrStatus.TextRecognized,
-                    snapshot = snapshot(listOf("Invoice 2048", "Invoice 2048")),
-                )
-                val importedText = importedSnapshot(listOf("Invoice 2048", "Invoice 2048"))
-                val importedState = if (source == "imported") {
-                    ImportedImageState(phase = ImportedImagePhase.Imported, snapshot = importedText)
-                } else {
-                    ImportedImageState()
-                }
-                val freezeState = if (source == "frozen") {
-                    FreezePresentationState(
-                        mode = FreezeMode.Frozen,
-                        requestId = 1L,
-                        frame = FrozenSearchFrame(
-                            1L,
-                            FrameIdentity(1L, 1L),
-                            checkNotNull(cameraState.snapshot),
-                        ),
+        listOf(false, true).forEach { darkTheme ->
+            listOf("frozen", "imported").forEach { source ->
+                listOf(false, true).forEach { selected ->
+                    disposeComposition()
+                    val saving = mutableStateOf(false)
+                    val previewSize = mutableStateOf(IntSize.Zero)
+                    val previewBounds = mutableStateOf<Rect?>(null)
+                    val cameraState = OcrUiState(
+                        status = OcrStatus.TextRecognized,
+                        snapshot = snapshot(listOf("Invoice 2048", "Invoice 2048")),
                     )
-                } else {
-                    FreezePresentationState()
-                }
-                val liveSearch = searchRecognizedText("invoice", cameraState)
-                val search = if (source == "imported") {
-                    searchRecognizedContent(liveSearch.spec, importedText)
-                } else {
-                    searchRecognizedContent(liveSearch.spec, freezeState.frame?.snapshot)
-                }
-                val rows = stillMatchRows(search)
-                val selectedRow = rows.first()
-                val presentation = SearchPresentationOwner().present(
-                    search.spec,
-                    cameraState,
-                    nowMillis = 0L,
-                )
+                    val importedText = importedSnapshot(listOf("Invoice 2048", "Invoice 2048"))
+                    val importedState = if (source == "imported") {
+                        ImportedImageState(
+                            phase = ImportedImagePhase.Imported,
+                            snapshot = importedText,
+                        )
+                    } else {
+                        ImportedImageState()
+                    }
+                    val freezeState = if (source == "frozen") {
+                        FreezePresentationState(
+                            mode = FreezeMode.Frozen,
+                            requestId = 1L,
+                            frame = FrozenSearchFrame(
+                                1L,
+                                FrameIdentity(1L, 1L),
+                                checkNotNull(cameraState.snapshot),
+                            ),
+                        )
+                    } else {
+                        FreezePresentationState()
+                    }
+                    val liveSearch = searchRecognizedText("invoice", cameraState)
+                    val search = if (source == "imported") {
+                        searchRecognizedContent(liveSearch.spec, importedText)
+                    } else {
+                        searchRecognizedContent(liveSearch.spec, freezeState.frame?.snapshot)
+                    }
+                    val rows = stillMatchRows(search)
+                    val selectedRow = rows.first()
+                    val presentation = SearchPresentationOwner().present(
+                        search.spec,
+                        cameraState,
+                        nowMillis = 0L,
+                    )
 
-                mount(360, 800) {
-                    LiveTextFinderTheme(darkThemeOverride = false, dynamicColor = false) {
-                        Surface(Modifier.fillMaxSize()) {
-                            FinderContentAssembly(
-                                scrollState = androidx.compose.foundation.ScrollState(0),
-                                scrollable = false,
+                    mount(360, 800) {
+                        LiveTextFinderTheme(darkThemeOverride = darkTheme, dynamicColor = false) {
+                            Surface(
                                 modifier = Modifier.fillMaxSize(),
-                                topContent = {
-                                    Column(
-                                        Modifier.fillMaxWidth().padding(
-                                            horizontal = FinderSpacing.large,
-                                            vertical = FinderSpacing.extraSmall,
-                                        ),
-                                        verticalArrangement = Arrangement.spacedBy(
-                                            FinderSpacing.extraSmall,
-                                        ),
-                                    ) {
-                                        RetainedInspectionHeader(
-                                            activeListName = null,
-                                            manualQuery = "invoice",
-                                            matchMode = search.spec.matchMode,
-                                            saving = saving.value,
-                                            editing = false,
-                                            managerOpen = false,
-                                            returnLabel = if (source == "frozen") {
-                                                "Resume scanning"
-                                            } else {
-                                                "Return to camera"
-                                            },
-                                            resultCount = search.occurrences.size,
-                                            occurrenceCount = rows.size,
-                                            sharePreparing = false,
-                                            onEditSearch = {},
-                                            onReturn = {},
-                                            onTerms = {},
-                                            onOccurrences = {},
-                                            onLists = {},
-                                            onOptions = {},
-                                            onShare = {},
-                                            onCancelShare = {},
-                                        )
-                                        FinderStatusRegion(
-                                            state = cameraState,
-                                            importedState = importedState,
-                                            freezeState = freezeState,
-                                            sessionState = SearchSessionState(
-                                                loaded = true,
-                                                saving = saving.value,
+                                color = MaterialTheme.colorScheme.background,
+                            ) {
+                                FinderContentAssembly(
+                                    scrollState = androidx.compose.foundation.ScrollState(0),
+                                    scrollable = false,
+                                    modifier = Modifier.fillMaxSize(),
+                                    topContent = {
+                                        Column(
+                                            Modifier.fillMaxWidth().padding(
+                                                horizontal = FinderSpacing.large,
+                                                vertical = FinderSpacing.extraSmall,
                                             ),
-                                            search = search,
-                                            presentation = presentation,
-                                            highlights = Highlights(true, emptyList()),
-                                            areaSelected = false,
-                                            shouldShowViews = true,
-                                            onRetrySavedData = {},
-                                            onRequestReset = {},
-                                        )
-                                    }
-                                },
-                                managerContent = {},
-                                viewportContent = {
-                                    StillInspectionViewport(
-                                        sourceIdentity = "$source:fixture",
-                                        fit = FrozenFrameFit(100, 100, 0, 100f, 100f),
-                                        viewportSize = previewSize.value,
-                                        transform = StillViewTransform(),
-                                        onTransformChange = {},
-                                        modifier = Modifier.weight(1f).fillMaxWidth()
-                                            .background(Color.Black)
-                                            .onSizeChanged { previewSize.value = it }
-                                            .onGloballyPositioned {
-                                                previewBounds.value = it.boundsInRoot()
-                                            },
-                                    ) {
-                                        Canvas(Modifier.matchParentSize()) {
-                                            drawRect(Color.DarkGray)
-                                            drawRect(
-                                                Color.LightGray,
-                                                topLeft = Offset(
-                                                    size.width * 0.2f,
-                                                    size.height * 0.3f,
+                                            verticalArrangement = Arrangement.spacedBy(
+                                                FinderSpacing.extraSmall,
+                                            ),
+                                        ) {
+                                            RetainedInspectionHeader(
+                                                activeListName = null,
+                                                manualQuery = "invoice",
+                                                matchMode = search.spec.matchMode,
+                                                saving = saving.value,
+                                                editing = false,
+                                                managerOpen = false,
+                                                returnLabel = if (source == "frozen") {
+                                                    "Resume scanning"
+                                                } else {
+                                                    "Return to camera"
+                                                },
+                                                resultCount = search.occurrences.size,
+                                                occurrenceCount = rows.size,
+                                                sharePreparing = false,
+                                                onEditSearch = {},
+                                                onReturn = {},
+                                                onTerms = {},
+                                                onOccurrences = {},
+                                                onLists = {},
+                                                onOptions = {},
+                                                onShare = {},
+                                                onCancelShare = {},
+                                            )
+                                            FinderStatusRegion(
+                                                state = cameraState,
+                                                importedState = importedState,
+                                                freezeState = freezeState,
+                                                sessionState = SearchSessionState(
+                                                    loaded = true,
+                                                    saving = saving.value,
                                                 ),
-                                                size = Size(
-                                                    size.width * 0.6f,
-                                                    size.height * 0.4f,
-                                                ),
+                                                search = search,
+                                                presentation = presentation,
+                                                highlights = Highlights(true, emptyList()),
+                                                areaSelected = false,
+                                                shouldShowViews = true,
+                                                onRetrySavedData = {},
+                                                onRequestReset = {},
                                             )
                                         }
-                                    }
-                                },
-                                footerContent = {
-                                    Column(
-                                        Modifier.fillMaxWidth().padding(
-                                            horizontal = FinderSpacing.large,
-                                            vertical = FinderSpacing.extraSmall,
-                                        ),
-                                        verticalArrangement = Arrangement.spacedBy(
-                                            FinderSpacing.extraSmall,
-                                        ),
-                                    ) {
-                                        StillInspectionControls(
-                                            matchCount = rows.size,
-                                            showMatchesAction = false,
-                                            zoom = 1f,
-                                            canZoom = true,
-                                            onZoomIn = {},
-                                            onZoomOut = {},
-                                            onReset = {},
-                                            onMatches = {},
-                                        )
-                                        if (selected) {
-                                            StillMatchNavigationControls(
-                                                position = 1,
-                                                count = rows.size,
-                                                matchedTerm = selectedRow.termLabel,
-                                                matchedText = selectedRow.matchedText,
-                                                canLocate = true,
-                                                onPrevious = {},
-                                                onNext = {},
-                                                onCopy = {},
-                                            )
+                                    },
+                                    managerContent = {},
+                                    viewportContent = {
+                                        StillInspectionViewport(
+                                            sourceIdentity = "$source:fixture",
+                                            fit = FrozenFrameFit(100, 100, 0, 100f, 100f),
+                                            viewportSize = previewSize.value,
+                                            transform = StillViewTransform(),
+                                            onTransformChange = {},
+                                            modifier = Modifier.weight(1f).fillMaxWidth()
+                                                .background(Color.Black)
+                                                .onSizeChanged { previewSize.value = it }
+                                                .onGloballyPositioned {
+                                                    previewBounds.value = it.boundsInRoot()
+                                                },
+                                        ) {
+                                            Canvas(Modifier.matchParentSize()) {
+                                                drawRect(Color.DarkGray)
+                                                drawRect(
+                                                    Color.LightGray,
+                                                    topLeft = Offset(
+                                                        size.width * 0.2f,
+                                                        size.height * 0.3f,
+                                                    ),
+                                                    size = Size(
+                                                        size.width * 0.6f,
+                                                        size.height * 0.4f,
+                                                    ),
+                                                )
+                                            }
                                         }
-                                    }
-                                },
-                            )
+                                    },
+                                    footerContent = {
+                                        Column(
+                                            Modifier.fillMaxWidth().padding(
+                                                horizontal = FinderSpacing.large,
+                                                vertical = FinderSpacing.extraSmall,
+                                            ),
+                                            verticalArrangement = Arrangement.spacedBy(
+                                                FinderSpacing.extraSmall,
+                                            ),
+                                        ) {
+                                            StillInspectionControls(
+                                                matchCount = rows.size,
+                                                showMatchesAction = false,
+                                                zoom = 1f,
+                                                canZoom = true,
+                                                onZoomIn = {},
+                                                onZoomOut = {},
+                                                onReset = {},
+                                                onMatches = {},
+                                            )
+                                            if (selected) {
+                                                StillMatchNavigationControls(
+                                                    position = 1,
+                                                    count = rows.size,
+                                                    matchedTerm = selectedRow.termLabel,
+                                                    matchedText = selectedRow.matchedText,
+                                                    canLocate = true,
+                                                    onPrevious = {},
+                                                    onNext = {},
+                                                    onCopy = {},
+                                                )
+                                            }
+                                        }
+                                    },
+                                )
+                            }
                         }
                     }
+
+                    val retainedBounds = checkNotNull(previewBounds.value)
+                    val minimumViewport = if (selected) 408f else 476f
+                    assertTrue(retainedBounds.height > 0f)
+                    println(
+                        "RETAINED dark=$darkTheme $source selected=$selected " +
+                            "minimum=${minimumViewport}dp current=${retainedBounds.height}dp",
+                    )
+                    assertTrue(
+                        retainedBounds.height >= minimumViewport,
+                        "$source selected=$selected: minimum=$minimumViewport dp, " +
+                            "retained current=$retainedBounds",
+                    )
+                    val themeName = if (darkTheme) "dark" else "light"
+                    saveRenderedFixture("retained-$themeName-$source-selected-$selected.png")
+                    System.getenv("LTF_VISUAL_OUTPUT_DIR")?.let { directory ->
+                        File(directory, "retained-measurements.txt").appendText(
+                            "$themeName $source selected=$selected " +
+                                "minimum=${minimumViewport}dp " +
+                                "current=${retainedBounds.height}dp\n",
+                        )
+                    }
+
+                    saving.value = true
+                    measureCurrentComposition()
+                    assertEquals(retainedBounds, previewBounds.value)
+                    saving.value = false
+                    measureCurrentComposition()
+                    assertEquals(retainedBounds, previewBounds.value)
                 }
-
-                val retainedBounds = checkNotNull(previewBounds.value)
-                // Immutable Stage 2 evidence from HEAD a015704 measured 252dp unselected,
-                // 184dp selected; this fixture measures only the current retained assembly.
-                val historicalStage2Baseline = if (selected) 184f else 252f
-                assertTrue(retainedBounds.height > 0f)
-                println(
-                    "COMPARE $source selected=$selected stage2Baseline=" +
-                        "$historicalStage2Baseline dp retainedCurrent=${retainedBounds.height}dp",
-                )
-                assertTrue(
-                    retainedBounds.height - historicalStage2Baseline >= 96f,
-                    "$source selected=$selected: historical Stage 2=" +
-                        "$historicalStage2Baseline dp, retained current=$retainedBounds",
-                )
-                saveRenderedFixture("retained-$source-selected-$selected.png")
-
-                saving.value = true
-                measureCurrentComposition()
-                assertEquals(retainedBounds, previewBounds.value)
-                saving.value = false
-                measureCurrentComposition()
-                assertEquals(retainedBounds, previewBounds.value)
             }
         }
     }
@@ -483,8 +498,11 @@ class StillInspectionUiTest {
                                 showTitle = false,
                                 query = "invoice",
                                 onQueryChange = {},
-                                searchListsLabel = if (managerOpen.value) "Close lists"
-                                else "Search lists",
+                                searchListsLabel = if (managerOpen.value) {
+                                    "Close lists"
+                                } else {
+                                    "Lists"
+                                },
                                 onSearchLists = {
                                     RetainedInspectionActionDispatcher.toggleLists(
                                         managerOpen.value,
@@ -496,13 +514,6 @@ class StillInspectionUiTest {
                                 },
                                 searchContext = "Manual search",
                                 onOptions = { actions += "options" },
-                                captureLabel = null,
-                                captureEnabled = true,
-                                onCapture = {},
-                                pendingCaptureLabel = null,
-                                onCancelCapture = {},
-                                secondaryActionLabel = null,
-                                onSecondaryAction = {},
                             )
                         }
                         if (managerOpen.value) {

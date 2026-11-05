@@ -41,6 +41,8 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntSize
+import com.artkachenko.livetextfinder.ui.FinderCaptureControls
+import com.artkachenko.livetextfinder.ui.FinderContentAssembly
 import com.artkachenko.livetextfinder.ui.FinderPrimaryAction
 import com.artkachenko.livetextfinder.ui.FinderSearchControls
 import com.artkachenko.livetextfinder.ui.FinderSpacing
@@ -185,31 +187,53 @@ class LiveTextFinderThemeTest {
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     fun productionControlsExposeQueryContextActionsAndNonOverlappingBounds() {
         val query = mutableStateOf("invoice-2048")
-        val listButtonLabel = mutableStateOf("Search lists")
+        val listButtonLabel = mutableStateOf("Lists")
         val captureEnabled = mutableStateOf(false)
         val listClicks = mutableIntStateOf(0)
         val captureClicks = mutableIntStateOf(0)
+        val resultsClicks = mutableIntStateOf(0)
+        val previewSize = mutableStateOf(IntSize.Zero)
         mount(widthDp = 360, heightDp = 800) {
             LiveTextFinderTheme(darkThemeOverride = false, dynamicColor = false) {
                 Surface(Modifier.fillMaxSize()) {
-                    FinderSearchControls(
-                        showTitle = true,
-                        query = query.value,
-                        onQueryChange = { query.value = it },
-                        searchListsLabel = listButtonLabel.value,
-                        onSearchLists = {
-                            listClicks.intValue++
-                            listButtonLabel.value = "Close lists"
+                    FinderContentAssembly(
+                        scrollState = ScrollState(0),
+                        scrollable = false,
+                        modifier = Modifier.fillMaxSize(),
+                        topContent = {
+                            FinderSearchControls(
+                                showTitle = true,
+                                query = query.value,
+                                onQueryChange = { query.value = it },
+                                searchListsLabel = listButtonLabel.value,
+                                onSearchLists = {
+                                    listClicks.intValue++
+                                    listButtonLabel.value = "Close lists"
+                                },
+                                onOptions = ::ignoreAction,
+                                resultsLabel = "Results (3)",
+                                onResults = { resultsClicks.intValue++ },
+                            )
                         },
-                        searchContext = "Monthly review · 4 terms",
-                        onOptions = ::ignoreAction,
-                        captureLabel = "Freeze frame",
-                        captureEnabled = captureEnabled.value,
-                        onCapture = { captureClicks.intValue++ },
-                        pendingCaptureLabel = null,
-                        onCancelCapture = ::ignoreAction,
-                        secondaryActionLabel = null,
-                        onSecondaryAction = ::ignoreAction,
+                        managerContent = {},
+                        viewportContent = {
+                            Box(
+                                Modifier.weight(1f).fillMaxWidth().onSizeChanged {
+                                    previewSize.value = it
+                                },
+                            )
+                        },
+                        footerContent = {
+                            FinderCaptureControls(
+                                captureLabel = "Freeze frame",
+                                captureEnabled = captureEnabled.value,
+                                onCapture = { captureClicks.intValue++ },
+                                pendingCaptureLabel = null,
+                                onCancelCapture = ::ignoreAction,
+                                secondaryActionLabel = null,
+                                onSecondaryAction = ::ignoreAction,
+                            )
+                        },
                     )
                 }
             }
@@ -231,7 +255,7 @@ class LiveTextFinderThemeTest {
             },
         )
 
-        val listButton = nodeWithText(nodes, "Search lists", clickable = true)
+        val listButton = nodeWithText(nodes, "Lists", clickable = true)
         val listClick = checkNotNull(listButton.config.getOrNull(SemanticsActions.OnClick)?.action)
         assertTrue(listClick())
         Snapshot.sendApplyNotifications()
@@ -239,6 +263,11 @@ class LiveTextFinderThemeTest {
         assertEquals(1, listClicks.intValue)
         nodes = semanticsNodes()
         assertTrue(nodeWithText(nodes, "Close lists", clickable = true).boundsInRoot.height > 0f)
+        val resultsAction = nodeWithText(nodes, "Results (3)", clickable = true)
+        assertTrue(
+            checkNotNull(resultsAction.config.getOrNull(SemanticsActions.OnClick)?.action)(),
+        )
+        assertEquals(1, resultsClicks.intValue)
 
         val disabledCapture = nodeWithText(nodes, "Freeze frame")
         assertTrue(disabledCapture.config.contains(SemanticsProperties.Disabled))
@@ -255,17 +284,13 @@ class LiveTextFinderThemeTest {
         assertEquals(1, captureClicks.intValue)
 
         val searchListsButton = nodeWithText(nodes, "Close lists", clickable = true)
-        val contextText = nodeWithText(nodes, "Monthly review · 4 terms")
+        val contextText = nodeWithText(nodes, "Manual search")
         val optionsButton = nodeWithText(nodes, "Options", clickable = true)
         val composeView = checkNotNull(this.composeView)
         val currentQueryNode = nodes.single {
             it.config.getOrNull(SemanticsProperties.EditableText)?.text == "updated invoice"
         }
-        val controls = listOf(
-            searchListsButton,
-            optionsButton,
-            enabledCapture,
-        )
+        val controls = listOf(searchListsButton, optionsButton, enabledCapture)
         controls.forEach { assertTouchBounds(it) }
         val visibleBounds = listOf(
             currentQueryNode.unclippedBoundsInRoot(),
@@ -289,12 +314,13 @@ class LiveTextFinderThemeTest {
                 )
             }
         }
+        assertTrue(previewSize.value.height >= composeView.height / 2)
     }
 
     @Test
     @Config(sdk = [35])
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
-    fun productionSearchControlFixturesKeepWeightedPreviewAndRenderWhenRequested() {
+    fun mainScannerHeaderAndFooterFixturesRenderAcrossSmallAndShortLayouts() {
         val outputDirectory = System.getenv("LTF_VISUAL_OUTPUT_DIR")
         val fixtures = listOf(
             SearchControlFixture(
@@ -318,13 +344,14 @@ class LiveTextFinderThemeTest {
                 searchContext = "Monthly review · 4 terms",
             ),
             SearchControlFixture(
-                fileName = "search-controls-compact-large-font.png",
+                fileName = "search-controls-320-large-font-ime-like.png",
                 dark = false,
-                width = 360,
-                height = 520,
-                fontScale = 1.3f,
+                width = 320,
+                height = 400,
+                fontScale = 1.4f,
                 hasPreview = false,
                 scrollable = true,
+                requiresOverflow = true,
                 searchContext =
                     "Quarterly invoices and records retained for follow-up review · 4 terms",
             ),
@@ -344,6 +371,7 @@ class LiveTextFinderThemeTest {
         fixtures.forEach { fixture ->
             clearMountedView()
             val controlsSize = mutableStateOf(IntSize.Zero)
+            val footerSize = mutableStateOf(IntSize.Zero)
             val placeholderPreviewSize = mutableStateOf(IntSize.Zero)
             val scrollState = ScrollState(0)
             mount(fixture.width, fixture.height) {
@@ -358,54 +386,66 @@ class LiveTextFinderThemeTest {
                             modifier = Modifier.fillMaxSize(),
                             color = MaterialTheme.colorScheme.background,
                         ) {
-                            AppContentColumn(
+                            FinderContentAssembly(
                                 scrollState = scrollState,
                                 scrollable = fixture.scrollable,
                                 modifier = Modifier.fillMaxSize(),
-                            ) {
-                                Column(
-                                    modifier = Modifier.onSizeChanged { controlsSize.value = it }
-                                        .fillMaxWidth()
-                                        .padding(
+                                topContent = {
+                                    Column(
+                                        modifier = Modifier.onSizeChanged {
+                                            controlsSize.value = it
+                                        }.fillMaxWidth().padding(
                                             horizontal = FinderSpacing.large,
                                             vertical = FinderSpacing.extraSmall,
                                         ),
-                                ) {
-                                    FinderSearchControls(
-                                        showTitle = fixture.height >= 500 &&
-                                            fixture.fontScale < 1.3f,
-                                        query = "invoice-2048",
-                                        onQueryChange = ::ignoreQueryChange,
-                                        searchListsLabel = "Search lists",
-                                        onSearchLists = ::ignoreAction,
-                                        searchContext = fixture.searchContext,
-                                        onOptions = ::ignoreAction,
-                                        captureLabel = "Freeze frame",
-                                        captureEnabled = true,
-                                        onCapture = ::ignoreAction,
-                                        pendingCaptureLabel = null,
-                                        onCancelCapture = ::ignoreAction,
-                                        secondaryActionLabel = null,
-                                        onSecondaryAction = ::ignoreAction,
-                                    )
-                                }
-                                if (fixture.hasPreview) {
-                                    Box(
-                                        modifier = Modifier.weight(1f)
-                                            .fillMaxWidth()
-                                            .background(Color.Black)
-                                            .onSizeChanged {
-                                                placeholderPreviewSize.value = it
-                                            },
-                                        contentAlignment = Alignment.Center,
                                     ) {
-                                        Text(
-                                            "Camera preview fixture · no live camera",
-                                            color = Color.White,
+                                        FinderSearchControls(
+                                            showTitle = fixture.height >= 500 &&
+                                                fixture.fontScale < 1.3f,
+                                            query = "invoice-2048",
+                                            onQueryChange = ::ignoreQueryChange,
+                                            searchListsLabel = "Lists",
+                                            onSearchLists = ::ignoreAction,
+                                            searchContext = fixture.searchContext,
+                                            onOptions = ::ignoreAction,
+                                            resultsLabel = "Results (4)",
+                                            onResults = ::ignoreAction,
                                         )
                                     }
-                                }
-                            }
+                                },
+                                managerContent = {},
+                                viewportContent = {
+                                    if (fixture.hasPreview) {
+                                        Box(
+                                            modifier = Modifier.weight(1f)
+                                                .fillMaxWidth()
+                                                .background(Color.Black)
+                                                .onSizeChanged {
+                                                    placeholderPreviewSize.value = it
+                                                },
+                                            contentAlignment = Alignment.Center,
+                                        ) {
+                                            Text(
+                                                "Camera preview fixture · no live camera",
+                                                color = Color.White,
+                                            )
+                                        }
+                                    }
+                                },
+                                footerContent = {
+                                    Box(Modifier.onSizeChanged { footerSize.value = it }) {
+                                        FinderCaptureControls(
+                                            captureLabel = "Freeze frame",
+                                            captureEnabled = true,
+                                            onCapture = ::ignoreAction,
+                                            pendingCaptureLabel = null,
+                                            onCancelCapture = ::ignoreAction,
+                                            secondaryActionLabel = null,
+                                            onSecondaryAction = ::ignoreAction,
+                                        )
+                                    }
+                                },
+                            )
                         }
                     }
                 }
@@ -413,16 +453,20 @@ class LiveTextFinderThemeTest {
             val composeView = checkNotNull(composeView)
             measureCurrentComposition()
             if (fixture.scrollable) {
+                val topOptions = nodeWithText(semanticsNodes(), "Options", clickable = true)
+                val topOptionsBounds = topOptions.unclippedBoundsInRoot()
+                assertTrue(topOptionsBounds.top >= 0f)
+                assertTrue(topOptionsBounds.bottom <= composeView.height)
                 runBlocking { scrollState.scrollTo(scrollState.maxValue) }
                 measureCurrentComposition()
                 if (fixture.requiresOverflow) {
                     assertTrue(scrollState.maxValue > 0)
                 }
                 assertEquals(scrollState.maxValue, scrollState.value)
-                val options = nodeWithText(semanticsNodes(), "Options", clickable = true)
-                val optionsBounds = options.unclippedBoundsInRoot()
-                assertTrue(optionsBounds.height > 0f)
-                assertTrue(optionsBounds.top >= 0f && optionsBounds.bottom <= composeView.height)
+                val scrolledNodes = semanticsNodes()
+                val capture = nodeWithText(scrolledNodes, "Freeze frame", clickable = true)
+                assertTouchBounds(capture)
+                assertTrue(capture.unclippedBoundsInRoot().bottom <= composeView.height)
             }
             assertTrue(controlsSize.value.height > 0)
             val renderedNodes = semanticsNodes()
@@ -432,7 +476,7 @@ class LiveTextFinderThemeTest {
             val renderedContext = nodeWithText(renderedNodes, fixture.searchContext)
             val renderedControlBounds = listOf(
                 renderedQuery.unclippedBoundsInRoot(),
-                nodeWithText(renderedNodes, "Search lists", clickable = true)
+                nodeWithText(renderedNodes, "Lists", clickable = true)
                     .unclippedBoundsInRoot(),
                 renderedContext.unclippedBoundsInRoot(),
                 nodeWithText(renderedNodes, "Options", clickable = true)
@@ -443,6 +487,9 @@ class LiveTextFinderThemeTest {
             renderedControlBounds.forEach { bounds ->
                 assertTrue(bounds.width > 0f && bounds.height > 0f)
                 assertTrue(bounds.left >= 0f && bounds.right <= composeView.width)
+                if (!fixture.scrollable) {
+                    assertTrue(bounds.top >= 0f && bounds.bottom <= composeView.height)
+                }
             }
             for (firstIndex in renderedControlBounds.indices) {
                 for (secondIndex in firstIndex + 1 until renderedControlBounds.size) {
@@ -459,7 +506,7 @@ class LiveTextFinderThemeTest {
             }
             if (fixture.hasPreview) {
                 assertEquals(
-                    composeView.height - controlsSize.value.height,
+                    composeView.height - controlsSize.value.height - footerSize.value.height,
                     placeholderPreviewSize.value.height,
                 )
                 assertTrue(placeholderPreviewSize.value.height > 0)
@@ -472,7 +519,7 @@ class LiveTextFinderThemeTest {
             assertEquals(expectedBackground.toArgb(), bitmap.getPixel(0, 0))
             val expectedPrimary = if (fixture.dark) Color(0xFF60E1C1) else Color(0xFF006B58)
             val primaryPixels = countPixels(bitmap, expectedPrimary.toArgb())
-            assertTrue(primaryPixels > 100)
+            assertTrue(primaryPixels > 100, "$fixture primaryPixels=$primaryPixels")
             if (outputDirectory != null) {
                 saveRenderedFixture(outputDirectory, fixture.fileName, bitmap)
             }
