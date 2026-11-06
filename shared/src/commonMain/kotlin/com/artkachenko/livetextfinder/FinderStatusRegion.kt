@@ -52,6 +52,7 @@ internal fun FinderStatusRegion(
     resultsAvailable: Boolean = true,
     areaSelected: Boolean,
     shouldShowViews: Boolean,
+    liveStageBand: Boolean = false,
     onRetrySavedData: () -> Unit,
     onRequestReset: () -> Unit,
 ) {
@@ -181,6 +182,7 @@ internal fun FinderStatusRegion(
             details = selectedDetails.takeIf { shouldShowViews },
             onDetails = { detailsOpen = true },
             isError = source == StatusSource.LiveCamera && state.status == OcrStatus.Error,
+            stageBand = liveStageBand,
         )
     }
     if (detailsOpen && shouldShowViews && selectedDetails != null) {

@@ -13,7 +13,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -22,6 +24,7 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.snapshots.Snapshot
@@ -37,16 +40,27 @@ import androidx.compose.ui.platform.ViewRootForTest
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.SemanticsProperties.Focused
+import androidx.compose.ui.semantics.SemanticsProperties.TestTag
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.dp
+import androidx.core.graphics.Insets
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import com.artkachenko.livetextfinder.search.SearchMatchMode
+import com.artkachenko.livetextfinder.search.inMemorySearchSessionController
 import com.artkachenko.livetextfinder.ui.FinderCaptureControls
 import com.artkachenko.livetextfinder.ui.FinderContentAssembly
+import com.artkachenko.livetextfinder.ui.FinderLiveAppBar
+import com.artkachenko.livetextfinder.ui.FinderLiveDock
 import com.artkachenko.livetextfinder.ui.FinderPrimaryAction
 import com.artkachenko.livetextfinder.ui.FinderSearchControls
 import com.artkachenko.livetextfinder.ui.FinderSpacing
 import com.artkachenko.livetextfinder.ui.LiveTextFinderTheme
+import com.artkachenko.livetextfinder.ui.StatusSummary
 import com.artkachenko.livetextfinder.ui.fallbackColorScheme
 import com.artkachenko.livetextfinder.ui.platformColorScheme
 import java.util.concurrent.TimeUnit
@@ -525,6 +539,461 @@ class LiveTextFinderThemeTest {
             }
             bitmap.recycle()
         }
+    }
+
+    @Test
+    @Config(sdk = [35])
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun productionLiveManualDockPreservesViewportAndRoutesActions() {
+        val viewportSize = mutableStateOf(IntSize.Zero)
+        val statusSize = mutableStateOf(IntSize.Zero)
+        val statusMessage = mutableStateOf("Scanning · Enter a query")
+        val query = mutableStateOf("invoice-2048")
+        val resultsLabel = mutableStateOf<String?>("Results (3)")
+        val saving = mutableStateOf(false)
+        val captureLabel = mutableStateOf<String?>("Freeze frame")
+        val pendingCaptureLabel = mutableStateOf<String?>(null)
+        val dockSize = mutableStateOf(IntSize.Zero)
+        val safeSize = mutableStateOf(IntSize.Zero)
+        val previewVisible = mutableStateOf(true)
+        val darkTheme = mutableStateOf(false)
+        val optionsClicks = mutableIntStateOf(0)
+        val termsClicks = mutableIntStateOf(0)
+        val listClicks = mutableIntStateOf(0)
+        val resultsClicks = mutableIntStateOf(0)
+        val captureClicks = mutableIntStateOf(0)
+        val detailsClicks = mutableIntStateOf(0)
+        mount(widthDp = 360, heightDp = 800) {
+            LiveTextFinderTheme(darkThemeOverride = darkTheme.value, dynamicColor = false) {
+                Surface(
+                    Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background,
+                ) {
+                    FinderContentAssembly(
+                        scrollState = ScrollState(0),
+                        scrollable = !previewVisible.value,
+                        modifier = Modifier.fillMaxSize().safeDrawingPadding().imePadding()
+                            .onSizeChanged { safeSize.value = it },
+                        topContent = {
+                            FinderLiveAppBar(onOptions = { optionsClicks.intValue++ })
+                            if (previewVisible.value) {
+                                StatusSummary(
+                                    message = statusMessage.value,
+                                    details = RecognitionDetails(
+                                        source = StatusSource.LiveCamera,
+                                        recognizedLineCount = 0,
+                                        outlinedElementCount = 0,
+                                        imageWidth = 1280,
+                                        imageHeight = 720,
+                                        rotationDegrees = 0,
+                                        textSample = null,
+                                        textUnavailable = true,
+                                        retainedOutlines = false,
+                                        sourceMessage = null,
+                                    ),
+                                    onDetails = { detailsClicks.intValue++ },
+                                    modifier = Modifier.onSizeChanged { statusSize.value = it },
+                                    stageBand = true,
+                                )
+                            }
+                        },
+                        managerContent = {},
+                        viewportContent = {
+                            if (previewVisible.value) {
+                                Box(
+                                    Modifier.weight(1f).fillMaxWidth().background(Color.Black)
+                                        .onSizeChanged { viewportSize.value = it },
+                                )
+                            }
+                        },
+                        footerContent = {
+                            Box(
+                                Modifier.fillMaxWidth().onSizeChanged { dockSize.value = it },
+                            ) {
+                                FinderLiveDock(
+                                    query = query.value,
+                                    onQueryChange = { query.value = it },
+                                    activeListName = null,
+                                    activeListTermCount = 0,
+                                    matchMode = SearchMatchMode.Substring,
+                                    searchListsLabel = "Lists",
+                                    onSearchLists = { listClicks.intValue++ },
+                                    onTerms = { termsClicks.intValue++ },
+                                    onUseManual = {},
+                                    onResults = { resultsClicks.intValue++ },
+                                    resultsLabel = resultsLabel.value,
+                                    saving = saving.value,
+                                    captureLabel = captureLabel.value,
+                                    captureEnabled = true,
+                                    onCapture = { captureClicks.intValue++ },
+                                    pendingCaptureLabel = pendingCaptureLabel.value,
+                                    onCancelCapture = ::ignoreAction,
+                                    secondaryActionLabel = null,
+                                    onSecondaryAction = ::ignoreAction,
+                                )
+                            }
+                        },
+                    )
+                }
+            }
+        }
+
+        val density = checkNotNull(composeView).resources.displayMetrics.density
+        assertEquals(744f, safeSize.value.height / density)
+        assertTrue(viewportSize.value.height / density >= 400f)
+        val reservedStatusSize = statusSize.value
+        val reservedViewportSize = viewportSize.value
+        listOf(
+            "Scanning · No readable text",
+            "Scanning · No matches",
+            "Scanning · 3 matches",
+            "Scanning · Results unavailable",
+            "Scanning · Waiting for new text…",
+            "Scanning · Waiting for current search results · Some older highlights remain",
+            "Scanning · No matches in search area · Some older highlights remain",
+            "Scanning · No readable text · Some older highlights remain",
+            "Scanning · 333 matches · Waiting to show highlights",
+        ).forEach { message ->
+            statusMessage.value = message
+            Snapshot.sendApplyNotifications()
+            measureCurrentComposition()
+            assertEquals(reservedStatusSize, statusSize.value, message)
+            assertEquals(reservedViewportSize, viewportSize.value, message)
+            assertTrue(viewportSize.value.height / density >= 400f, message)
+        }
+        var nodes = semanticsNodes()
+        val queryNode = nodes.single {
+            it.config.getOrNull(SemanticsProperties.EditableText)?.text == "invoice-2048"
+        }
+        assertTrue(queryNode.unclippedBoundsInRoot().height / density >= 56f)
+        val setText = checkNotNull(queryNode.config.getOrNull(SemanticsActions.SetText)?.action)
+        assertTrue(setText(AnnotatedString("updated invoice")))
+        Snapshot.sendApplyNotifications()
+        measureCurrentComposition()
+        assertEquals("updated invoice", query.value)
+        nodes = semanticsNodes()
+
+        val actions = listOf(
+            nodeWithText(nodes, "Options", clickable = true),
+            nodeWithText(nodes, "Details", clickable = true),
+            nodeWithText(nodes, "Terms", clickable = true),
+            nodeWithText(nodes, "Lists", clickable = true),
+            nodeWithText(nodes, "Results (3)", clickable = true),
+            nodeWithText(nodes, "Freeze frame", clickable = true),
+        )
+        val freezeButtonSize = nodeWithText(nodes, "Freeze frame", clickable = true)
+            .touchBoundsInRoot.height
+        actions.forEach(::assertTouchBounds)
+        assertTrue(freezeButtonSize / density >= 52f)
+        assertTrue(
+            nodeWithText(nodes, "Freeze frame", clickable = true).touchBoundsInRoot.width /
+                density >= 320f,
+        )
+        for (firstIndex in actions.indices) {
+            for (secondIndex in firstIndex + 1 until actions.size) {
+                assertFalse(
+                    intersects(
+                        actions[firstIndex].touchBoundsInRoot,
+                        actions[secondIndex].touchBoundsInRoot,
+                    ),
+                )
+            }
+        }
+        val clickActions = listOf(
+            optionsClicks to "Options",
+            detailsClicks to "Details",
+            termsClicks to "Terms",
+            listClicks to "Lists",
+            resultsClicks to "Results (3)",
+            captureClicks to "Freeze frame",
+        )
+        clickActions.forEach { (clickCount, label) ->
+            val action = nodeWithText(semanticsNodes(), label, clickable = true)
+            assertTrue(checkNotNull(action.config.getOrNull(SemanticsActions.OnClick)?.action)())
+            assertEquals(1, clickCount.intValue, label)
+        }
+        query.value = ""
+        resultsLabel.value = null
+        Snapshot.sendApplyNotifications()
+        measureCurrentComposition()
+        assertFalse(semanticsNodes().any { node ->
+            node.config.getOrNull(SemanticsProperties.Text).orEmpty().any {
+                it.text == "Results (3)"
+            }
+        })
+        assertEquals(reservedViewportSize, viewportSize.value)
+        query.value = "invoice-2048"
+        resultsLabel.value = "Results (3)"
+        Snapshot.sendApplyNotifications()
+        measureCurrentComposition()
+        captureLabel.value = null
+        pendingCaptureLabel.value = "Cancel freeze"
+        Snapshot.sendApplyNotifications()
+        measureCurrentComposition()
+        nodes = semanticsNodes()
+        val cancelButton = nodeWithText(nodes, "Cancel freeze", clickable = true)
+        assertTrue(cancelButton.touchBoundsInRoot.height >= freezeButtonSize)
+        assertEquals(reservedStatusSize, statusSize.value)
+        assertEquals(reservedViewportSize, viewportSize.value)
+        assertTrue(viewportSize.value.height / density >= 400f)
+        val reservedDockSize = dockSize.value
+        saving.value = true
+        Snapshot.sendApplyNotifications()
+        measureCurrentComposition()
+        assertEquals(reservedDockSize, dockSize.value)
+        assertEquals(reservedViewportSize, viewportSize.value)
+        val focusableQuery = semanticsNodes().single {
+            it.config.getOrNull(SemanticsProperties.EditableText)?.text == "invoice-2048"
+        }
+        val requestFocus = checkNotNull(
+            focusableQuery.config.getOrNull(SemanticsActions.RequestFocus)?.action,
+        )
+        assertTrue(requestFocus())
+        previewVisible.value = false
+        Snapshot.sendApplyNotifications()
+        measureCurrentComposition()
+        nodes = semanticsNodes()
+        val queryAfterPreviewHide = nodes.single {
+            it.config.getOrNull(SemanticsProperties.EditableText)?.text == "invoice-2048"
+        }
+        assertEquals(true, queryAfterPreviewHide.config.getOrNull(Focused))
+        assertTrue(nodeWithText(nodes, "Options", clickable = true).boundsInRoot.height > 0f)
+        assertTrue(
+            nodeWithText(nodes, "Cancel freeze", clickable = true).boundsInRoot.height > 0f,
+        )
+        val setTextAfterPreviewHide = checkNotNull(
+            queryAfterPreviewHide.config.getOrNull(SemanticsActions.SetText)?.action,
+        )
+        assertTrue(setTextAfterPreviewHide(AnnotatedString("kept through IME")))
+        Snapshot.sendApplyNotifications()
+        measureCurrentComposition()
+        assertEquals("kept through IME", query.value)
+        query.value = "invoice-2048"
+        resultsLabel.value = "Results (3)"
+        saving.value = false
+        captureLabel.value = "Freeze frame"
+        pendingCaptureLabel.value = null
+        statusMessage.value = "Scanning · 3 matches"
+        previewVisible.value = true
+        Snapshot.sendApplyNotifications()
+        measureCurrentComposition()
+
+        val outputDirectory = System.getenv("LTF_VISUAL_OUTPUT_DIR")
+        if (outputDirectory != null) {
+            val bitmap = captureRenderedBitmap()
+            saveRenderedFixture(outputDirectory, "live-dock-manual-light.png", bitmap)
+            bitmap.recycle()
+            darkTheme.value = true
+            Snapshot.sendApplyNotifications()
+            measureCurrentComposition()
+            assertEquals(reservedViewportSize, viewportSize.value)
+            val darkBitmap = captureRenderedBitmap()
+            saveRenderedFixture(outputDirectory, "live-dock-manual-dark.png", darkBitmap)
+            darkBitmap.recycle()
+        }
+    }
+
+    @Test
+    @Config(sdk = [35])
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun productionLiveListDockShowsListIdentityAndRestoresManualSearch() {
+        val viewportSize = mutableStateOf(IntSize.Zero)
+        val darkTheme = mutableStateOf(true)
+        val safeSize = mutableStateOf(IntSize.Zero)
+        val useManualClicks = mutableIntStateOf(0)
+        val query = mutableStateOf("retained private query")
+        mount(widthDp = 360, heightDp = 800) {
+            LiveTextFinderTheme(darkThemeOverride = darkTheme.value, dynamicColor = false) {
+                Surface(
+                    Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background,
+                ) {
+                    FinderContentAssembly(
+                        scrollState = ScrollState(0),
+                        scrollable = false,
+                        modifier = Modifier.fillMaxSize().safeDrawingPadding().imePadding()
+                            .onSizeChanged { safeSize.value = it },
+                        topContent = {
+                            FinderLiveAppBar(onOptions = ::ignoreAction)
+                            StatusSummary(
+                                message = "Scanning · Results unavailable",
+                                details = RecognitionDetails(
+                                    source = StatusSource.LiveCamera,
+                                    recognizedLineCount = 2,
+                                    outlinedElementCount = 1,
+                                    imageWidth = 1280,
+                                    imageHeight = 720,
+                                    rotationDegrees = 0,
+                                    textSample = "Quarterly review",
+                                    textUnavailable = false,
+                                    retainedOutlines = false,
+                                    sourceMessage = null,
+                                ),
+                                onDetails = ::ignoreAction,
+                                stageBand = true,
+                            )
+                        },
+                        managerContent = {},
+                        viewportContent = {
+                            Box(
+                                Modifier.weight(1f).fillMaxWidth().background(Color.Black)
+                                    .onSizeChanged { viewportSize.value = it },
+                            )
+                        },
+                        footerContent = {
+                            FinderLiveDock(
+                                query = query.value,
+                                onQueryChange = { query.value = it },
+                                activeListName =
+                                    "Quarterly review list with a long accessible name",
+                                activeListTermCount = 4,
+                                matchMode = SearchMatchMode.WholeWord,
+                                searchListsLabel = "Lists",
+                                onSearchLists = ::ignoreAction,
+                                onTerms = ::ignoreAction,
+                                onUseManual = { useManualClicks.intValue++ },
+                                onResults = ::ignoreAction,
+                                resultsLabel = "Results unavailable",
+                                saving = true,
+                                captureLabel = "Freeze frame",
+                                captureEnabled = true,
+                                onCapture = ::ignoreAction,
+                                pendingCaptureLabel = null,
+                                onCancelCapture = ::ignoreAction,
+                                secondaryActionLabel = null,
+                                onSecondaryAction = ::ignoreAction,
+                            )
+                        },
+                    )
+                }
+            }
+        }
+
+        val density = checkNotNull(composeView).resources.displayMetrics.density
+        assertEquals(744f, safeSize.value.height / density)
+        assertTrue(viewportSize.value.height / density >= 324f)
+        val nodes = semanticsNodes()
+        assertTrue(
+            nodes.any { node ->
+                node.config.getOrNull(SemanticsProperties.Text).orEmpty().any { text ->
+                    text.text.contains("Search list · Quarterly review list")
+                }
+            },
+        )
+        assertTrue(
+            nodes.any { node ->
+                node.config.getOrNull(SemanticsProperties.Text).orEmpty().any { text ->
+                    text.text.contains("4 terms")
+                }
+            },
+        )
+        assertFalse(nodes.any { it.config.contains(SemanticsProperties.EditableText) })
+        assertTrue(nodeWithText(nodes, "Saving…").boundsInRoot.height > 0f)
+        val useManual = nodeWithText(nodes, "Use manual search", clickable = true)
+        assertTouchBounds(useManual)
+        assertTrue(checkNotNull(useManual.config.getOrNull(SemanticsActions.OnClick)?.action)())
+        assertEquals(1, useManualClicks.intValue)
+
+        val outputDirectory = System.getenv("LTF_VISUAL_OUTPUT_DIR")
+        if (outputDirectory != null) {
+            val bitmap = captureRenderedBitmap()
+            saveRenderedFixture(outputDirectory, "live-dock-list-dark.png", bitmap)
+            bitmap.recycle()
+            val darkViewport = viewportSize.value
+            darkTheme.value = false
+            Snapshot.sendApplyNotifications()
+            measureCurrentComposition()
+            assertEquals(darkViewport, viewportSize.value)
+            val lightBitmap = captureRenderedBitmap()
+            saveRenderedFixture(outputDirectory, "live-dock-list-light.png", lightBitmap)
+            lightBitmap.recycle()
+        }
+    }
+
+    @Test
+    @Config(sdk = [35])
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun appKeepsFocusedLiveDockQueryAcrossImeAndLargeFontPolicyChanges() {
+        val session = inMemorySearchSessionController()
+        session.setManualQuery("invoice-2048")
+        val fontScale = mutableFloatStateOf(1f)
+        mount(widthDp = 360, heightDp = 800) {
+            CompositionLocalProvider(
+                LocalDensity provides Density(density = 1f, fontScale = fontScale.floatValue),
+            ) {
+                App(session)
+            }
+        }
+
+        var nodes = semanticsNodes()
+        assertTrue(nodes.any { it.config.getOrNull(TestTag) == "finder-image-viewport" })
+        var queryNode = nodes.single {
+            it.config.getOrNull(SemanticsProperties.EditableText)?.text == "invoice-2048"
+        }
+        val requestFocus = checkNotNull(
+            queryNode.config.getOrNull(SemanticsActions.RequestFocus)?.action,
+        )
+        assertTrue(requestFocus())
+        val imeInsets = WindowInsetsCompat.Builder()
+            .setInsets(WindowInsetsCompat.Type.ime(), Insets.of(0, 0, 0, 320))
+            .setVisible(WindowInsetsCompat.Type.ime(), true)
+            .build()
+        ViewCompat.dispatchApplyWindowInsets(checkNotNull(composeView), imeInsets)
+        shadowOf(Looper.getMainLooper()).idle()
+        measureCurrentComposition()
+
+        nodes = semanticsNodes()
+        assertFalse(nodes.any { it.config.getOrNull(TestTag) == "finder-image-viewport" })
+        queryNode = nodes.single {
+            it.config.getOrNull(SemanticsProperties.EditableText)?.text == "invoice-2048"
+        }
+        assertEquals(true, queryNode.config.getOrNull(Focused))
+        assertTrue(nodeWithText(nodes, "Options", clickable = true).boundsInRoot.height > 0f)
+        assertTrue(nodeWithText(nodes, "Lists", clickable = true).boundsInRoot.height > 0f)
+
+        fontScale.floatValue = 1.5f
+        shadowOf(Looper.getMainLooper()).idleFor(16, TimeUnit.MILLISECONDS)
+        measureAt(checkNotNull(composeView), checkNotNull(activity), widthDp = 360, heightDp = 400)
+        measureCurrentComposition()
+        nodes = semanticsNodes()
+        assertFalse(nodes.any { it.config.getOrNull(TestTag) == "finder-image-viewport" })
+        queryNode = nodes.single {
+            it.config.getOrNull(SemanticsProperties.EditableText)?.text == "invoice-2048"
+        }
+        assertEquals(true, queryNode.config.getOrNull(Focused))
+        assertEquals(1.5f, queryNode.layoutInfo.density.fontScale)
+        val scrollNode = checkNotNull(
+            nodes.firstOrNull { it.config.contains(SemanticsActions.ScrollBy) },
+        )
+        val scrollBy = checkNotNull(
+            scrollNode.config.getOrNull(SemanticsActions.ScrollBy)?.action,
+        )
+        assertTrue(scrollBy(0f, -1000f))
+        measureCurrentComposition()
+        nodes = semanticsNodes()
+        queryNode = nodes.single {
+            it.config.getOrNull(SemanticsProperties.EditableText)?.text == "invoice-2048"
+        }
+        assertEquals(true, queryNode.config.getOrNull(Focused))
+        assertTrue(nodeWithText(nodes, "Options", clickable = true).boundsInRoot.height > 0f)
+        assertTrue(scrollBy(0f, 1000f))
+        measureCurrentComposition()
+        nodes = semanticsNodes()
+        queryNode = nodes.single {
+            it.config.getOrNull(SemanticsProperties.EditableText)?.text == "invoice-2048"
+        }
+        assertEquals(true, queryNode.config.getOrNull(Focused))
+        assertTrue(nodeWithText(nodes, "Freeze frame").boundsInRoot.height > 0f)
+        val setText = checkNotNull(queryNode.config.getOrNull(SemanticsActions.SetText)?.action)
+        assertTrue(setText(AnnotatedString("compact query preserved")))
+        Snapshot.sendApplyNotifications()
+        measureCurrentComposition()
+        assertTrue(
+            semanticsNodes().any { node ->
+                node.config.getOrNull(SemanticsProperties.EditableText)?.text ==
+                    "compact query preserved"
+            },
+        )
     }
 
     private fun mount(

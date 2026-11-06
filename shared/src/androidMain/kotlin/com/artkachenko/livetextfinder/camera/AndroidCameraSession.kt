@@ -17,6 +17,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.Observer
+import com.artkachenko.livetextfinder.ocr.CameraTimingDiagnostics
 import com.artkachenko.livetextfinder.ocr.CapturedCameraFrame
 import com.artkachenko.livetextfinder.ocr.LiveFrameTracker
 import com.artkachenko.livetextfinder.ocr.MlKitTextAnalyzer
@@ -44,6 +45,13 @@ internal class AndroidCameraSession(
     private var closed = false
     private val handler = Handler(Looper.getMainLooper())
     private val frames = LiveFrameTracker(++nextSessionId)
+    private val diagnostics = if (
+        context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
+    ) {
+        CameraTimingDiagnostics()
+    } else {
+        null
+    }
     private var emittedState: OcrUiState? = null
     private var targetRotation: Int? = null
     private val expiry = Runnable {
@@ -82,21 +90,31 @@ internal class AndroidCameraSession(
                     frames.ticket()
                 },
                 captureExecutor = CaptureCopyWorker,
+                diagnostics = diagnostics,
                 onCaptured = { captured ->
                     !closed && frames.ticket() == captured.identity && onCaptured(captured)
                 },
                 onCaptureFailure = { requestId, message ->
                     if (!closed) onCaptureFailure(requestId, message)
                 },
-            ) { state, identity ->
-                if (!closed) {
-                    refreshMapping()
-                    if (frames.receive(identity, state)) {
-                        publish()
-                        scheduleExpiry()
+                onState = { state, identity ->
+                    if (!closed) {
+                        refreshMapping()
+                        val accepted = frames.receive(identity, state)
+                        val frame = state.snapshot?.frame
+                        if (accepted) {
+                            diagnostics?.frameAccepted(identity, frame)
+                        } else {
+                            val current = frames.ticket()
+                            diagnostics?.frameRejected(identity, current, frame)
+                        }
+                        if (accepted) {
+                            publish()
+                            scheduleExpiry()
+                        }
                     }
-                }
-            }
+                },
+            )
             analysis.setAnalyzer(executor, checkNotNull(analyzer))
             preview.surfaceProvider = view.surfaceProvider
             displayManager.registerDisplayListener(displayListener, Handler(Looper.getMainLooper()))

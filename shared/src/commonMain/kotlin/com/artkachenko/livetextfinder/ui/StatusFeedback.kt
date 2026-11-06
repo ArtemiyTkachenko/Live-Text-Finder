@@ -16,6 +16,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.unit.dp
 import com.artkachenko.livetextfinder.RecognitionDetails
 import com.artkachenko.livetextfinder.SearchFeedback
@@ -60,16 +61,23 @@ internal fun StatusSummary(
     onDetails: () -> Unit,
     modifier: Modifier = Modifier,
     isError: Boolean = false,
+    stageBand: Boolean = false,
 ) {
     Surface(
-        modifier = modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        shape = MaterialTheme.shapes.medium,
+        modifier = modifier.fillMaxWidth().then(
+            if (stageBand) Modifier.heightIn(min = 56.dp) else Modifier,
+        ),
+        color = if (stageBand) {
+            MaterialTheme.colorScheme.surfaceContainerHigh
+        } else {
+            MaterialTheme.colorScheme.surfaceContainer
+        },
+        shape = if (stageBand) RectangleShape else MaterialTheme.shapes.medium,
     ) {
         Row(
             modifier = Modifier.padding(
                 horizontal = FinderSpacing.medium,
-                vertical = if (details != null) {
+                vertical = if (stageBand || details != null) {
                     FinderSpacing.extraSmall
                 } else {
                     FinderSpacing.small
@@ -87,6 +95,7 @@ internal fun StatusSummary(
                     MaterialTheme.colorScheme.onSurface
                 },
                 style = MaterialTheme.typography.bodyMedium,
+                minLines = if (stageBand) 2 else 1,
             )
             if (details != null) {
                 FinderSecondaryAction(

@@ -523,3 +523,44 @@ zero failures/errors/skips**, Android lint (**14 warnings, zero errors**) and sh
 compilation. git diff --check and the changed-Kotlin 100-column check passed. The iOS task verifies
 shared-source compilation only. No APK or device/runtime test was run. Full aggregate log:
 work/redesign/dialogs/final-checks.log.
+
+
+## Phase 7 Android camera timing diagnostics — 2026-11-06
+
+Debug builds now report bounded, mode-separated camera timing summaries under `LTF.CameraTiming`.
+The 64-record buffer records delegate submission to SDK callback (recognition plus callback
+scheduling), callback entry through snapshot adaptation, and only the synchronous `onState`
+delivery interval. Live and capture statistics and cadence are separate. Tracker deliveries record
+accepted/rejected counts, observed identity differences, actual frame dimensions and rotation;
+unavailable rejection reasons remain unspecified. Summaries are event-driven and limited to one
+per two seconds, with no recognized text, query or image logging. Release builds use no observer.
+Diagnostic clock and logging failures are isolated from publication and capture ownership.
+
+Three diagnostic host tests verify bounds, classified statistics, rate limiting and fresh instances.
+Ten production capture-ownership tests include throwing observers and exact fake-clock stage
+boundaries. Capture pixel copy, Compose scheduling and drawing are not measured; these diagnostics
+do not establish full freeze-to-highlight latency or a recognition speed improvement. A device
+trace from the delayed case is still needed before selecting a performance correction.
+
+## Phase 8 Live scanner composition — 2026-11-06
+
+The live scanner now uses a compact app bar, an opaque status band, the weighted camera viewport,
+and one raised bottom dock for search configuration and capture. Manual query entry and list
+identity no longer occupy the large top form card. The query remains at the same composition site
+when IME, window height or font scaling hides the preview, retaining focus and edits. Options stays
+reachable; compact content scrolls. Manager and retained-source controls keep their prior paths.
+
+Native light/dark manual and list fixtures measured **744dp safe content and 400dp image viewports**
+at 360×800 and density 1.0. Tests verify 48dp secondary and 52dp capture targets, action routing,
+saving/cancel-capture stability, and unchanged image bounds across ordinary status messages,
+including full unavailable/area/retained-outline wording. An actual App fixture verifies the
+viewport disappears with IME insets and 1.5 font scale while the query remains focused and editable;
+scrolling exposes Options and capture. Nine theme/layout host tests passed. Native captures use an
+opaque camera placeholder and do not establish physical camera compositing or device IME behavior.
+
+Final checks passed Android debug Kotlin compilation, **351 host tests across 49 suites with zero
+failures/errors/skips**, Android lint (**14 warnings, zero errors**) and shared iOS simulator
+compilation. `git diff --check` and changed-Kotlin import/100-column checks passed; no Kotlin
+formatter is configured. The iOS task verifies shared-source compatibility only. No APK or device
+run was performed. Native captures and the final aggregate log are in
+`work/demo-2/live-dock/`; final aggregate: `final-checks.log`.
