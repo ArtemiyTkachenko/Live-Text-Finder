@@ -127,8 +127,12 @@ class ImageShareBoundaryTest {
                         val decoded = RuntimeEnvironment.getApplication().contentResolver
                             .openInputStream(uri)!!
                             .use { stream -> BitmapFactory.decodeStream(stream) }
-                        assertEquals(highlightColor.argb.toInt(), decoded.getPixel(9, 6))
-                        assertEquals(Color.BLACK, decoded.getPixel(5, 10))
+                        assertForegroundBlend(
+                            decoded.getPixel(9, 6),
+                            highlightColor.argb.toInt(),
+                            Color.RED,
+                        )
+                        assertEquals(Color.RED, decoded.getPixel(5, 10))
                         assertEquals(Color.RED, decoded.getPixel(1, 1))
                         val pixelsAfterPipeline = IntArray(source.width * source.height)
                         source.getPixels(
@@ -193,7 +197,7 @@ class ImageShareBoundaryTest {
         try {
             ShareWorkGate.executor.execute(worker)
             assertTrue(entered.await(5, TimeUnit.SECONDS))
-            assertEquals(HighlightColor.Yellow.argb.toInt(), encodedColor.get())
+            assertForegroundBlend(encodedColor.get(), HighlightColor.Yellow.argb.toInt(), Color.RED)
             session.setHighlightColor(customColor)
         } finally {
             release.countDown()
@@ -248,7 +252,7 @@ class ImageShareBoundaryTest {
         try {
             ShareWorkGate.executor.execute(worker)
             assertTrue(entered.await(5, TimeUnit.SECONDS))
-            assertEquals(HighlightColor.Yellow.argb.toInt(), encodedColor.get())
+            assertForegroundBlend(encodedColor.get(), HighlightColor.Yellow.argb.toInt(), Color.RED)
         } finally {
             release.countDown()
             waitForGate()
@@ -318,8 +322,8 @@ class ImageShareBoundaryTest {
                 file,
             ),
         )!!.use { stream -> BitmapFactory.decodeStream(stream) }
-        assertEquals(customColor.argb.toInt(), decoded.getPixel(9, 6))
-        assertEquals(Color.BLACK, decoded.getPixel(5, 10))
+        assertForegroundBlend(decoded.getPixel(9, 6), customColor.argb.toInt(), Color.RED)
+        assertEquals(Color.RED, decoded.getPixel(5, 10))
         decoded.recycle()
         shareFiles(context.cacheDir).forEach(File::delete)
         shareOwner.dispose()
@@ -329,6 +333,12 @@ class ImageShareBoundaryTest {
     @Test
     fun frozenRotationsRenderProjectedOutlinesIntoDecodedPng() {
         val expectedRedPixels = listOf(1 to 1, 22 to 1, 38 to 22, 1 to 38)
+        val expectedBackgroundsAtBlackFringeSample = listOf(
+            Color.RED,
+            Color.BLUE,
+            Color.YELLOW,
+            Color.GREEN,
+        )
         val rotations = listOf(0, 90, 180, 270)
         rotations.forEachIndexed { index, rotation ->
             val source = asymmetricBitmap(40, 24)
@@ -361,8 +371,12 @@ class ImageShareBoundaryTest {
                     ))!!.use { stream -> BitmapFactory.decodeStream(stream) }
                 val (redX, redY) = expectedRedPixels[index]
                 assertEquals(Color.RED, decoded.getPixel(redX, redY))
-                assertEquals(Color.YELLOW, decoded.getPixel(9, 6))
-                assertEquals(Color.BLACK, decoded.getPixel(5, 10))
+                assertForegroundBlend(
+                    decoded.getPixel(9, 6),
+                    Color.YELLOW,
+                    expectedBackgroundsAtBlackFringeSample[index],
+                )
+                assertEquals(expectedBackgroundsAtBlackFringeSample[index], decoded.getPixel(5, 10))
                 assertFalse(source.isRecycled)
                 decoded.recycle()
             } finally {
@@ -698,7 +712,7 @@ class ImageShareBoundaryTest {
             BitmapFactory.decodeStream(stream)
         }
         assertEquals(Color.RED, decoded.getPixel(1, 1))
-        assertEquals(Color.BLACK, decoded.getPixel(5, 10))
+        assertEquals(Color.RED, decoded.getPixel(5, 10))
         decoded.recycle()
 
         shareFiles(context.cacheDir).forEach { file -> file.delete() }
@@ -780,7 +794,7 @@ class ImageShareBoundaryTest {
         )
         assertEquals(FreezeMode.Frozen, sourceOwner.state.value.mode)
         assertTrue(entered.await(5, TimeUnit.SECONDS))
-        assertEquals(Color.BLACK, capturedBorder.get())
+        assertEquals(Color.RED, capturedBorder.get())
 
         currentSearchIdentity = manualSearchSpec("changed").identity
         shareOwner.updateCurrent(sourceIdentity, currentSearchIdentity)
@@ -1481,7 +1495,7 @@ class ImageShareBoundaryTest {
         try {
             ShareWorkGate.executor.execute(worker)
             assertTrue(entered.await(5, TimeUnit.SECONDS))
-            assertEquals(Color.BLACK, capturedBorder.get())
+            assertEquals(Color.RED, capturedBorder.get())
             assertEquals(Color.RED, capturedLandmark.get())
         } finally {
             release.countDown()
@@ -1520,8 +1534,12 @@ class ImageShareBoundaryTest {
             BitmapFactory.decodeStream(stream)
         }
         if (expectCurrentMatches) {
-            assertEquals(Color.BLACK, decoded.getPixel(5, 10))
-            assertEquals(SearchHighlightPalette.colors[0].argb.toInt(), decoded.getPixel(9, 6))
+            assertEquals(Color.RED, decoded.getPixel(5, 10))
+            assertForegroundBlend(
+                decoded.getPixel(9, 6),
+                SearchHighlightPalette.colors[0].argb.toInt(),
+                Color.RED,
+            )
         } else {
             assertEquals(source.getPixel(5, 10), decoded.getPixel(5, 10))
         }
@@ -1548,6 +1566,47 @@ class ImageShareBoundaryTest {
             snapshot,
             searchRecognizedContent(manualSearchSpec("target"), snapshot),
         )
+    }
+
+    private fun assertForegroundBlend(actual: Int, foreground: Int, background: Int) {
+        val blackCoverage = 0.54
+        val foregroundCoverage = 0.27
+        val backgroundChannels = intArrayOf(
+            Color.red(background),
+            Color.green(background),
+            Color.blue(background),
+        )
+        val foregroundChannels = intArrayOf(
+            Color.red(foreground),
+            Color.green(foreground),
+            Color.blue(foreground),
+        )
+        fun matchesExpectedBlend(pixel: Int): Boolean {
+            val actualChannels = intArrayOf(Color.red(pixel), Color.green(pixel), Color.blue(pixel))
+            return actualChannels.indices.all { channel ->
+                val underlay = backgroundChannels[channel] * (1.0 - blackCoverage)
+                val expected = underlay * (1.0 - foregroundCoverage) +
+                    foregroundChannels[channel] * foregroundCoverage
+                kotlin.math.abs(actualChannels[channel] - expected) <= 8.0
+            }
+        }
+        assertTrue(
+            matchesExpectedBlend(actual),
+            "Expected foreground blend $foreground, got $actual",
+        )
+        assertFalse(matchesExpectedBlend(Color.BLACK), "A missing foreground must fail")
+        if (foreground == Color.YELLOW) {
+            assertFalse(
+                matchesExpectedBlend(Color.rgb(51, 128, 0)),
+                "A weak yellow blend must fail",
+            )
+        }
+        if (foreground == HighlightColor.fromRgb(18, 171, 239).argb.toInt()) {
+            assertFalse(
+                matchesExpectedBlend(Color.rgb(0, 128, 51)),
+                "A wrong custom color must fail",
+            )
+        }
     }
 
     private fun frozenSnapshot(width: Int, height: Int, rotation: Int) = OcrSnapshot(

@@ -14,6 +14,8 @@ import com.artkachenko.livetextfinder.ocr.ImportedTextSnapshot
 import com.artkachenko.livetextfinder.ocr.OcrSnapshot
 import com.artkachenko.livetextfinder.ocr.TextElement
 import kotlin.math.abs
+import kotlin.math.hypot
+import kotlin.math.min
 
 /** Android Matrix value order, column-vector points; units are preview-local pixels. */
 internal data class PreviewTarget(val width: Int, val height: Int, val sensorToView: List<Float>)
@@ -31,6 +33,36 @@ internal data class ElementOutline(
     val termIds: List<String> = emptyList(),
 )
 internal data class Highlights(val ready: Boolean, val outlines: List<ElementOutline>)
+
+/** Returns a conservative outline stroke width from a quad's minimum perpendicular span. */
+internal fun highlightOutlineWidth(points: List<PreviewPoint>, maxWidth: Float): Float? {
+    if (!validPolygon(points) || !maxWidth.isFinite() || maxWidth <= 0f) return null
+
+    var minimumSpan = Double.POSITIVE_INFINITY
+    points.indices.forEach { index ->
+        val first = points[index]
+        val second = points[(index + 1) % points.size]
+        val edgeX = second.x.toDouble() - first.x.toDouble()
+        val edgeY = second.y.toDouble() - first.y.toDouble()
+        val edgeLength = hypot(edgeX, edgeY)
+        if (!edgeLength.isFinite() || edgeLength <= 0.0) return null
+        val normalX = -edgeY / edgeLength
+        val normalY = edgeX / edgeLength
+        var minimumProjection = Double.POSITIVE_INFINITY
+        var maximumProjection = Double.NEGATIVE_INFINITY
+        points.forEach { point ->
+            val projection = point.x.toDouble() * normalX + point.y.toDouble() * normalY
+            minimumProjection = min(minimumProjection, projection)
+            maximumProjection = maxOf(maximumProjection, projection)
+        }
+        val span = maximumProjection - minimumProjection
+        if (!span.isFinite() || span <= 0.0) return null
+        minimumSpan = min(minimumSpan, span)
+    }
+
+    val width = min(maxWidth.toDouble(), minimumSpan * 0.12)
+    return width.toFloat().takeIf { it.isFinite() && it > 0f }
+}
 
 internal data class MatchOutlineBounds(
     val left: Float,
@@ -95,10 +127,17 @@ internal fun DrawScope.drawHighlightOutlines(
             val termIds = owners.flatMap { it.termIds }.distinct()
             outline.copy(termIds = termIds) to path
         }
-        grouped.forEach { (_, path) ->
-            drawPath(path, Color.Black, style = Stroke(6.dp.toPx()))
+        val maxOuterWidth = 2.dp.toPx()
+        val strokeWidths = grouped.map { (outline, _) ->
+            highlightOutlineWidth(outline.points, maxOuterWidth)
         }
-        grouped.forEach { (outline, path) ->
+        grouped.forEachIndexed { index, (_, path) ->
+            val outerWidth = strokeWidths[index] ?: return@forEachIndexed
+            drawPath(path, Color.Black, style = Stroke(outerWidth))
+        }
+        grouped.forEachIndexed { index, (outline, path) ->
+            val outerWidth = strokeWidths[index] ?: return@forEachIndexed
+            val foregroundWidth = outerWidth * 0.5f
             val colors = colorsByTermId.keys
                 .filter { it in outline.termIds }
                 .mapNotNull(colorsByTermId::get)
@@ -107,7 +146,7 @@ internal fun DrawScope.drawHighlightOutlines(
                 drawPath(
                     path,
                     (colors.singleOrNull() ?: highlightColor).composeColor,
-                    style = Stroke(3.dp.toPx()),
+                    style = Stroke(foregroundWidth),
                 )
             } else {
                 val segments = splitPolygonPerimeter(outline.points, colors.size)
@@ -117,7 +156,11 @@ internal fun DrawScope.drawHighlightOutlines(
                         moveTo(first.x, first.y)
                         points.drop(1).forEach { lineTo(it.x, it.y) }
                     }
-                    drawPath(segment, colors[index].composeColor, style = Stroke(3.dp.toPx()))
+                    drawPath(
+                        segment,
+                        colors[index].composeColor,
+                        style = Stroke(foregroundWidth),
+                    )
                 }
             }
         }

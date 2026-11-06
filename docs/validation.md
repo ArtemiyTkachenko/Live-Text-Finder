@@ -564,3 +564,25 @@ compilation. `git diff --check` and changed-Kotlin import/100-column checks pass
 formatter is configured. The iOS task verifies shared-source compatibility only. No APK or device
 run was performed. Native captures and the final aggregate log are in
 `work/demo-2/live-dock/`; final aggregate: `final-checks.log`.
+
+## Phase 9 Thin OCR outlines — 2026-11-06
+
+Live, frozen, imported and exported OCR outlines now share one adaptive stroke rule: the black
+outer stroke is capped at 2dp in Compose and 2 source pixels in exported images, and shrinks to
+12% of the quad's minimum perpendicular span. The foreground stroke is half that computed width.
+The shared geometry helper uses Double projections and rejects invalid or degenerate quads. Both
+renderers compute each grouped width once and retain the existing all-black-then-color paint order.
+
+Geometry tests cover the maximum width, 6px text height, rotated and vertical quads, skew, subpixel
+geometry and invalid input. Native graphics tests render a 6px-high text-like glyph with a white
+counter through density-2 Compose and the PNG renderer; both preserve the black stem and white
+counter. A half-pixel PNG overlap checks the earlier foreground color against an exact production
+reference. Existing renderer tests now account for antialiasing with fixed source-color blend
+expectations and independent Paint/Stroke references. Negative checks reject missing foregrounds
+and known wrong colors; source pixels, ownership, rotation and stale-share checks remain covered.
+
+Final checks passed Android debug Kotlin compilation, **357 host tests across 50 suites with zero
+failures/errors/skips**, Android lint (**14 warnings, zero errors**) and shared iOS simulator
+compilation. `git diff --check` and the changed-line 100-column audit passed. The iOS task verifies
+shared-source compatibility only. Density-2 Compose, PNG, and overlap captures were visually
+inspected in `work/thin-outlines/`. No APK or device run was performed.

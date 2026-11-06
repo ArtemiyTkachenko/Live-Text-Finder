@@ -7,6 +7,7 @@ import android.graphics.Matrix
 import android.graphics.Paint
 import com.artkachenko.livetextfinder.search.ElementOutline
 import com.artkachenko.livetextfinder.search.HighlightColor
+import com.artkachenko.livetextfinder.search.highlightOutlineWidth
 import com.artkachenko.livetextfinder.search.splitPolygonPerimeter
 
 internal object AndroidImageShareRenderer {
@@ -60,22 +61,27 @@ internal object AndroidImageShareRenderer {
                     }
                     close()
                 }
-                outline.copy(termIds = owners.flatMap { it.termIds }.distinct()) to path
+                val mergedOutline = outline.copy(
+                    termIds = owners.flatMap { it.termIds }.distinct(),
+                )
+                val outerWidth = highlightOutlineWidth(mergedOutline.points, 2f)
+                    ?: return@mapNotNull null
+                Triple(mergedOutline, path, outerWidth)
             }
             val blackPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = Color.BLACK
                 style = Paint.Style.STROKE
-                strokeWidth = 6f
             }
             val highlightPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = highlightColor.argb.toInt()
                 style = Paint.Style.STROKE
-                strokeWidth = 3f
             }
-            grouped.forEach { (_, path) ->
+            grouped.forEach { (_, path, outerWidth) ->
+                blackPaint.strokeWidth = outerWidth
                 canvas.drawPath(path, blackPaint)
             }
-            grouped.forEach { (outline, path) ->
+            grouped.forEach { (outline, path, outerWidth) ->
+                highlightPaint.strokeWidth = outerWidth * 0.5f
                 val colors = colorsByTermId.keys
                     .filter { it in outline.termIds }
                     .mapNotNull(colorsByTermId::get)
