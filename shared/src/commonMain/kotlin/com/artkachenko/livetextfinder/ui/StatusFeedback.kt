@@ -41,9 +41,9 @@ import livetextfinder.shared.generated.resources.status_no_matches
 import livetextfinder.shared.generated.resources.status_no_readable_text
 import livetextfinder.shared.generated.resources.status_no_text_sample
 import livetextfinder.shared.generated.resources.status_outlined_count
+import livetextfinder.shared.generated.resources.status_results_unavailable
 import livetextfinder.shared.generated.resources.status_retained_outlines
 import livetextfinder.shared.generated.resources.status_retention
-import livetextfinder.shared.generated.resources.status_results_unavailable
 import livetextfinder.shared.generated.resources.status_scanning
 import livetextfinder.shared.generated.resources.status_source_frozen
 import livetextfinder.shared.generated.resources.status_source_imported
@@ -69,7 +69,11 @@ internal fun StatusSummary(
         Row(
             modifier = Modifier.padding(
                 horizontal = FinderSpacing.medium,
-                vertical = FinderSpacing.small,
+                vertical = if (details != null) {
+                    FinderSpacing.extraSmall
+                } else {
+                    FinderSpacing.small
+                },
             ),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(FinderSpacing.small),
@@ -85,9 +89,10 @@ internal fun StatusSummary(
                 style = MaterialTheme.typography.bodyMedium,
             )
             if (details != null) {
-                TextButton(onClick = onDetails) {
-                    Text(stringResource(Res.string.status_details))
-                }
+                FinderSecondaryAction(
+                    label = stringResource(Res.string.status_details),
+                    onClick = onDetails,
+                )
             }
         }
     }
@@ -181,9 +186,11 @@ internal fun StatusDetailsDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismissRequest) {
-                Text(stringResource(Res.string.status_details_close))
-            }
+            FinderPrimaryAction(
+                label = stringResource(Res.string.status_details_close),
+                enabled = true,
+                onClick = onDismissRequest,
+            )
         },
     )
 }

@@ -19,7 +19,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -99,8 +98,10 @@ import com.artkachenko.livetextfinder.ui.ContextMessage
 import com.artkachenko.livetextfinder.ui.FinderCaptureControls
 import com.artkachenko.livetextfinder.ui.FinderContentAssembly
 import com.artkachenko.livetextfinder.ui.FinderOptionsSheet
+import com.artkachenko.livetextfinder.ui.FinderPrimaryAction
 import com.artkachenko.livetextfinder.ui.FinderSearchControls
 import com.artkachenko.livetextfinder.ui.FinderSearchLists
+import com.artkachenko.livetextfinder.ui.FinderSecondaryAction
 import com.artkachenko.livetextfinder.ui.FinderSpacing
 import com.artkachenko.livetextfinder.ui.HighlightColorDialog
 import com.artkachenko.livetextfinder.ui.LiveTextFinderTheme
@@ -1293,7 +1294,10 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                         Text("Delete $name? The saved manual query will be kept.")
                     },
                     confirmButton = {
-                        TextButton(
+                        FinderPrimaryAction(
+                            label = "Delete",
+                            enabled = true,
+                            destructive = true,
                             onClick = {
                                 transferOwner.contextChanged()
                                 transferContextRevision++
@@ -1303,12 +1307,10 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                                 }
                                 deleteId = null
                             },
-                        ) {
-                            Text("Delete")
-                        }
+                        )
                     },
                     dismissButton = {
-                        TextButton(onClick = { deleteId = null }) { Text("Cancel") }
+                        FinderSecondaryAction(label = "Cancel", onClick = { deleteId = null })
                     },
                 )
             }
@@ -1323,17 +1325,23 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                         )
                     },
                     confirmButton = {
-                        TextButton(onClick = {
-                            resetConfirm = false
-                            transferOwner.contextChanged()
-                            transferContextRevision++
-                            session.retry()
-                        }) {
-                            Text("Reset")
-                        }
+                        FinderPrimaryAction(
+                            label = "Reset",
+                            enabled = true,
+                            destructive = true,
+                            onClick = {
+                                resetConfirm = false
+                                transferOwner.contextChanged()
+                                transferContextRevision++
+                                session.retry()
+                            },
+                        )
                     },
                     dismissButton = {
-                        TextButton(onClick = { resetConfirm = false }) { Text("Cancel") }
+                        FinderSecondaryAction(
+                            label = "Cancel",
+                            onClick = { resetConfirm = false },
+                        )
                     },
                 )
             }

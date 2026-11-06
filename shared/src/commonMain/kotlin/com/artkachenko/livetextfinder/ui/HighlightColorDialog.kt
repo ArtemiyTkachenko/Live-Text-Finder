@@ -25,7 +25,6 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -51,6 +50,7 @@ import livetextfinder.shared.generated.resources.highlight_color_cyan
 import livetextfinder.shared.generated.resources.highlight_color_done
 import livetextfinder.shared.generated.resources.highlight_color_green
 import livetextfinder.shared.generated.resources.highlight_color_magenta
+import livetextfinder.shared.generated.resources.highlight_color_presets
 import livetextfinder.shared.generated.resources.highlight_color_preview
 import livetextfinder.shared.generated.resources.highlight_color_red
 import livetextfinder.shared.generated.resources.highlight_color_selected
@@ -100,10 +100,15 @@ internal fun HighlightColorDialog(
                 )
             } else {
                 Column(
-                    modifier = Modifier.heightIn(max = 320.dp)
+                    modifier = Modifier.heightIn(max = 360.dp).fillMaxWidth()
                         .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(FinderSpacing.extraSmall),
+                    verticalArrangement = Arrangement.spacedBy(FinderSpacing.medium),
                 ) {
+                    Text(
+                        stringResource(Res.string.highlight_color_presets),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
                     Text(
                         text = stringResource(Res.string.highlight_color_custom_description),
                         style = MaterialTheme.typography.bodyMedium,
@@ -137,33 +142,33 @@ internal fun HighlightColorDialog(
         },
         dismissButton = if (customEditor) {
             {
-                TextButton(
+                FinderSecondaryAction(
+                    label = stringResource(Res.string.highlight_color_cancel),
                     onClick = {
                         resetDraftToSelection()
                         customEditor = false
                     },
-                ) {
-                    Text(stringResource(Res.string.highlight_color_cancel))
-                }
+                )
             }
         } else {
             null
         },
         confirmButton = {
             if (customEditor) {
-                TextButton(
+                FinderPrimaryAction(
+                    label = stringResource(Res.string.highlight_color_apply),
                     enabled = enabled,
                     onClick = {
                         onSelectColor(draft)
                         onDismissRequest()
                     },
-                ) {
-                    Text(stringResource(Res.string.highlight_color_apply))
-                }
+                )
             } else {
-                TextButton(onClick = onDismissRequest) {
-                    Text(stringResource(Res.string.highlight_color_done))
-                }
+                FinderPrimaryAction(
+                    label = stringResource(Res.string.highlight_color_done),
+                    enabled = true,
+                    onClick = onDismissRequest,
+                )
             }
         },
     )
@@ -223,9 +228,19 @@ private fun CustomColorEditor(
     onBlueChange: (Int) -> Unit,
 ) {
     Column(
-        modifier = Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(FinderSpacing.extraSmall),
+        modifier = Modifier.heightIn(max = 360.dp).fillMaxWidth()
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(FinderSpacing.small),
     ) {
+        Text(
+            stringResource(Res.string.highlight_color_custom),
+            style = MaterialTheme.typography.titleSmall,
+        )
+        Text(
+            stringResource(Res.string.highlight_color_custom_description),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         val previewLabel = stringResource(Res.string.highlight_color_preview)
         Row(
             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)

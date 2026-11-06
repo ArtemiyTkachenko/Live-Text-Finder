@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -48,6 +47,7 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.artkachenko.livetextfinder.ocr.OcrStatus
 import com.artkachenko.livetextfinder.ocr.OcrUiState
+import com.artkachenko.livetextfinder.ui.FinderPrimaryAction
 import livetextfinder.shared.generated.resources.Res
 import livetextfinder.shared.generated.resources.camera_preview_paused
 import livetextfinder.shared.generated.resources.camera_preview_starting
@@ -137,18 +137,22 @@ internal actual fun CameraPreview(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Text("Camera access is needed for live text recognition.", color = Color.White)
-                Button(onClick = {
-                    if (settingsRequired) {
-                        context.startActivity(
-                            Intent(
-                                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                                Uri.fromParts("package", context.packageName, null),
+                FinderPrimaryAction(
+                    label = if (settingsRequired) "Open app settings" else "Allow camera",
+                    enabled = true,
+                    onClick = {
+                        if (settingsRequired) {
+                            context.startActivity(
+                                Intent(
+                                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                    Uri.fromParts("package", context.packageName, null),
+                                ),
                             )
-                        )
-                    } else {
-                        launcher.launch(Manifest.permission.CAMERA)
-                    }
-                }) { Text(if (settingsRequired) "Open app settings" else "Allow camera") }
+                        } else {
+                            launcher.launch(Manifest.permission.CAMERA)
+                        }
+                    },
+                )
             }
         }
 
@@ -223,14 +227,14 @@ internal fun CameraPreviewFeedbackLayer(
             CameraStreamFeedback(feedback)
         }
         if (failed) {
-            Button(
-                onClick = onRetry,
+            FinderPrimaryAction(
+                label = "Retry camera",
+                enabled = true,
                 modifier = Modifier
                     .align(Alignment.Center)
                     .heightIn(min = CAMERA_RETRY_MIN_HEIGHT_DP.dp),
-            ) {
-                Text("Retry camera")
-            }
+                onClick = onRetry,
+            )
         }
     }
 }

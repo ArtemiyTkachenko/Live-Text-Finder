@@ -491,3 +491,35 @@ zero failures/errors/skips**, Android lint (**14 warnings, zero errors**) and sh
 compilation. `git diff --check` passed; no Kotlin formatter is configured. The iOS task verifies
 shared-source compilation only. No APK or device/runtime test was run. Full aggregate log:
 `work/redesign/results-options/final-checks.log`.
+
+
+## Phase 6 Dialogs and recovery actions — 2026-11-06
+
+The live-area editor now groups Size and Position controls and shows a schematic region guide
+computed from the same normalized bounds as the sliders. Its boundary description explains that
+position percentages measure travel through the remaining space. Apply reads current slider state;
+Full frame retains the null-area callback. The color editor groups presets and RGB controls with a
+fixed footer and scrollable body. Help and status details use shared spacing and actions; Delete and
+Reset confirmations use the shared coral destructive action, and the two camera recovery actions
+use the shared primary style. Search Results presents its total and matched-term summary vertically
+so both values remain readable at 320dp and 1.5× text.
+
+Native fixtures verify live-area center/edge/full-frame geometry, current-state apply and stale
+revision behavior; color slider and footer reachability; Help's last iOS section and Details
+metadata; Matches selection/copy and final-row scrolling; and action dimensions. Dialog fixtures
+set font scale before Activity creation and assert the density inside the native dialog. Actual
+320×420 captures cover the compact live-area editor, Help, Details and RGB editor at 1.5×; Results
+use 320×470 at 1.5×, and Matches uses 320×480 at 1.5×. Light/dark Matches captures and the other
+updated captures were regenerated and visually inspected in work/redesign/dialogs/.
+
+Font-scale accuracy note: earlier validation entries described large-text previews based on a
+ComposeView density provider, but native dialogs did not inherit that provider; their actual font
+scale was 1.0. Those historical entries remain unchanged. The current fixtures set Android's
+runtime font scale before creating the Activity, assert 1.5 inside the dialog, and the captures
+listed above reflect that verified scale.
+
+The final aggregate passed Android debug Kotlin compilation, **344 host tests across 48 suites with
+zero failures/errors/skips**, Android lint (**14 warnings, zero errors**) and shared iOS simulator
+compilation. git diff --check and the changed-Kotlin 100-column check passed. The iOS task verifies
+shared-source compilation only. No APK or device/runtime test was run. Full aggregate log:
+work/redesign/dialogs/final-checks.log.

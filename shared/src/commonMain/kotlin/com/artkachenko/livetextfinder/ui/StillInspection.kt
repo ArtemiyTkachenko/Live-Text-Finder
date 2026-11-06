@@ -309,25 +309,22 @@ internal fun SearchTermResultsDialog(
                         color = MaterialTheme.colorScheme.surfaceContainer,
                         shape = MaterialTheme.shapes.medium,
                     ) {
-                        Row(
+                        Column(
                             modifier = Modifier.fillMaxWidth().padding(FinderSpacing.large),
-                            horizontalArrangement = Arrangement.spacedBy(FinderSpacing.medium),
-                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                            verticalArrangement = Arrangement.spacedBy(FinderSpacing.extraSmall),
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    stringResource(Res.string.search_results_occurrences),
-                                    style = MaterialTheme.typography.labelLarge,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                Text(
-                                    occurrenceTotal.toString(),
-                                    style = MaterialTheme.typography.headlineMedium,
-                                    color = MaterialTheme.colorScheme.primary,
-                                )
-                            }
                             Text(
-                                pluralStringResource(
+                                text = stringResource(Res.string.search_results_occurrences),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text(
+                                text = occurrenceTotal.toString(),
+                                style = MaterialTheme.typography.headlineMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                            Text(
+                                text = pluralStringResource(
                                     Res.plurals.search_results_matched_terms,
                                     matchedTermCount,
                                     matchedTermCount,

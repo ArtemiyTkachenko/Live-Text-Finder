@@ -8,11 +8,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.artkachenko.livetextfinder.camera.liveSearchAreaAvailable
+import com.artkachenko.livetextfinder.ui.FinderPrimaryAction
+import com.artkachenko.livetextfinder.ui.FinderSpacing
 import livetextfinder.shared.generated.resources.Res
 import livetextfinder.shared.generated.resources.finder_match_help
 import livetextfinder.shared.generated.resources.help_options_location
@@ -28,7 +29,7 @@ internal fun UsageHelpDialog(onDismissRequest: () -> Unit) {
         text = {
             Column(
                 modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(FinderSpacing.medium),
             ) {
                 HelpSection(
                     title = "Find text on Android",
@@ -89,14 +90,14 @@ internal fun UsageHelpDialog(onDismissRequest: () -> Unit) {
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismissRequest) { Text("Done") }
+            FinderPrimaryAction(label = "Done", enabled = true, onClick = onDismissRequest)
         },
     )
 }
 
 @Composable
 private fun HelpSection(title: String, body: String) {
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(FinderSpacing.small)) {
         Text(title, style = MaterialTheme.typography.titleSmall)
         Text(body, style = MaterialTheme.typography.bodyMedium)
     }

@@ -1,10 +1,12 @@
 package com.artkachenko.livetextfinder.ui
 
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Text
@@ -149,13 +151,22 @@ internal fun FinderPrimaryAction(
     label: String,
     enabled: Boolean,
     modifier: Modifier = Modifier,
+    destructive: Boolean = false,
     onClick: () -> Unit,
 ) {
     Button(
         onClick = onClick,
         enabled = enabled,
-        modifier = modifier.defaultMinSize(minWidth = 48.dp, minHeight = 52.dp),
+        modifier = modifier.widthIn(min = 48.dp).heightIn(min = 52.dp),
         shape = MaterialTheme.shapes.medium,
+        colors = if (destructive) {
+            ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.error,
+                contentColor = MaterialTheme.colorScheme.onError,
+            )
+        } else {
+            ButtonDefaults.buttonColors()
+        },
     ) {
         Text(label)
     }

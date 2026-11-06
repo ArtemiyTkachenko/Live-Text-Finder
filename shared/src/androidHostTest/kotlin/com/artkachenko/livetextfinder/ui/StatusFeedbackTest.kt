@@ -57,6 +57,7 @@ import com.artkachenko.livetextfinder.FinderStatusRegion
 import com.artkachenko.livetextfinder.SearchFeedback
 import com.artkachenko.livetextfinder.SearchFeedbackKind
 import com.artkachenko.livetextfinder.StatusSource
+import com.artkachenko.livetextfinder.UsageHelpDialog
 import com.artkachenko.livetextfinder.camera.CameraPreviewFeedbackLayer
 import com.artkachenko.livetextfinder.camera.FreezeMode
 import com.artkachenko.livetextfinder.camera.FreezePresentationState
@@ -114,6 +115,7 @@ import org.junit.After
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
@@ -135,6 +137,7 @@ class StatusFeedbackTest {
     private var frameClock: BroadcastFrameClock? = null
     private var recomposer: Recomposer? = null
     private var recomposerScope: CoroutineScope? = null
+    private var expectedFontScale = 1f
     private var nextFrameTimeNanos = 1_000_000_000L
 
     @After
@@ -235,7 +238,7 @@ class StatusFeedbackTest {
         assertTouchBounds(retry)
         val density = checkNotNull(composeView).resources.displayMetrics.density
         assertTrue(retry.size.width / density >= 48f)
-        assertTrue(retry.size.height / density >= 48f)
+        assertTrue(retry.size.height / density >= 52f)
         assertRendered("camera-feedback-retry-dark-large-text.png")
         click(retry)
         assertEquals(1, retryCount)
@@ -882,7 +885,7 @@ class StatusFeedbackTest {
             outlinedElementCount = 2,
             retainedOutlines = false,
         )
-        mount(widthDp = 360, heightDp = 700) {
+        mount(widthDp = 320, heightDp = 420, fontScale = 1.5f) {
             LiveTextFinderTheme(darkThemeOverride = false, dynamicColor = false) {
                 Surface(Modifier.fillMaxSize()) {
                     Column {
@@ -925,18 +928,68 @@ class StatusFeedbackTest {
         measureCurrentComposition()
 
         val dialog = checkNotNull(ShadowDialog.getLatestDialog())
+        setNativeDialogSize(dialog, widthDp = 320, heightDp = 420)
         val dialogRoot = findViewRoot(dialog.window?.decorView)
-        val dialogNodes = semanticsNodes(dialogRoot)
+        var dialogNodes = semanticsNodes(dialogRoot)
         assertTrue(dialogNodes.any { it.textValues().contains("Recognition details") })
+        assertEquals(
+            1.5f,
+            nodeWithText(dialogNodes, "Recognition details").layoutInfo.density.fontScale,
+        )
         assertTrue(dialogNodes.any { it.textValues().contains("Source: imported image") })
         assertTrue(dialogNodes.any { it.textValues().contains("Image: 640 × 480 pixels") })
         assertTrue(dialogNodes.any { it.textValues().contains("2 outlined elements") })
         assertTrue(dialogNodes.any { it.textValues().contains("Text sample: invoice paid") })
+        val viewport = scrollViewportNode(dialogNodes)
+        checkNotNull(viewport.config.getOrNull(SemanticsActions.ScrollBy)?.action).invoke(
+            0f,
+            1000f,
+        )
+        measureCurrentComposition()
+        dialogNodes = semanticsNodes(dialogRoot)
+        val sample = nodeWithText(dialogNodes, "Text sample: invoice paid")
+        assertFullyVisibleInViewport(sample, scrollViewportNode(dialogNodes))
         assertDialogRendered(dialog, "status-light-imported-details.png")
         val close = nodeWithText(dialogNodes, "Close")
         assertTouchBounds(close, dialog.window?.decorView)
+        val density = checkNotNull(activity).resources.displayMetrics.density
+        assertTrue(close.size.height / density >= 52f)
         click(close)
         assertFalse(isOpen.value)
+    }
+
+    @Test
+    fun productionUsageHelpScrollsToLastIosSectionAndKeepsDoneReachable() {
+        var dismissCount = 0
+        mount(widthDp = 320, heightDp = 420, fontScale = 1.5f) {
+            LiveTextFinderTheme(darkThemeOverride = true, dynamicColor = false) {
+                UsageHelpDialog(onDismissRequest = { dismissCount++ })
+            }
+        }
+
+        val dialog = checkNotNull(ShadowDialog.getLatestDialog())
+        val decorView = checkNotNull(dialog.window?.decorView)
+        setNativeDialogSize(dialog, widthDp = 320, heightDp = 420)
+        var nodes = semanticsNodes(findViewRoot(decorView))
+        val title = nodeWithText(nodes, "How to use")
+        assertEquals(1.5f, title.layoutInfo.density.fontScale)
+        val ios = nodeWithText(
+            nodes,
+            "Query, lists, and colour are kept in memory only. Camera OCR, image import, and " +
+                "image sharing are unavailable in this build.",
+        )
+        scrollTextParagraphIntoViewport(findViewRoot(decorView), ios.textValues().first())
+        nodes = semanticsNodes(findViewRoot(decorView))
+        val visibleIos = nodeWithText(nodes, ios.textValues().first())
+        assertFullyVisibleInViewport(visibleIos, scrollViewportNode(nodes))
+        val done = nodeWithText(nodes, "Done")
+        assertFullyVisibleInDialog(done, decorView)
+        assertTouchBounds(done, decorView)
+        val density = checkNotNull(activity).resources.displayMetrics.density
+        assertTrue(done.size.height / density >= 52f)
+        assertDialogRendered(dialog, "usage-help-dark-last-section-large-text.png")
+        click(done)
+        assertEquals(1, dismissCount)
     }
 
     @Test
@@ -1000,7 +1053,7 @@ class StatusFeedbackTest {
                 occurrenceCount = if (index == 31) 0 else index + 1,
             )
         }
-        mount(widthDp = 320, heightDp = 620, fontScale = 1.2f) {
+        mount(widthDp = 320, heightDp = 620, fontScale = 1.5f) {
             LiveTextFinderTheme(darkThemeOverride = false, dynamicColor = false) {
                 SearchTermResultsDialog(terms = terms, onDismiss = ::ignoreAction)
             }
@@ -1008,22 +1061,30 @@ class StatusFeedbackTest {
         settleDialog()
 
         val dialog = checkNotNull(ShadowDialog.getLatestDialog())
+        setNativeDialogSize(dialog, widthDp = 320, heightDp = 470)
         val dialogRoot = findViewRoot(dialog.window?.decorView)
         var nodes = semanticsNodes(dialogRoot)
+        val resultsTitle = nodeWithText(nodes, "Search results")
+        assertEquals(1.5f, resultsTitle.layoutInfo.density.fontScale)
+        assertDialogRendered(dialog, "search-results-32-top-light-large-text.png")
         assertTrue(nodes.any { it.textValues().contains("Search results") })
         assertTrue(nodes.any { it.textValues().contains("Matches") })
         assertTrue(nodes.any { it.textValues().contains("496") })
         assertTrue(nodes.any { it.textValues().contains("31 terms matched") })
+        assertSingleLineText(nodeWithText(nodes, "Matches"))
+        assertSingleLineText(nodeWithText(nodes, "496"))
         assertTrue(nodes.any { it.textValues().contains("long search phrase label 0") })
-        assertDialogRendered(dialog, "search-results-32-top-light-large-text.png")
-        val scrollNode = checkNotNull(
-            nodes.firstOrNull { it.config.getOrNull(SemanticsActions.ScrollBy) != null },
-        )
-        val scrollBy = checkNotNull(scrollNode.config.getOrNull(SemanticsActions.ScrollBy)?.action)
-        assertTrue(scrollBy(0f, 2_000f))
-        measureCurrentComposition()
+        val lastLabel = "long search phrase label 31"
+        scrollListUntilTextVisible(dialogRoot, lastLabel)
         nodes = semanticsNodes(dialogRoot)
-        assertTrue(nodes.any { it.textValues().contains("long search phrase label 31") })
+        val lastRow = nodeWithText(nodes, lastLabel)
+        assertFullyVisibleInViewport(lastRow, scrollViewportNode(nodes))
+        val zeroCount = checkNotNull(nodes.firstOrNull { node ->
+            node.config.getOrNull(SemanticsProperties.ContentDescription)
+                ?.contains("Occurrences 0") == true
+        })
+        assertFullyVisibleInViewport(zeroCount, scrollViewportNode(nodes))
+        assertTrue(nodes.any { it.textValues().contains(lastLabel) })
         assertTrue(nodes.any { it.textValues().contains("0") })
         assertTrue(nodes.any { it.textValues().contains("31 terms matched") })
         assertTouchBounds(nodeWithText(nodes, "Done"), dialog.window?.decorView)
@@ -1571,7 +1632,7 @@ class StatusFeedbackTest {
 
     @Test
     fun productionCustomEditorShowsThreeChannelsAndFixedActionsInLargeViewport() {
-        mount(widthDp = 360, heightDp = 700, fontScale = 1.3f) {
+        mount(widthDp = 320, heightDp = 420, fontScale = 1.5f) {
             LiveTextFinderTheme(darkThemeOverride = false, dynamicColor = false) {
                 HighlightColorDialog(
                     selectedColor = HighlightColor.fromRgb(18, 171, 239),
@@ -1584,18 +1645,29 @@ class StatusFeedbackTest {
         settleDialog()
         val dialog = checkNotNull(ShadowDialog.getLatestDialog())
         val decorView = checkNotNull(dialog.window?.decorView)
+        setNativeDialogSize(dialog, widthDp = 320, heightDp = 420)
         val customColorRow = nodeWithDescription(
             semanticsNodes(findViewRoot(decorView)),
             "Custom color (#12ABEF)",
         )
+        scrollNodeIntoViewport(findViewRoot(decorView), "Custom color (#12ABEF)")
         click(customColorRow)
-        val nodes = semanticsNodes(findViewRoot(decorView))
+        val dialogRoot = findViewRoot(decorView)
+        var nodes = semanticsNodes(dialogRoot)
+        assertEquals(
+            1.5f,
+            nodeWithText(nodes, "Highlight color").layoutInfo.density.fontScale,
+        )
         listOf("Red", "Green", "Blue").forEach { label ->
+            scrollNodeIntoViewport(dialogRoot, label)
+            nodes = semanticsNodes(dialogRoot)
+            val viewport = scrollViewportNode(nodes)
             val slider = nodeWithDescription(nodes, label)
             assertTouchBounds(slider, decorView)
             assertSliderLayoutHeight(slider, decorView)
-            assertFullyVisibleInDialog(slider, decorView)
+            assertFullyVisibleInViewport(slider, viewport)
         }
+        nodes = semanticsNodes(dialogRoot)
         assertFullyVisibleInDialog(nodeWithText(nodes, "Apply"), decorView)
         assertFullyVisibleInDialog(nodeWithText(nodes, "Cancel"), decorView)
         assertTouchBounds(nodeWithText(nodes, "Apply"), decorView)
@@ -2606,6 +2678,8 @@ class StatusFeedbackTest {
         fontScale: Float = 1f,
         content: @Composable () -> Unit,
     ) {
+        RuntimeEnvironment.setFontScale(fontScale)
+        expectedFontScale = fontScale
         val hostActivity = Robolectric.buildActivity(ComponentActivity::class.java).setup().get()
         val hostView = ComposeView(hostActivity)
         hostView.setLayerType(View.LAYER_TYPE_SOFTWARE, null)
@@ -2942,6 +3016,30 @@ class StatusFeedbackTest {
         assertFalse(layouts.single().hasVisualOverflow)
     }
 
+    private fun assertSingleLineText(node: SemanticsNode) {
+        val layouts = mutableListOf<TextLayoutResult>()
+        val getLayout = checkNotNull(
+            node.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action,
+        )
+        assertTrue(getLayout(layouts))
+        assertEquals(1, layouts.single().lineCount)
+        val layout = layouts.single()
+        assertTrue(
+            layout.getLineLeft(0) >= -1f &&
+                layout.getLineRight(0) <= layout.size.width + 1f,
+            "Text ${node.textValues()} exceeds its measured width: " +
+                "line=${layout.getLineLeft(0)}..${layout.getLineRight(0)}, " +
+                "size=${layout.size.width}.",
+        )
+        assertTrue(
+            layout.getLineTop(0) >= -1f &&
+                layout.getLineBottom(0) <= layout.size.height + 1f,
+            "Text ${node.textValues()} exceeds its measured height: " +
+                "line=${layout.getLineTop(0)}..${layout.getLineBottom(0)}, " +
+                "size=${layout.size.height}.",
+        )
+    }
+
     private fun click(node: SemanticsNode) {
         assertTrue(checkNotNull(node.config.getOrNull(SemanticsActions.OnClick)?.action)())
         measureCurrentComposition()
@@ -2992,6 +3090,44 @@ class StatusFeedbackTest {
             nodes = semanticsNodes(root)
         }
         error("Could not scroll '$description' fully into the dialog viewport.")
+    }
+
+    private fun scrollTextParagraphIntoViewport(root: ViewRootForTest, text: String) {
+        repeat(12) {
+            val nodes = semanticsNodes(root)
+            val target = nodeWithText(nodes, text)
+            val viewport = scrollViewportNode(nodes)
+            val viewportTop = viewport.positionInRoot.y
+            val viewportBottom = viewportTop + viewport.size.height
+            val targetTop = target.positionInRoot.y
+            val targetBottom = targetTop + target.size.height
+            if (targetTop >= viewportTop && targetBottom <= viewportBottom) {
+                return
+            }
+            val delta = if (targetBottom > viewportBottom) {
+                targetBottom - viewportBottom
+            } else {
+                targetTop - viewportTop
+            }
+            checkNotNull(viewport.config.getOrNull(SemanticsActions.ScrollBy)?.action)
+                .invoke(0f, delta)
+            measureCurrentComposition()
+        }
+        error("Could not scroll the paragraph into the help viewport.")
+    }
+
+    private fun scrollListUntilTextVisible(root: ViewRootForTest, text: String) {
+        repeat(12) {
+            val nodes = semanticsNodes(root)
+            if (nodes.any { node -> node.textValues().contains(text) }) {
+                return
+            }
+            val viewport = scrollViewportNode(nodes)
+            checkNotNull(viewport.config.getOrNull(SemanticsActions.ScrollBy)?.action)
+                .invoke(0f, 10_000f)
+            measureCurrentComposition()
+        }
+        error("Could not scroll the list to '$text'.")
     }
 
     private fun scrollTextIntoViewport(
@@ -3101,6 +3237,8 @@ class StatusFeedbackTest {
                     node.size.height > 0
             }
         }
+        val optionsTitle = nodeWithText(optionsDialogNodes(), "Options")
+        assertEquals(expectedFontScale, optionsTitle.layoutInfo.density.fontScale)
         val dialog = optionsDialog()
         val decor = checkNotNull(dialog.window?.decorView)
         val density = checkNotNull(activity).resources.displayMetrics.density
@@ -3117,6 +3255,23 @@ class StatusFeedbackTest {
 
     private fun measureHostRoot() {
         (checkNotNull(composeView).getChildAt(0) as ViewRootForTest).measureAndLayoutForTest()
+    }
+
+    private fun setNativeDialogSize(dialog: android.app.Dialog, widthDp: Int, heightDp: Int) {
+        val decorView = checkNotNull(dialog.window?.decorView)
+        val density = decorView.resources.displayMetrics.density
+        val width = (widthDp * density).roundToInt()
+        val height = (heightDp * density).roundToInt()
+        dialog.window?.setLayout(width, height)
+        shadowOf(Looper.getMainLooper()).idle()
+        decorView.requestLayout()
+        decorView.invalidate()
+        findViewRoot(decorView).measureAndLayoutForTest()
+        measureCurrentComposition()
+        decorView.invalidate()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(width, decorView.width)
+        assertEquals(height, decorView.height)
     }
 
     private fun assertRendered(fileName: String) {

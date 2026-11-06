@@ -1,5 +1,6 @@
 <resources>
     <string name="highlight_color_title">Highlight color</string>
+    <string name="highlight_color_presets">Presets</string>
     <string name="highlight_color_done">Done</string>
     <string name="highlight_color_yellow">Yellow</string>
     <string name="highlight_color_cyan">Cyan</string>
@@ -27,6 +28,12 @@
     <string name="highlight_color_blue">Blue</string>
     <string name="highlight_color_cancel">Cancel</string>
     <string name="highlight_color_apply">Apply</string>
+    <string name="area_size_group">Size</string>
+    <string name="area_position_group">Position</string>
+    <string name="area_guide_title">Search area guide</string>
+    <string name="area_guide_caption">Schematic guide; proportions may differ from the camera.</string>
+    <string name="area_position_help">Position is travel through the remaining space, from start to end.</string>
+    <string name="area_bounds_description">Left %1$d%; top %2$d%; right %3$d%; bottom %4$d%</string>
     <string name="search_lists_heading">Search lists</string>
     <string name="search_lists_new">New list</string>
     <string name="search_lists_empty">Create a list to reuse search terms across sessions.</string>

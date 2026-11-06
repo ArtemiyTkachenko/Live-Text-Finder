@@ -98,6 +98,7 @@ import com.artkachenko.livetextfinder.search.searchRecognizedText
 import com.artkachenko.livetextfinder.search.stillMatchRows
 import java.io.File
 import java.io.FileOutputStream
+import kotlin.math.roundToInt
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -113,6 +114,7 @@ import org.junit.After
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.shadow.api.Shadow
@@ -1319,9 +1321,18 @@ class StillInspectionUiTest {
             }
         }
 
-        val dialogRoot = dialogComposeRoot()
-        val dialogView = checkNotNull(ShadowDialog.getLatestDialog()?.window?.decorView)
+        val dialog = checkNotNull(ShadowDialog.getLatestDialog())
+        val dialogView = checkNotNull(dialog.window?.decorView)
         val density = dialogView.resources.displayMetrics.density
+        val dialogWidth = (320 * density).roundToInt()
+        val dialogHeight = (480 * density).roundToInt()
+        dialog.window?.setLayout(dialogWidth, dialogHeight)
+        org.robolectric.Shadows.shadowOf(Looper.getMainLooper()).idle()
+        val dialogRoot = dialogComposeRoot()
+        assertEquals(dialogWidth, dialogView.width)
+        assertEquals(dialogHeight, dialogView.height)
+        val title = nodes(dialogRoot).first { nodeText(it).contains("Matches in this image") }
+        assertEquals(1.5f, title.layoutInfo.density.fontScale)
         fun assertDialogActionSize(label: String, minimumHeight: Float) {
             val action = nodes(dialogRoot).first { node ->
                 nodeText(node).contains(label) &&
@@ -1356,11 +1367,37 @@ class StillInspectionUiTest {
             nodes(dialogRoot).any { node -> nodeText(node) == "50 matches" },
             "Dialog text: ${nodes(dialogRoot).map(::nodeText)}",
         )
-        val rowNode = nodes(dialogRoot).first { node ->
+        val scrollToTargetAction = checkNotNull(
+            scrollable.config.getOrNull(SemanticsActions.ScrollBy)?.action,
+        )
+        val viewportHeight = scrollable.size.height.toFloat()
+        var rowNode = nodes(dialogRoot).firstOrNull { node ->
             nodeText(node).contains("match 2") &&
                 node.config.getOrNull(SemanticsActions.OnClick) != null
         }
-        assertTrue(checkNotNull(rowNode.config.getOrNull(SemanticsActions.OnClick)?.action)())
+        repeat(20) {
+            val list = nodes(dialogComposeRoot()).single { node ->
+                node.config.getOrNull(SemanticsActions.ScrollBy) != null
+            }
+            val listTop = list.positionInRoot.y
+            val listBottom = listTop + list.size.height
+            rowNode = nodes(dialogComposeRoot()).firstOrNull { node ->
+                nodeText(node).contains("match 2") &&
+                    node.config.getOrNull(SemanticsActions.OnClick) != null &&
+                    node.positionInRoot.y >= listTop &&
+                    node.positionInRoot.y + node.size.height <= listBottom
+            }
+            if (rowNode != null) return@repeat
+            assertTrue(scrollToTargetAction(0f, viewportHeight / 2f))
+            measureCurrentComposition()
+        }
+        assertNotNull(
+            rowNode,
+            "match 2 row did not become fully visible: " +
+                nodes(dialogComposeRoot()).map(::nodeText),
+        )
+        val rowClick = checkNotNull(rowNode).config.getOrNull(SemanticsActions.OnClick)?.action
+        assertTrue(checkNotNull(rowClick)())
         measureCurrentComposition()
         val show = nodes(dialogComposeRoot()).first { node ->
             nodeText(node) == "Show on image"
@@ -1420,6 +1457,7 @@ class StillInspectionUiTest {
         fontScale: Float = 1f,
         content: @Composable () -> Unit,
     ) {
+        RuntimeEnvironment.setFontScale(fontScale)
         val hostActivity = Robolectric.buildActivity(ComponentActivity::class.java).setup().get()
         val hostView = ComposeView(hostActivity)
         hostView.setLayerType(View.LAYER_TYPE_SOFTWARE, null)
