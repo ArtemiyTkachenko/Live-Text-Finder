@@ -586,3 +586,12 @@ failures/errors/skips**, Android lint (**14 warnings, zero errors**) and shared 
 compilation. `git diff --check` and the changed-line 100-column audit passed. The iOS task verifies
 shared-source compatibility only. Density-2 Compose, PNG, and overlap captures were visually
 inspected in `work/thin-outlines/`. No APK or device run was performed.
+
+
+## Acceptance follow-up — 2026-11-07
+
+The canonical aggregate command `./gradlew :androidApp:compileDebugKotlin :shared:testAndroidHostTest :androidApp:lintDebug :shared:compileKotlinIosSimulatorArm64 --console=plain --rerun-tasks` completed successfully (73 tasks, 1m20s). Android host XML reports **357 tests across 50 suites, zero failures/errors/skips**. Android lint reports **14 warnings and zero errors**; shared iOS simulator compilation passed. The full run log is `work/acceptance-2026-11-07/baseline-checks.log`.
+
+Reviewed native captures include density-2 Compose/PNG outline and overlap pixels, live manual/list docks, compact/large-font controls, landscape controls, retained hidden viewport, combined dark long-list content, still navigation, and light/dark large-text Matches. No actionable host-capture issue was identified. These are host fixtures; they do not establish physical display readability, runtime touch/focus behavior, camera composition, or assistive-technology semantics. No phone was connected. The device interaction, scaling, TalkBack, and camera-timing checklist remains pending at `outputs/acceptance-2026-11-07/README.md`.
+
+The timing filter is `adb logcat -v threadtime -s LTF.CameraTiming:D '*:S'`. The diagnostic stages are delegate submission to SDK callback (`ocr`), callback-to-snapshot adaptation (`snapshot`), and synchronous `onState` delivery (`delivery`); pixel-copy, Compose scheduling/drawing, and end-to-end freeze-to-visible latency are outside coverage. No device timing values are claimed.
