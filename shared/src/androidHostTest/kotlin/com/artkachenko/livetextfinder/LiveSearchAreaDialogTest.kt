@@ -3,13 +3,20 @@ package com.artkachenko.livetextfinder
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.os.Looper
+import android.os.SystemClock
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.snapshots.Snapshot
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.ViewRootForTest
@@ -89,6 +96,117 @@ class LiveSearchAreaDialogTest {
     }
 
     @Test
+    fun productionOverlayMovesDraftFromRealTouchEventsWithoutChangingCommittedOwner() {
+        val host = Robolectric.buildActivity(ComponentActivity::class.java).setup().get()
+        val view = ComposeView(host)
+        activity = host
+        composeView = view
+        val dimension = (400 * host.resources.displayMetrics.density).toInt()
+        val owner = LiveSearchAreaOwner()
+        val draft = mutableStateOf(NormalizedSearchArea.CENTERED_DEFAULT)
+        val darkTheme = mutableStateOf(false)
+        val previewColor = mutableStateOf(Color(0xFF34424A))
+        view.setContent {
+            LiveTextFinderTheme(darkThemeOverride = darkTheme.value, dynamicColor = false) {
+                Box(Modifier.fillMaxSize().background(previewColor.value)) {
+                    LiveSearchAreaEditorOverlay(
+                        area = draft.value,
+                        viewportSize = androidx.compose.ui.unit.IntSize(dimension, dimension),
+                        onAreaChange = { draft.value = it },
+                    )
+                }
+            }
+        }
+        host.setContentView(view)
+        view.layoutParams = FrameLayout.LayoutParams(dimension, dimension)
+        view.measure(
+            View.MeasureSpec.makeMeasureSpec(dimension, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(dimension, View.MeasureSpec.EXACTLY),
+        )
+        view.layout(0, 0, dimension, dimension)
+        shadowOf(Looper.getMainLooper()).idle()
+        captureView(view, "live-area-direct-editor-light.png")
+        previewColor.value = Color.White
+        Snapshot.sendApplyNotifications()
+        shadowOf(Looper.getMainLooper()).idle()
+        captureView(view, "live-area-direct-editor-paper.png")
+        previewColor.value = Color(0xFF34424A)
+        Snapshot.sendApplyNotifications()
+        shadowOf(Looper.getMainLooper()).idle()
+        val semantics = checkNotNull(findViewRoot(view)).semanticsOwner.rootSemanticsNode
+        val handles = nodes(semantics).filter { node ->
+            node.config.getOrNull(SemanticsProperties.ContentDescription)?.singleOrNull()
+                ?.startsWith("Resize live area") == true
+        }.toList()
+        assertEquals(4, handles.size)
+        val movableRegion = checkNotNull(nodes(semantics).firstOrNull { node ->
+            node.config.getOrNull(SemanticsProperties.ContentDescription) ==
+                listOf("Movable live search area")
+        })
+        assertEquals(0.6, movableRegion.size.width.toDouble() / dimension, 0.01)
+        assertEquals(0.6, movableRegion.size.height.toDouble() / dimension, 0.01)
+        assertEquals(0.2, movableRegion.positionInRoot.x / dimension.toDouble(), 0.01)
+        assertEquals(0.2, movableRegion.positionInRoot.y / dimension.toDouble(), 0.01)
+        handles.forEach { node ->
+            assertTrue(node.size.width / host.resources.displayMetrics.density >= 48f)
+            assertTrue(
+                node.config.getOrNull(SemanticsProperties.ContentDescription)
+                    ?.singleOrNull()?.contains("handle") == true,
+            )
+        }
+        val original = draft.value
+        val downTime = SystemClock.uptimeMillis()
+        listOf(
+            MotionEvent.obtain(downTime, downTime, MotionEvent.ACTION_DOWN,
+                dimension * 0.5f, dimension * 0.5f, 0),
+            MotionEvent.obtain(downTime, downTime + 80, MotionEvent.ACTION_MOVE,
+                dimension * 0.55f, dimension * 0.55f, 0),
+            MotionEvent.obtain(downTime, downTime + 100, MotionEvent.ACTION_UP,
+                dimension * 0.55f, dimension * 0.55f, 0),
+        ).forEach { event ->
+            view.dispatchTouchEvent(event)
+            event.recycle()
+        }
+        shadowOf(Looper.getMainLooper()).idle()
+        assertTrue(draft.value.left > original.left)
+        assertTrue(draft.value.top > original.top)
+        val beforeCorner = draft.value
+        dispatchDrag(view, dimension * beforeCorner.left, dimension * beforeCorner.top,
+            dimension * (beforeCorner.left + 0.05f), dimension * (beforeCorner.top + 0.05f))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertTrue(draft.value.left > beforeCorner.left)
+        assertEquals(beforeCorner.right, draft.value.right, 0.0001f)
+        assertEquals(beforeCorner.bottom, draft.value.bottom, 0.0001f)
+        val beforeClamp = draft.value
+        dispatchDrag(view, dimension * beforeClamp.left, dimension * beforeClamp.top,
+            dimension * 0.98f, dimension * 0.98f)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(0.2f, draft.value.right - draft.value.left, 0.0001f)
+        assertEquals(0.2f, draft.value.bottom - draft.value.top, 0.0001f)
+        captureView(view, "live-area-direct-editor-minimum.png")
+        val beforeOutside = draft.value
+        dispatchDrag(view, dimension * 0.05f, dimension * 0.05f,
+            dimension * 0.1f, dimension * 0.1f)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(beforeOutside, draft.value)
+        dispatchLiftBeforeSlop(view, dimension, beforeOutside)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(beforeOutside, draft.value)
+        dispatchMultiTouch(view, dimension, beforeOutside)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(beforeOutside, draft.value)
+        draft.value = NormalizedSearchArea(0f, 0f, 1f, 1f)
+        Snapshot.sendApplyNotifications()
+        shadowOf(Looper.getMainLooper()).idle()
+        captureView(view, "live-area-direct-editor-full-frame.png")
+        darkTheme.value = true
+        Snapshot.sendApplyNotifications()
+        shadowOf(Looper.getMainLooper()).idle()
+        captureView(view, "live-area-direct-editor-dark.png")
+        assertNull(owner.area)
+    }
+
+    @Test
     fun fullFrameActionAndConstrainedDialogKeepActionsSemanticallyReachable() {
         val fixture = mountDialog(NormalizedSearchArea.CENTERED_DEFAULT, heightDp = 240)
         val root = semanticsRoot()
@@ -117,6 +235,37 @@ class LiveSearchAreaDialogTest {
         click(semanticsRoot(), "Full frame")
         assertNull(fixture.first.area)
         assertEquals(2L, fixture.first.revision)
+    }
+
+    @Test
+    fun preciseDialogCanReturnDraftWithoutCommittingOwner() {
+        val draft = mutableStateOf<NormalizedSearchArea?>(null)
+        val fixture = mountDialog(
+            NormalizedSearchArea.CENTERED_DEFAULT,
+            onDraftApply = { draft.value = it },
+        )
+        setProgress(semanticsRoot(), "Width", 80f)
+        Snapshot.sendApplyNotifications()
+        dialogRoot().measureAndLayoutForTest()
+        click(semanticsRoot(), "Apply")
+        assertEquals(NormalizedSearchArea.CENTERED_DEFAULT, fixture.first.area)
+        val draftedArea = checkNotNull(draft.value)
+        assertEquals(0.8f, draftedArea.right - draftedArea.left, 0.0001f)
+    }
+
+    @Test
+    fun preciseDialogOpenedFromPendingFullFrameKeepsFullFrameWhenAppliedUntouched() {
+        val draft = mutableStateOf<NormalizedSearchArea?>(null)
+        val fixture = mountDialog(
+            NormalizedSearchArea.CENTERED_DEFAULT,
+            startFullFrame = true,
+            onDraftApply = { draft.value = it },
+        )
+        assertTrue(texts(semanticsRoot()).containsAll(listOf("Width: 100%", "Height: 100%")))
+        captureDialog("live-area-precision-full-frame.png")
+        click(semanticsRoot(), "Apply")
+        assertEquals(NormalizedSearchArea.CENTERED_DEFAULT, fixture.first.area)
+        assertEquals(NormalizedSearchArea(0f, 0f, 1f, 1f), draft.value)
     }
 
     @Test
@@ -325,6 +474,8 @@ class LiveSearchAreaDialogTest {
         widthDp: Int = 360,
         fontScale: Float = 1f,
         darkTheme: Boolean = false,
+        onDraftApply: ((NormalizedSearchArea?) -> Unit)? = null,
+        startFullFrame: Boolean = false,
     ): Triple<LiveSearchAreaOwner, ComposeView, androidx.compose.runtime.MutableState<Boolean>> {
         RuntimeEnvironment.setFontScale(fontScale)
         val host = Robolectric.buildActivity(ComponentActivity::class.java).setup().get()
@@ -349,6 +500,8 @@ class LiveSearchAreaDialogTest {
                             revision = owner.revision,
                             owner = owner,
                             onDismiss = { show.value = false },
+                            onDraftApply = onDraftApply,
+                            startFullFrame = startFullFrame,
                         )
                     }
                 }
@@ -423,6 +576,82 @@ class LiveSearchAreaDialogTest {
         node.config.getOrNull(SemanticsProperties.Text)?.any { it.text == text } == true
     }).boundsInRoot
 
+    private fun dispatchDrag(view: View, fromX: Float, fromY: Float, toX: Float, toY: Float) {
+        val downTime = SystemClock.uptimeMillis()
+        val events = listOf(
+            MotionEvent.obtain(downTime, downTime, MotionEvent.ACTION_DOWN, fromX, fromY, 0),
+            MotionEvent.obtain(downTime, downTime + 80, MotionEvent.ACTION_MOVE, toX, toY, 0),
+            MotionEvent.obtain(downTime, downTime + 100, MotionEvent.ACTION_UP, toX, toY, 0),
+        )
+        events.forEach { event ->
+            view.dispatchTouchEvent(event)
+            event.recycle()
+        }
+    }
+
+    private fun dispatchLiftBeforeSlop(view: View, dimension: Int, area: NormalizedSearchArea) {
+        val centerX = dimension * (area.left + area.right) / 2f
+        val centerY = dimension * (area.top + area.bottom) / 2f
+        val downTime = SystemClock.uptimeMillis()
+        val down = MotionEvent.obtain(
+            downTime, downTime, MotionEvent.ACTION_DOWN, centerX, centerY, 0,
+        )
+        view.dispatchTouchEvent(down)
+        down.recycle()
+        val up = MotionEvent.obtain(
+            downTime, downTime + 20, MotionEvent.ACTION_UP,
+            centerX + dimension * 0.1f, centerY + dimension * 0.1f, 0,
+        )
+        view.dispatchTouchEvent(up)
+        up.recycle()
+    }
+
+    private fun dispatchMultiTouch(view: View, dimension: Int, area: NormalizedSearchArea) {
+        val downTime = SystemClock.uptimeMillis()
+        fun properties() = Array(2) { index ->
+            MotionEvent.PointerProperties().apply {
+                id = index
+                toolType = MotionEvent.TOOL_TYPE_FINGER
+            }
+        }
+        fun coordinates(firstX: Float, firstY: Float, secondX: Float, secondY: Float) =
+            arrayOf(firstX to firstY, secondX to secondY).map { (x, y) ->
+                MotionEvent.PointerCoords().apply {
+                    this.x = x
+                    this.y = y
+                    pressure = 1f
+                    size = 1f
+                }
+            }.toTypedArray()
+        fun send(time: Long, action: Int, coords: Array<MotionEvent.PointerCoords>) {
+            val event = MotionEvent.obtain(
+                downTime, time, action, 2, properties(), coords, 0, 0, 1f, 1f, 0, 0,
+                android.view.InputDevice.SOURCE_TOUCHSCREEN, 0,
+            )
+            view.dispatchTouchEvent(event)
+            event.recycle()
+        }
+        val centerX = dimension * (area.left + area.right) / 2f
+        val centerY = dimension * (area.top + area.bottom) / 2f
+        val down = MotionEvent.obtain(
+            downTime, downTime, MotionEvent.ACTION_DOWN, centerX, centerY, 0,
+        )
+        view.dispatchTouchEvent(down)
+        down.recycle()
+        send(downTime + 10, MotionEvent.ACTION_POINTER_DOWN or
+            (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT), coordinates(centerX, centerY,
+            centerX + dimension * 0.02f, centerY + dimension * 0.02f))
+        send(downTime + 50, MotionEvent.ACTION_MOVE, coordinates(centerX + dimension * 0.1f,
+            centerY + dimension * 0.1f, centerX + dimension * 0.12f, centerY + dimension * 0.12f))
+        send(downTime + 70, MotionEvent.ACTION_POINTER_UP or
+            (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT), coordinates(centerX + dimension * 0.1f,
+            centerY + dimension * 0.1f, centerX + dimension * 0.12f, centerY + dimension * 0.12f))
+        val up = MotionEvent.obtain(downTime, downTime + 80, MotionEvent.ACTION_UP,
+            centerX + dimension * 0.1f, centerY + dimension * 0.1f, 0)
+        view.dispatchTouchEvent(up)
+        up.recycle()
+    }
+
     private fun captureDialog(fileName: String) {
         val outputDirectory = System.getenv("LTF_VISUAL_OUTPUT_DIR") ?: return
         val decor = checkNotNull(
@@ -430,6 +659,19 @@ class LiveSearchAreaDialogTest {
         )
         val bitmap = Bitmap.createBitmap(decor.width, decor.height, Bitmap.Config.ARGB_8888)
         decor.draw(Canvas(bitmap))
+        val output = File(outputDirectory, fileName)
+        output.parentFile?.mkdirs()
+        FileOutputStream(output).use { stream ->
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
+        }
+        bitmap.recycle()
+    }
+
+    private fun captureView(view: View, fileName: String) {
+        val outputDirectory = System.getenv("LTF_VISUAL_OUTPUT_DIR") ?: return
+        if (view.width <= 0 || view.height <= 0) return
+        val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+        view.draw(Canvas(bitmap))
         val output = File(outputDirectory, fileName)
         output.parentFile?.mkdirs()
         FileOutputStream(output).use { stream ->

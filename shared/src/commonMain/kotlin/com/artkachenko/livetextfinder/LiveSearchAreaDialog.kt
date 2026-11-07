@@ -55,15 +55,21 @@ internal fun LiveSearchAreaDialog(
     revision: Long,
     owner: LiveSearchAreaOwner,
     onDismiss: () -> Unit,
+    onDraftApply: ((NormalizedSearchArea?) -> Unit)? = null,
+    startFullFrame: Boolean = false,
 ) {
-    val initial = area ?: NormalizedSearchArea.CENTERED_DEFAULT
-    val widthState = remember(revision, area) {
+    val initial = if (startFullFrame) {
+        NormalizedSearchArea(0f, 0f, 1f, 1f)
+    } else {
+        area ?: NormalizedSearchArea.CENTERED_DEFAULT
+    }
+    val widthState = remember(revision, area, startFullFrame) {
         mutableIntStateOf(((initial.right - initial.left) * 100).roundToInt().coerceIn(20, 100))
     }
-    val heightState = remember(revision, area) {
+    val heightState = remember(revision, area, startFullFrame) {
         mutableIntStateOf(((initial.bottom - initial.top) * 100).roundToInt().coerceIn(20, 100))
     }
-    val horizontalState = remember(revision, area) {
+    val horizontalState = remember(revision, area, startFullFrame) {
         mutableIntStateOf(
             if (initial.right - initial.left >= 1f) {
                 50
@@ -73,7 +79,7 @@ internal fun LiveSearchAreaDialog(
             },
         )
     }
-    val verticalState = remember(revision, area) {
+    val verticalState = remember(revision, area, startFullFrame) {
         mutableIntStateOf(
             if (initial.bottom - initial.top >= 1f) {
                 50
@@ -125,15 +131,17 @@ internal fun LiveSearchAreaDialog(
                     label = "Apply",
                     enabled = true,
                     onClick = {
-                        owner.apply(
-                            revision,
-                            NormalizedSearchArea.fromSizeAndPosition(
+                        val next = NormalizedSearchArea.fromSizeAndPosition(
                                 width,
                                 height,
                                 horizontal,
                                 vertical,
-                            ),
-                        )
+                            )
+                        if (onDraftApply != null) {
+                            onDraftApply(next)
+                        } else {
+                            owner.apply(revision, next)
+                        }
                         onDismiss()
                     },
                 )
@@ -141,7 +149,11 @@ internal fun LiveSearchAreaDialog(
                 FinderSecondaryAction(
                     label = "Full frame",
                     onClick = {
-                        owner.apply(revision, null)
+                        if (onDraftApply != null) {
+                            onDraftApply(null)
+                        } else {
+                            owner.apply(revision, null)
+                        }
                         onDismiss()
                     },
                 )

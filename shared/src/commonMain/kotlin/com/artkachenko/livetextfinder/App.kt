@@ -69,7 +69,10 @@ import com.artkachenko.livetextfinder.ocr.OcrUiState
 import com.artkachenko.livetextfinder.performStillMatchLocate
 import com.artkachenko.livetextfinder.rememberStillMatchNavigationCoordinator
 import com.artkachenko.livetextfinder.search.Highlights
+import com.artkachenko.livetextfinder.search.LiveSearchAreaDialogSession
+import com.artkachenko.livetextfinder.search.LiveSearchAreaEditorSession
 import com.artkachenko.livetextfinder.search.LiveSearchAreaOwner
+import com.artkachenko.livetextfinder.search.normalizeEditorDraftArea
 import com.artkachenko.livetextfinder.search.NormalizedSearchArea
 import com.artkachenko.livetextfinder.search.PreviewPoint
 import com.artkachenko.livetextfinder.search.SearchHighlightPalette
@@ -221,6 +224,18 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
             var colorDialogOpen by remember { mutableStateOf(false) }
             var areaDialogOpen by remember { mutableStateOf(false) }
             val areaOwner = remember { LiveSearchAreaOwner() }
+            val areaEditorSession = remember(areaOwner) { LiveSearchAreaEditorSession(areaOwner) }
+            val areaDialogSession = remember { LiveSearchAreaDialogSession() }
+            var areaEditorVersion by remember { mutableLongStateOf(0L) }
+            val editorDraft = remember(areaEditorVersion) { areaEditorSession.draft }
+            val areaEditorOpen = editorDraft != null
+            val areaEditorDraft = editorDraft?.area
+            val areaEditorRevision = editorDraft?.expectedRevision ?: areaOwner.revision
+            val areaEditorToken = editorDraft?.token ?: 0L
+            var areaDialogEditorToken by remember { mutableLongStateOf(0L) }
+            var areaDialogToken by remember { mutableLongStateOf(0L) }
+            var areaDialogRevision by remember { mutableLongStateOf(areaOwner.revision) }
+            var areaDialogUsesDraft by remember { mutableStateOf(false) }
             var areaState by remember { mutableStateOf<NormalizedSearchArea?>(null) }
             var areaRevision by remember { mutableLongStateOf(areaOwner.revision) }
             var helpDialogOpen by remember { mutableStateOf(false) }
@@ -237,9 +252,28 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
             val freezeState = frozenOwner.state.value
             fun resetLiveArea() {
                 areaOwner.reset()
+                areaEditorSession.cancelCurrent()
+                areaEditorVersion++
                 areaState = null
                 areaRevision = areaOwner.revision
                 areaDialogOpen = false
+                areaDialogSession.invalidate()
+                areaDialogToken = 0L
+            }
+            fun beginAreaEditor(area: NormalizedSearchArea): Long =
+                areaEditorSession.begin(area).token.also { areaEditorVersion++ }
+            fun updateAreaEditor(token: Long, area: NormalizedSearchArea?): Boolean =
+                areaEditorSession.update(token, area).also { if (it) areaEditorVersion++ }
+            fun cancelAreaEditor(token: Long): Boolean =
+                areaEditorSession.cancel(token).also { if (it) areaEditorVersion++ }
+            fun applyAreaEditor(token: Long, isCurrent: () -> Boolean): Boolean =
+                areaEditorSession.apply(token, isCurrent).also { if (it) areaEditorVersion++ }
+            fun openAreaDialog(usesDraft: Boolean, editorToken: Long) {
+                areaDialogUsesDraft = usesDraft
+                areaDialogEditorToken = editorToken
+                areaDialogRevision = areaOwner.revision
+                areaDialogToken = areaDialogSession.open()
+                areaDialogOpen = true
             }
             LiveSearchAreaLifecycle(::resetLiveArea)
             val density = LocalDensity.current
@@ -293,6 +327,26 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                 freezeState.mode == FreezeMode.Frozen ->
                     "frozen:${freezeState.frame?.identity}"
                 else -> null
+            }
+            val editorCanRemainOpen = areaEditorOpen && sourceIdentity == null &&
+                freezeState.mode == FreezeMode.Live &&
+                (importedState.phase == ImportedImagePhase.Live ||
+                    importedState.phase == ImportedImagePhase.Error) &&
+                liveSearchAreaAvailable() && isContentVisible()
+            val editorGestureEnabled = editorCanRemainOpen &&
+                previewSize.width > 0 && previewSize.height > 0 &&
+                (state.status == OcrStatus.Scanning || state.status == OcrStatus.TextRecognized)
+            LaunchedEffect(areaEditorOpen, editorCanRemainOpen) {
+                if (areaEditorOpen && !editorCanRemainOpen) {
+                    areaEditorSession.cancelCurrent()
+                    areaEditorVersion++
+                    areaDialogOpen = false
+                    areaDialogSession.invalidate()
+                    areaDialogToken = 0L
+                }
+            }
+            LiveAreaBackHandler(areaEditorOpen) {
+                cancelAreaEditor(areaEditorToken)
             }
             val inspectionIdentity = when {
                 importedState.phase == ImportedImagePhase.Imported -> sourceIdentity
@@ -892,7 +946,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                             statusContent()
                         }
                     }
-                    if (liveScreen) {
+                    if (liveScreen && !editorCanRemainOpen) {
                         statusContent()
                     }
                 },
@@ -982,6 +1036,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                                 ) { state = it }
                             }
                             Canvas(Modifier.matchParentSize()) {
+                                if (editorCanRemainOpen) return@Canvas
                                 val currentFreezeState = frozenOwner.state.value
                                 val currentSearchIdentity =
                                     session.state.value.activeSearch.identity
@@ -1120,7 +1175,15 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                                     )
                                 }
                             }
-                            if (areaState != null &&
+                            if (editorGestureEnabled) {
+                                LiveSearchAreaEditorOverlay(
+                                    area = areaEditorDraft ?: NormalizedSearchArea(0f, 0f, 1f, 1f),
+                                    viewportSize = previewSize,
+                                    onAreaChange = { updateAreaEditor(areaEditorToken, it) },
+                                    modifier = Modifier.matchParentSize(),
+                                )
+                            }
+                            if (!editorCanRemainOpen && areaState != null &&
                                 areaOwner.revision == presentation.areaRevision &&
                                 areaOwner.area == areaState &&
                                 importedState.phase != ImportedImagePhase.Imported &&
@@ -1142,7 +1205,74 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                 },
                 footerContent = {
                     if (sourceIdentity == null) {
-                        if (useLiveDock) {
+                        if (editorCanRemainOpen) {
+                            val actionToken = areaEditorToken
+                            androidx.compose.foundation.layout.Column(
+                                Modifier.fillMaxWidth().padding(
+                                    horizontal = FinderSpacing.large,
+                                    vertical = FinderSpacing.extraSmall,
+                                ),
+                                verticalArrangement = Arrangement.spacedBy(
+                                    FinderSpacing.extraSmall,
+                                ),
+                            ) {
+                                Text(
+                                    "Editing live area",
+                                    style = MaterialTheme.typography.labelLarge,
+                                )
+                                androidx.compose.foundation.layout.FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(
+                                        FinderSpacing.small,
+                                    ),
+                                    verticalArrangement = Arrangement.spacedBy(
+                                        FinderSpacing.small,
+                                    ),
+                                ) {
+                                    FinderPrimaryAction(
+                                        label = "Apply",
+                                        enabled = true,
+                                        onClick = {
+                                            val latestPhase = importedOwner.state.value.phase
+                                            val latestFreeze = frozenOwner.state.value
+                                            val applied = applyAreaEditor(actionToken) {
+                                                latestFreeze.mode == FreezeMode.Live &&
+                                                    importedOwner.state.value.phase ==
+                                                        latestPhase &&
+                                                    isContentVisible() &&
+                                                    liveSearchAreaAvailable() &&
+                                                    (latestPhase == ImportedImagePhase.Live ||
+                                                        latestPhase == ImportedImagePhase.Error)
+                                            }
+                                            if (applied) {
+                                                areaState = areaOwner.area
+                                                areaRevision = areaOwner.revision
+                                            }
+                                        },
+                                    )
+                                    FinderSecondaryAction("Cancel", {
+                                        cancelAreaEditor(actionToken)
+                                    })
+                                    FinderSecondaryAction("Full frame", {
+                                        updateAreaEditor(actionToken, null)
+                                    })
+                                    FinderSecondaryAction(
+                                        "Precise",
+                                        areaEditorSession.precisionAction(
+                                            actionToken,
+                                            isCurrent = {
+                                                val phase = importedOwner.state.value.phase
+                                                frozenOwner.state.value.mode == FreezeMode.Live &&
+                                                    (phase == ImportedImagePhase.Live ||
+                                                        phase == ImportedImagePhase.Error) &&
+                                                    isContentVisible() &&
+                                                    liveSearchAreaAvailable()
+                                            },
+                                            onOpen = { openAreaDialog(true, it) },
+                                        ),
+                                    )
+                                }
+                            }
+                        } else if (useLiveDock) {
                             FinderLiveDock(
                                 query = query,
                                 onQueryChange = onManualQueryChange,
@@ -1398,14 +1528,42 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                 )
             }
             if (areaDialogOpen && liveSearchAreaAvailable()) {
+                val dialogToken = areaDialogToken
+                val usesDraft = areaDialogUsesDraft
+                val editorToken = areaDialogEditorToken
+                val capturedRevision = areaDialogRevision
                 LiveSearchAreaDialog(
-                    area = areaState,
-                    revision = areaRevision,
+                    area = if (usesDraft) areaEditorDraft else areaState,
+                    revision = capturedRevision,
                     owner = areaOwner,
+                    startFullFrame = usesDraft && areaEditorDraft == null,
                     onDismiss = {
-                        areaState = areaOwner.area
-                        areaRevision = areaOwner.revision
-                        areaDialogOpen = false
+                        areaDialogSession.dismiss(dialogToken) {
+                            if (!usesDraft) {
+                                areaState = areaOwner.area
+                                areaRevision = areaOwner.revision
+                            }
+                            areaDialogOpen = false
+                        }
+                    },
+                    onDraftApply = { nextArea ->
+                        areaDialogSession.dispatch(dialogToken) {
+                            if (usesDraft) {
+                                if (areaEditorSession.draft?.token == editorToken &&
+                                    areaOwner.revision == capturedRevision
+                                ) {
+                                    updateAreaEditor(
+                                        editorToken,
+                                        normalizeEditorDraftArea(nextArea),
+                                    )
+                                }
+                            } else if (areaOwner.revision == capturedRevision &&
+                                areaOwner.apply(capturedRevision, nextArea)
+                            ) {
+                                areaState = areaOwner.area
+                                areaRevision = areaOwner.revision
+                            }
+                        }
                     },
                 )
             }
@@ -1463,7 +1621,16 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                     },
                     onLiveArea = {
                         optionsOpen = false
-                        areaDialogOpen = true
+                        val canDirectEdit = sourceIdentity == null &&
+                            freezeState.mode == FreezeMode.Live &&
+                            (importedState.phase == ImportedImagePhase.Live ||
+                                importedState.phase == ImportedImagePhase.Error) &&
+                            liveSearchAreaAvailable() && isContentVisible()
+                        if (canDirectEdit) {
+                            beginAreaEditor(areaState ?: NormalizedSearchArea.CENTERED_DEFAULT)
+                        } else {
+                            openAreaDialog(false, 0L)
+                        }
                     },
                     onImport = {
                         optionsOpen = false
