@@ -615,3 +615,29 @@ revision and live source/visibility before opening a dialog. Independent correct
 passed with device limitations. The final canonical aggregate passed in 43s: **368 host tests in
 50 suites, zero failures/errors/skips**, Android lint **14 warnings and zero errors**, Android debug
 compilation and shared iOS simulator compilation. No APK or device run was performed.
+
+
+## Documentation, release and performance review — 2026-11-07
+
+Current architecture/requirements and the implementation record now describe the live dock,
+schema-5 preferences, per-entry colours, branded theme defaults and direct area editing. The user
+reported positive testing feedback for the preceding build; this is not a completed historical
+scenario matrix and does not validate the new editor. One post-commit import-order correction is
+included; the current import/whitespace checks passed.
+
+Release preparation adds explicit legacy and modern saved-search backup allowlists, keeps the
+foreground vector byte-identical when moving it out of the obsolete v24 directory, and adds a
+monochrome layer to both adaptive icons. The merged release manifest retains the existing app ID,
+version and non-exported share provider, with release debugging disabled by default. Release Kotlin,
+manifest/resource processing and lint passed together with the canonical debug/shared checks.
+The final host task was UP-TO-DATE; its current XML contains **368 tests across 50 suites, zero
+failures/errors/skips**. Both debug and release lint report **11 warnings and zero errors**; the
+remaining warnings concern tool/dependency updates. No dependency update or lint suppression was
+introduced. Moving the foreground initially exposed stale debug incremental resources; a forced
+rerun resolved that build-cache issue. Final log: `work/release-readiness/final-checks.log`.
+
+The source-based performance review records per-operation resource limits and existing ownership,
+bounds and quota coverage in architecture.md. It establishes no whole-process memory, throughput,
+thermal or battery measurement and introduces no speculative optimization. User device checks remain
+pending for the new gestures, TalkBack, themed launcher, backup/restore and sustained performance.
+No APK/bundle, signing, installation, publishing or device run was performed.

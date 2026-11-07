@@ -1,6 +1,23 @@
-# Initial implementation plan
+# Implementation record
 
-Documentation created before application changes. The product handoff is context; the current request limits this increment to preview and OCR.
+## Current status — 2026-11-07
+
+Android implements live manual/list search, per-entry colours, optional whole-word matching,
+freeze/zoom/result navigation, image import/sharing, list transfer, and direct live-area editing.
+The live scanner uses a top app bar, status band, weighted preview and bottom search/capture dock.
+Keyboard, compact, large-font and list-manager layouts retain the existing preview-hiding policy.
+iOS camera introduction remains postponed.
+
+The user reported that testing feedback was OK for the build before direct area editing. This is
+general positive feedback, not a completed record of every historical acceptance scenario. The new
+area editor still needs user device testing. Hardware testing and APK generation remain with the
+user; automated checks do not measure camera latency, sustained heat/battery use or TalkBack.
+
+## Historical foundation plan
+
+The following entries record successive approved increments. Earlier exclusions, pending reviews
+and stop conditions describe their stage; current behavior is defined by search-requirements.md
+and architecture.md, with actual check results retained in validation.md.
 
 1. Preserve the existing generated Android/iOS project and unrelated staged files.
 2. Verify official dependency guidance; pin CameraX 1.6.2 and bundled Latin text recognition 16.0.1; use stable UI dependencies.

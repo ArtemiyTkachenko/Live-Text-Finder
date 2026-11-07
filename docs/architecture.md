@@ -1,8 +1,8 @@
-# Camera / OCR foundation
+# Architecture
 
 ## Boundaries
 
-`androidApp` hosts shared `App`. `commonMain` owns the screen, diagnostic state, and immutable OCR result types. An expect/actual camera composable supplies a native preview and reports state; all camera and OCR implementation details stay in `androidMain`. `iosMain` renders an explicit Android-only notice.
+`androidApp` hosts shared `App`. `commonMain` owns scanner, list, settings and inspection UI, search/presentation state, and immutable OCR result types. An expect/actual camera composable supplies a native preview and reports state; all camera and OCR implementation details stay in `androidMain`. `iosMain` renders an explicit Android-only notice.
 
 Android owns a session containing PreviewView, camera use cases, and one bundled Latin recognizer. Use CameraX MlKitAnalyzer in original image coordinates, wrapped only to capture matching frame metadata. Copy text, line/element bounds and corner points before publishing; do not leak ML Kit/Android objects. Common snapshots use adapter-normalized full-buffer upright coordinates, never preview coordinates. The pinned bundled SDK supplies upright bounds but pre-upright corners; CS-003 normalizes corners once during result copying. Record raw size, rotation, crop, timestamp and sensor-to-buffer matrix. Shared projection now reverses full-buffer OCR rotation and the frame sensor-to-buffer transform, then applies the actual PreviewView sensor-to-view transform. See [search requirements](search-requirements.md) for coordinate conventions and limits.
 
@@ -18,7 +18,7 @@ The foundation added no image/text persistence, text logging, search, overlays o
 
 Common code owns immutable saved-list/session values, validation, asynchronous state ordering and the list editor. The Android host retains one application-scoped controller across Activity recreation. Its store lives in `shared/androidMain` and uses versioned app-private JSON through `AtomicFile`, a process-owned serialized background worker and main-thread callbacks. Reads complete before startup edits can be saved; newer manual typing or explicit clear wins over loaded text without discarding the stored library. Pending writes coalesce to the latest state. Load failures keep recovery visible and prevent writes until a confirmed reset; reset completion preserves manual edits made while it was running. The iOS placeholder uses an explicit in-memory store.
 
-The saved preference document contains manual query, list IDs/names/entries, active selection and global highlight colour. Shared validation applies on Android reads and writes, with strict JSON primitive/version checks. OCR results/images remain transient. Multi-term matching counts independent entries separately, deduplicates shared element outlines and scopes retention association to term identity. Draw-time eligibility reads the live session identity to reject outlines composed before a search change.
+The saved preference document contains manual query, list IDs/names/entries and palette slots, active selection, global highlight colour and match mode. Shared validation applies on Android reads and writes, with strict JSON primitive/version checks. OCR results/images remain transient. Multi-term matching counts independent entries separately, deduplicates shared element outlines and scopes retention association to term identity. Draw-time eligibility reads the live session identity to reject outlines composed before a search change.
 
 ## Memory-only freeze
 
@@ -68,7 +68,12 @@ Live stabilization blends at 0.5 only when corresponding displayed/raw vertices 
 
 Draw all black under-strokes before any foreground edges, so a later neighbouring outline cannot erase an earlier coloured side. Keep the same order in preview and PNG rendering; retain viewport clipping rather than manufacturing offscreen borders.
 
-A validated immutable common colour value supplies opaque ARGB to preview drawing and native PNG rendering. It retains the four named presets and uses equality by effective ARGB, so choosing the same colour remains a no-op. Android writes strict AtomicFile schema version 3 with preset keys or canonical custom RGB keys. Version 1 still defaults to Yellow; version 2 remains preset-only. Loading either legacy format does not eagerly rewrite it. The existing controller serializes colour changes with query/list writes and preserves healthy-load/recovery guards. iOS uses its existing in-memory store. Colour remains independent of search identity, geometry and retention. The custom picker edits only local RGB draft values until Apply; Cancel/re-entry starts again from the actual selection.
+A validated immutable common colour supplies opaque ARGB to preview and native PNG rendering.
+Manual search uses the global preset/custom RGB value; saved entries retain individual palette
+slots. Android writes strict AtomicFile schema 5, including match mode, and validates legacy
+schemas 1–4 without eagerly rewriting them. Colours stay separate from matching geometry and
+retention. The compact picker offers swatches and an advanced RGB draft; Apply commits, while
+Cancel leaves the current value unchanged. iOS retains its in-memory store.
 
 App reads current colour inside the Canvas drawing callback. Share requests capture a colour value and separately validate current colour before handoff, preserving immutable rendering and rejecting stale publication. Existing source/search/lifecycle/cache ownership remains intact. No extra store, renderer mapping table or dependency is introduced.
 
@@ -76,13 +81,19 @@ App reads current colour inside the Canvas drawing callback. Share requests capt
 
 A small common owner holds an optional normalized preview rectangle and revision independently of persisted search identity. Common filtering reuses validated raw element projection, checks every occurrence participant and rejects partial phrases. Full frame bypasses filtering; Custom has explicit readiness when its actual preview mapping is unavailable. The live presentation captures area revision and filters before retaining/smoothing occurrences; draw-time current revision checks complement existing exact raw source guards.
 
-The common control uses a cancellable draft and labelled sliders. Background/source resets invalidate stale drafts before Apply and reset area independently of camera renderer visibility. Android lifecycle binding sits at App scope, while iOS keeps a no-op binding and unsupported controls. Explicit source handlers reset before Freeze/Import; full-source frozen/imported search and shared PNG requests do not carry region state. Area selection affects match eligibility, never OCR buffers, camera generations, transforms or persisted preferences.
+The common editor overlays the measured live preview with move/four-corner resize controls and a cancellable normalized draft. Revision and opening tokens guard commits and precision-dialog callbacks; labelled sliders remain the precision/fallback path. Background/source resets invalidate stale drafts before Apply and reset area independently of camera renderer visibility. Android lifecycle binding sits at App scope, while iOS keeps a no-op binding and unsupported controls. Explicit source handlers reset before Freeze/Import; full-source frozen/imported search and shared PNG requests do not carry region state. Area selection affects match eligibility, never OCR buffers, camera generations, transforms or persisted preferences.
 
 ## Material theme and primary controls
 
-A small shared `LiveTextFinderTheme` supplies fallback light/dark colour schemes, Material typography/shapes and shared spacing. A narrow platform colour provider uses Android 12+ dynamic colours and fallback schemes on older Android and iOS. Android context and dynamic-colour APIs remain in Android sources. OCR palette values, camera backgrounds/scrims, projection and exported-image colours remain independent of theme personalisation.
+A small shared `LiveTextFinderTheme` supplies fallback light/dark colour schemes, Material typography/shapes and shared spacing. System light/dark selection uses the branded charcoal/mint schemes by default. A narrow platform provider supplies Android 12+ dynamic colours only when explicitly enabled; older Android and iOS use the fallback schemes. Android context and dynamic-colour APIs remain in Android sources. OCR palette values, camera backgrounds/scrims, projection and exported-image colours remain independent of theme personalisation.
 
-The main search/control region uses one restrained tonal surface, consistent content alignment and supporting typography for the active search. The main card and list/editor regions use a shared 16dp outer gutter with deliberately aligned content insets; text fields use the shared medium shape. Highlight/Help actions wrap from the start, and selectable highlight rows use 48dp targets with rounded outlined swatches. Freeze/Resume use a stronger tonal action while secondary actions stay directly available. The existing inset owner, conditional preview policy, actual measured preview bounds and source callbacks remain in place. List-manager and status presentation are described below.
+The live scanner has a compact app bar, opaque status band, weighted camera viewport and raised
+bottom dock for manual/list context and capture. The dock stays at one composition site across
+ordinary IME/large-font preview hiding to preserve query focus. Direct area editing temporarily
+substitutes draft actions without changing the camera session or committed matching area. Retained
+images use their source-aware inspection header and zoom/navigation controls. Shared Material roles,
+spacing and shapes govern list/editor surfaces; primary actions are 52dp and secondary targets at
+least 48dp. The root owns safe/IME insets once, and compact/manager modes scroll for reachability.
 
 ## Search-list presentation
 
@@ -107,3 +118,45 @@ List draft presentation uses the existing recognized-text normalization to count
 A presentation-only still transform applies zoom and bounded pan once to the complete retained-image/outline subtree inside a fixed viewport clip. Existing bitmap fits, raw geometry, draw-time source/visibility guards and full-source PNG sharing remain unchanged. Inspection state is keyed by the retained source/request and viewport; it is independent of query and colour. Source controls participate in the same page layout rather than overlaying the search header.
 
 Matching and copy-row projection share the normalized element-line builder, so occurrence offsets resolve against exactly the text used by literal matching. Each row retains its occurrence identity and index; copying resolves its actual substring and revalidates current source/content reference, search and selection at the write boundary. A small shared clipboard-entry factory bridges the modern Compose clipboard API to Android/iOS. Images/OCR remain owned by their existing in-memory platform owners; inspection creates no new store or image cache.
+
+
+## Resource limits and performance assessment — 2026-11-07
+
+| Work | Verified admission or storage limit |
+| --- | --- |
+| Live analysis | CameraX latest-frame backpressure; ordinary frames do not copy bitmaps. |
+| Capture | At most 4,000,000 pixels; one process-wide native copy, with overlap rejected. |
+| Import | 16 MiB encoded input; 4,000,000 decoded ARGB pixels and 16,000,000 allocation bytes; one admitted import. |
+| Share | 4,000,000 output pixels; one admitted share; PNG capped at 20 MiB. |
+| Share cache | 16 files, 128 MiB capacity with reservations, 24-hour expiry. |
+| Saved searches | 256 KiB JSON read/write bound on a serialized process worker. |
+| Debug timing | 64 samples; event-driven summaries at most once per two seconds. |
+
+These are individual bounds, not a whole-process memory ceiling. Import orientation can retain
+both decoded and upright bitmaps temporarily; encoded buffers, concurrent retained sources and
+SDK/native allocations add costs. Capture/import/share gates are independent. Matching work grows
+with active terms and recognized text density; no OCR-text/occurrence ceiling is asserted.
+Existing tests cover overlap rejection, ordinary-frame no-copy, cancellation, admission bounds,
+orientation, stale completion and cache/encoding quotas. No new optimization or semantics-changing
+cap is justified by these checks alone.
+
+Physical performance remains unmeasured. Compare fixed sparse/dense printed targets and small/large
+images, keeping lighting, distance, device, build and session duration recorded. Separate cold/warm
+startup, sustained live scanning, repeated Freeze/Resume and import/share cycles. Record visible
+response delay, memory before/after repeated operations, thermal behavior and battery consumption.
+Debug stage timings exclude copy work and Compose scheduling/drawing; measure end-to-end visible
+latency separately. No device latency, heat or battery improvement is claimed.
+
+## Android release configuration
+
+The app retains its application ID, version 1/1.0, signing and minification settings. Legacy and
+modern backup rules allow only saved-searches.json and its AtomicFile .bak recovery companion;
+cloud backup and device transfer use the same allowlist. Temporary .new files, images and unrelated
+future files are outside that allowlist. The existing launcher artwork now has a monochrome layer.
+Camera timing observation is disabled by the runtime debuggable flag in release; its class is not
+claimed to be stripped from the package. Launcher appearance and actual backup/restore transport
+behavior remain device checks. Compilation/resource/lint validation is not a signed distribution.
+
+References: [Android backup rules](https://developer.android.com/identity/data/autobackup),
+[adaptive icons](https://developer.android.com/develop/ui/compose/system/icon_design_adaptive),
+[CameraX analysis](https://developer.android.com/media/camera/camerax/analyze).

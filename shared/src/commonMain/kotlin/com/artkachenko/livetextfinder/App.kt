@@ -72,7 +72,6 @@ import com.artkachenko.livetextfinder.search.Highlights
 import com.artkachenko.livetextfinder.search.LiveSearchAreaDialogSession
 import com.artkachenko.livetextfinder.search.LiveSearchAreaEditorSession
 import com.artkachenko.livetextfinder.search.LiveSearchAreaOwner
-import com.artkachenko.livetextfinder.search.normalizeEditorDraftArea
 import com.artkachenko.livetextfinder.search.NormalizedSearchArea
 import com.artkachenko.livetextfinder.search.PreviewPoint
 import com.artkachenko.livetextfinder.search.SearchHighlightPalette
@@ -88,6 +87,7 @@ import com.artkachenko.livetextfinder.search.drawableElementsForSession
 import com.artkachenko.livetextfinder.search.importedHighlightsForDraw
 import com.artkachenko.livetextfinder.search.inMemorySearchSessionController
 import com.artkachenko.livetextfinder.search.isPresentationCurrentAreaRevision
+import com.artkachenko.livetextfinder.search.normalizeEditorDraftArea
 import com.artkachenko.livetextfinder.search.occurrenceBounds
 import com.artkachenko.livetextfinder.search.projectFrozenHighlights
 import com.artkachenko.livetextfinder.search.projectHighlights
