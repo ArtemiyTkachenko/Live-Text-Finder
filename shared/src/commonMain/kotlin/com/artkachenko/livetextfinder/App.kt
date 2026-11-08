@@ -112,7 +112,6 @@ import com.artkachenko.livetextfinder.ui.FinderSpacing
 import com.artkachenko.livetextfinder.ui.HighlightColorDialog
 import com.artkachenko.livetextfinder.ui.LiveTextFinderTheme
 import com.artkachenko.livetextfinder.ui.RetainedInspectionActionDispatcher
-import com.artkachenko.livetextfinder.ui.RetainedInspectionHeader
 import com.artkachenko.livetextfinder.ui.SearchTermResultsDialog
 import com.artkachenko.livetextfinder.ui.StillInspectionControls
 import com.artkachenko.livetextfinder.ui.StillInspectionViewport
@@ -353,9 +352,6 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                 freezeState.mode == FreezeMode.Frozen ->
                     "${sourceIdentity}:${freezeState.frame?.requestId}"
                 else -> null
-            }
-            var retainedSearchExpanded by remember(inspectionIdentity) {
-                mutableStateOf(false)
             }
             val stillSnapshot = when {
                 importedState.phase == ImportedImagePhase.Imported -> importedState.snapshot
@@ -711,7 +707,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                         transferContextRevision++
                     },
                     { managerOpen = it },
-                    { retainedSearchExpanded = false },
+                    {},
                     { editor = editor.close() },
                 )
             }
@@ -758,6 +754,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                 }
             }
             val useLiveDock = sourceIdentity == null && !managerOpen
+            val useSharedDock = sourceIdentity != null || useLiveDock
             val liveScreen = shouldShowViews && useLiveDock
             val statusContent: @Composable () -> Unit = {
                 FinderStatusRegion(
@@ -821,12 +818,12 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                     .imePadding()
                     .onSizeChanged { rootSize = it },
                 topContent = {
-                    if (useLiveDock) {
+                    if (useSharedDock) {
                         FinderLiveAppBar(onOptions = { optionsOpen = true })
                     }
                     Column(
                         Modifier.fillMaxWidth().then(
-                            if (useLiveDock) {
+                            if (useSharedDock) {
                                 Modifier
                             } else {
                                 Modifier.padding(
@@ -837,65 +834,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                         ),
                         verticalArrangement = Arrangement.spacedBy(FinderSpacing.extraSmall),
                     ) {
-                        val focusManager = LocalFocusManager.current
-                        val keyboardController = LocalSoftwareKeyboardController.current
-                        if (sourceIdentity != null) {
-                            RetainedInspectionHeader(
-                                activeListName = selectedList?.name,
-                                activeListTermCount = selectedList?.terms?.size ?: 0,
-                                manualQuery = query,
-                                matchMode = activeSearch.matchMode,
-                                saving = sessionState.saving,
-                                editing = retainedSearchExpanded || managerOpen,
-                                managerOpen = managerOpen,
-                                returnLabel = if (importedState.phase ==
-                                    ImportedImagePhase.Imported
-                                ) {
-                                    "Return to camera"
-                                } else {
-                                    stringResource(Res.string.inspection_return_frozen)
-                                },
-                                resultCount = search.occurrences.size.takeIf {
-                                    resultsAvailable
-                                },
-                                occurrenceCount = matchRows.size,
-                                sharePreparing = shareOwner.state.value.status ==
-                                    ImageShareStatus.Preparing,
-                                onEditSearch = {
-                                    RetainedInspectionActionDispatcher.toggleSearchEditing(
-                                        retainedSearchExpanded,
-                                        { retainedSearchExpanded = it },
-                                        focusManager::clearFocus,
-                                        { keyboardController?.hide() },
-                                    )
-                                },
-                                onReturn = {
-                                    RetainedInspectionActionDispatcher.returnToSource(
-                                        importedState.phase == ImportedImagePhase.Imported,
-                                        ::resetLiveArea,
-                                        importedOwner::cancel,
-                                        frozenOwner::resume,
-                                    )
-                                },
-                                onTerms = onShowTerms,
-                                onUseManual = onUseManualSearch,
-                                onOccurrences = {
-                                    RetainedInspectionActionDispatcher.showOccurrences(
-                                        focusManager::clearFocus,
-                                        { keyboardController?.hide() },
-                                        { searchResultsDialogOpen = it },
-                                        { matchesDialogOpen = it },
-                                    )
-                                },
-                                onLists = onSearchLists,
-                                onOptions = { optionsOpen = true },
-                                onShare = shareCurrentStillImage,
-                                onCancelShare = shareOwner::cancel,
-                            )
-                        }
-                        if (!useLiveDock &&
-                            (sourceIdentity == null || retainedSearchExpanded || managerOpen)
-                        ) {
+                        if (!useSharedDock) {
                             FinderSearchControls(
                                 showTitle = shouldShowViews,
                                 query = query,
@@ -913,9 +852,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                                 onUseManual = onUseManualSearch,
                                 onOptions = { optionsOpen = true },
                                 saving = sessionState.saving,
-                                resultsLabel = if (
-                                    sourceIdentity == null && search.query.isNotEmpty()
-                                ) {
+                                resultsLabel = if (search.query.isNotEmpty()) {
                                     if (resultsAvailable) {
                                         stringResource(
                                             Res.string.inspection_results,
@@ -1272,46 +1209,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                                     )
                                 }
                             }
-                        } else if (useLiveDock) {
-                            FinderLiveDock(
-                                query = query,
-                                onQueryChange = onManualQueryChange,
-                                activeListName = selectedList?.name,
-                                activeListTermCount = selectedList?.terms?.size ?: 0,
-                                matchMode = activeSearch.matchMode,
-                                searchListsLabel = if (managerOpen) {
-                                    "Close lists"
-                                } else {
-                                    "Lists"
-                                },
-                                onSearchLists = onSearchLists,
-                                onTerms = onShowTerms,
-                                onUseManual = onUseManualSearch,
-                                onResults = { searchResultsDialogOpen = true },
-                                resultsLabel = if (search.query.isNotEmpty()) {
-                                    if (resultsAvailable) {
-                                        stringResource(
-                                            Res.string.inspection_results,
-                                            search.occurrences.size,
-                                        )
-                                    } else {
-                                        stringResource(Res.string.search_results_unavailable)
-                                    }
-                                } else {
-                                    null
-                                },
-                                saving = sessionState.saving,
-                                captureLabel = captureLabel,
-                                captureEnabled = freezeState.mode != FreezeMode.Live ||
-                                    state.status == OcrStatus.Scanning ||
-                                    state.status == OcrStatus.TextRecognized,
-                                onCapture = onCapture,
-                                pendingCaptureLabel = pendingCaptureLabel,
-                                onCancelCapture = frozenOwner::cancel,
-                                secondaryActionLabel = directSecondaryActionLabel,
-                                onSecondaryAction = onSecondaryAction,
-                            )
-                        } else {
+                        } else if (!useSharedDock) {
                             FinderCaptureControls(
                                 captureLabel = captureLabel,
                                 captureEnabled = freezeState.mode != FreezeMode.Live ||
@@ -1412,6 +1310,74 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                             }
                             copyMessage?.let { message -> ContextMessage(message = message) }
                         }
+                    }
+                    if (useSharedDock && !editorCanRemainOpen) {
+                        val dockFocusManager = LocalFocusManager.current
+                        val dockKeyboardController = LocalSoftwareKeyboardController.current
+                        FinderLiveDock(
+                            query = query,
+                            onQueryChange = onManualQueryChange,
+                            activeListName = selectedList?.name,
+                            activeListTermCount = selectedList?.terms?.size ?: 0,
+                            matchMode = activeSearch.matchMode,
+                            searchListsLabel = if (managerOpen) "Close lists" else "Lists",
+                            onSearchLists = onSearchLists,
+                            onTerms = onShowTerms,
+                            onUseManual = onUseManualSearch,
+                            onResults = { searchResultsDialogOpen = true },
+                            onOccurrences = {
+                                RetainedInspectionActionDispatcher.showOccurrences(
+                                    dockFocusManager::clearFocus,
+                                    { dockKeyboardController?.hide() },
+                                    { searchResultsDialogOpen = it },
+                                    { matchesDialogOpen = it },
+                                )
+                            },
+                            resultsLabel = if (
+                                selectedList != null || search.query.isNotEmpty()
+                            ) {
+                                if (resultsAvailable) {
+                                    stringResource(
+                                        Res.string.inspection_results,
+                                        search.occurrences.size,
+                                    )
+                                } else {
+                                    stringResource(Res.string.search_results_unavailable)
+                                }
+                            } else {
+                                null
+                            },
+                            occurrencesEnabled = resultsAvailable && matchRows.isNotEmpty(),
+                            saving = sessionState.saving,
+                            captureLabel = captureLabel,
+                            captureEnabled = freezeState.mode != FreezeMode.Live ||
+                                state.status == OcrStatus.Scanning ||
+                                state.status == OcrStatus.TextRecognized,
+                            onCapture = onCapture,
+                            pendingCaptureLabel = pendingCaptureLabel,
+                            onCancelCapture = frozenOwner::cancel,
+                            secondaryActionLabel = directSecondaryActionLabel,
+                            onSecondaryAction = onSecondaryAction,
+                            returnLabel = if (sourceIdentity == null) null else if (
+                                importedState.phase == ImportedImagePhase.Imported
+                            ) {
+                                "Return to camera"
+                            } else {
+                                stringResource(Res.string.inspection_return_frozen)
+                            },
+                            onReturn = {
+                                RetainedInspectionActionDispatcher.returnToSource(
+                                    importedState.phase == ImportedImagePhase.Imported,
+                                    ::resetLiveArea,
+                                    importedOwner::cancel,
+                                    frozenOwner::resume,
+                                )
+                            },
+                            onShare = shareCurrentStillImage,
+                            onCancelShare = shareOwner::cancel,
+                            sharePreparing = shareOwner.state.value.status ==
+                                ImageShareStatus.Preparing,
+                        )
                     }
                 },
             )

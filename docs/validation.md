@@ -641,3 +641,31 @@ bounds and quota coverage in architecture.md. It establishes no whole-process me
 thermal or battery measurement and introduces no speculative optimization. User device checks remain
 pending for the new gestures, TalkBack, themed launcher, backup/restore and sustained performance.
 No APK/bundle, signing, installation, publishing or device run was performed.
+
+## Shared live and retained search dock — 2026-11-08
+
+Live, frozen and imported search now use one editable query and primary-action dock at the same
+App composition site. Freeze frame, Resume scanning and Return to camera occupy the same full-width
+52dp slot. Retained-image zoom, occurrence navigation/copy, Terms, Results and Lists remain
+available through the existing controls. More contains Lists/share, Options stays in the app bar,
+and share cancellation calls the current share owner. The retired collapsing inspection header
+was removed; its source-return dispatcher remains in use. Direct area editing keeps its own footer.
+
+The source-equivalent 360x800 native ComposeView fixtures use the same query, font scale, window
+insets, app bar, status placement, retained tools and dock siblings for live, frozen and imported
+states. Query bounds were x=16..344dp, y=576..640dp; primary-action bounds were x=16..344dp,
+y=744..796dp for all three states in light/dark themes, with and without a selected occurrence.
+Viewport heights measured 400dp live, 344dp frozen/imported by default, and 276dp frozen/imported
+with an occurrence selected. The earlier retained-only fixture measured 528dp / 460dp before the
+shared dock. Every current viewport remained positive. The compact 320x720 font 1.4, 360x640 font
+1.25 and 800x360 font 1.25 fixtures use the production sibling hierarchy and insets and show the
+query, contextual actions and primary slot through the existing scrolling path. The actual App
+host fixture preserved query focus across IME visibility and large-font/hidden-preview changes.
+These are host-rendered checks, not physical-device camera checks.
+
+Validation after the dock changes: the focused dock, retained source and App IME tests passed. The
+canonical `:androidApp:compileDebugKotlin :shared:testAndroidHostTest :androidApp:lintDebug
+:shared:compileKotlinIosSimulatorArm64` run passed after the final source revision: 368 host tests
+in 50 suites, zero failures/errors/skips, Android lint 11 warnings and zero errors, and iOS
+simulator compilation. The stage log and inspected captures are held in the ignored coordinator
+workspace. Physical-device camera, keyboard and accessibility checks remain deferred to the user.

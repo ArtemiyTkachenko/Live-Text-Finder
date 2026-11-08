@@ -1178,21 +1178,22 @@ class StatusFeedbackTest {
             LiveTextFinderTheme(darkThemeOverride = darkTheme.value, dynamicColor = false) {
                 Surface(Modifier.fillMaxSize()) {
                     Column {
-                        FinderSearchControls(
-                            showTitle = false,
+                        FinderLiveDock(
                             query = session.state.value.persisted.manualQuery,
                             onQueryChange = queryChange,
+                            activeListName = session.state.value.activeList?.name,
+                            activeListTermCount = 2,
+                            matchMode = session.state.value.persisted.matchMode,
                             searchListsLabel = "Lists",
                             onSearchLists = ::ignoreAction,
-                            activeListName = session.state.value.activeList?.name,
-                            activeListTermCount = 2,
-                            matchMode = session.state.value.persisted.matchMode,
                             onTerms = {
                                 RetainedInspectionActionDispatcher.showTerms(
                                     { termsOpen.value = it },
                                     { matchesOpen.value = it },
                                 )
                             },
+                            onResults = ::ignoreAction,
+                            resultsLabel = "Results unavailable",
                             onUseManual = {
                                 dispatchSearchListSelection(session, null) {
                                     invalidatedBeforeMutation =
@@ -1200,40 +1201,14 @@ class StatusFeedbackTest {
                                     invalidationCount++
                                 }
                             },
-                            onOptions = ::ignoreAction,
-                            saving = saving.value
-                        )
-                        RetainedInspectionHeader(
-                            activeListName = session.state.value.activeList?.name,
-                            activeListTermCount = 2,
-                            manualQuery = session.state.value.persisted.manualQuery,
-                            matchMode = session.state.value.persisted.matchMode,
                             saving = saving.value,
-                            editing = false,
-                            managerOpen = false,
-                            returnLabel = null,
-                            resultCount = null,
-                            occurrenceCount = 0,
-                            sharePreparing = false,
-                            onEditSearch = ::ignoreAction,
-                            onReturn = ::ignoreAction,
-                            onTerms = {
-                                RetainedInspectionActionDispatcher.showTerms(
-                                    { termsOpen.value = it },
-                                    { matchesOpen.value = it },
-                                )
-                            },
-                            onUseManual = {
-                                dispatchSearchListSelection(session, null) {
-                                    invalidatedBeforeMutation =
-                                        session.state.value.persisted.activeListId == listId
-                                    invalidationCount++
-                                }
-                            },
-                            onOccurrences = ::ignoreAction,
-                            onLists = ::ignoreAction,
-                            onOptions = ::ignoreAction,
-                            onShare = ::ignoreAction,
+                            captureLabel = null,
+                            captureEnabled = false,
+                            onCapture = ::ignoreAction,
+                            pendingCaptureLabel = null,
+                            onCancelCapture = ::ignoreAction,
+                            secondaryActionLabel = null,
+                            onSecondaryAction = ::ignoreAction,
                             onCancelShare = ::ignoreAction,
                         )
                         if (termsOpen.value) {
@@ -1258,18 +1233,17 @@ class StatusFeedbackTest {
         }
 
         var nodes = semanticsNodes(composeView)
-        assertTrue(nodes.count { it.textValues().contains("Substring") } >= 2)
-        assertTrue(nodes.count { it.textValues().contains("2 terms") } >= 2)
-        val manualFieldAction = nodeWithText(nodes, "Use manual", clickable = true)
-        assertTrue(
-            manualFieldAction.config.getOrNull(SemanticsProperties.ContentDescription)
-                .orEmpty().contains("Use manual search"),
-        )
-        val retainedManualAction = nodeWithText(nodes, "Use manual search", clickable = true)
+        assertEquals(1, nodes.count { it.textValues().contains("Substring") })
+        assertEquals(1, nodes.count { it.textValues().contains("2 terms") })
+        val listContextNode = nodes.first { node ->
+            node.textValues().any { it.contains(listName) }
+        }
+        assertFalse(listContextNode.textValues().any { it.contains("preserved query") })
+        val manualFieldAction = nodeWithText(nodes, "Use manual search", clickable = true)
         val actionDensity = checkNotNull(composeView).resources.displayMetrics.density
-        assertTrue(retainedManualAction.size.width / actionDensity >= 48f)
-        assertTrue(retainedManualAction.size.height / actionDensity >= 48f)
-        assertTrue(nodes.any { it.textValues().contains("Results") })
+        assertTrue(manualFieldAction.size.width / actionDensity >= 48f)
+        assertTrue(manualFieldAction.size.height / actionDensity >= 48f)
+        assertTrue(nodes.any { node -> node.textValues().any { it.startsWith("Results") } })
         assertFalse(nodes.any { it.textValues().contains("Results (0)") })
         fun assertActionSize(label: String) {
             val density = composeView!!.resources.displayMetrics.density
@@ -1277,7 +1251,7 @@ class StatusFeedbackTest {
                 node.textValues().contains(label) &&
                     node.config.getOrNull(SemanticsActions.OnClick) != null
             }
-            assertEquals(2, actions.size, "$label action count")
+            assertEquals(1, actions.size, "$label action count")
             actions.forEach { node ->
                 assertTrue(node.size.width / density >= 48f, "$label width: ${node.size}")
                 assertTrue(node.size.height / density >= 48f, "$label height: ${node.size}")
@@ -1303,19 +1277,19 @@ class StatusFeedbackTest {
         saving.value = false
         measureCurrentComposition()
         nodes = semanticsNodes(composeView)
-        assertTrue(nodes.count { it.textValues().contains("Substring") } >= 2)
+        assertEquals(1, nodes.count { it.textValues().contains("Substring") })
         assertRendered("search-context-idle-light-large-text.png")
 
         val identityBeforeModeChange = session.state.value.activeSearch.identity
         session.setMatchMode(SearchMatchMode.WholeWord)
         measureCurrentComposition()
         nodes = semanticsNodes(composeView)
-        assertTrue(nodes.count { it.textValues().contains("Whole words") } >= 2)
+        assertEquals(1, nodes.count { it.textValues().contains("Whole words") })
         assertTrue(identityBeforeModeChange != session.state.value.activeSearch.identity)
         darkTheme.value = true
         measureCurrentComposition()
         nodes = semanticsNodes(composeView)
-        assertTrue(nodes.count { it.textValues().contains("Whole words") } >= 2)
+        assertEquals(1, nodes.count { it.textValues().contains("Whole words") })
         assertRendered("search-context-list-dark-large-text.png")
 
         click(nodeWithText(nodes, "Use manual search", clickable = true))

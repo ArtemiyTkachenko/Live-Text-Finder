@@ -11,7 +11,11 @@ One labeled, single-line manual query is restored from the last completed Androi
 The live scanner uses an inset-aware app bar, a compact status band, the weighted preview and a
 bottom search/capture dock. Recognition details remain in an explicitly opened scrollable dialog.
 Keyboard/compact/large-font and list-manager layouts hide the preview, retaining input focus and
-reachable actions. Retained sources use inspection controls and their own measured viewport.
+reachable actions. Live, frozen and imported sources share the same editable query field and
+full-width primary-action dock. The primary action changes from Freeze frame to Resume scanning or
+Return to camera in place. Retained-image zoom and match navigation remain contextual controls
+before the dock; Terms and Results open their existing result routes, More contains Lists and share,
+and Options stays in the app bar.
 Android requests adjustResize; Compose owns IME padding once. Permission/settings recovery remains
 scrollable. Direct area editing temporarily replaces the dock with draft actions; precise sliders
 remain available when direct editing cannot be shown. General positive device feedback was received

@@ -630,6 +630,7 @@ class LiveTextFinderThemeTest {
                                     onCancelCapture = ::ignoreAction,
                                     secondaryActionLabel = null,
                                     onSecondaryAction = ::ignoreAction,
+                                    onCancelShare = ::ignoreAction,
                                 )
                             }
                         },
@@ -666,6 +667,23 @@ class LiveTextFinderThemeTest {
             it.config.getOrNull(SemanticsProperties.EditableText)?.text == "invoice-2048"
         }
         assertTrue(queryNode.unclippedBoundsInRoot().height / density >= 56f)
+        assertEquals(
+            1,
+            nodes.count { node ->
+                node.config.getOrNull(SemanticsProperties.Text).orEmpty().any {
+                    it.text == "Manual search"
+                }
+            },
+        )
+        assertFalse(nodes.any { node ->
+            node.config.getOrNull(SemanticsProperties.Text).orEmpty().any {
+                it.text == "Manual search · invoice-2048"
+            }
+        })
+        assertEquals(
+            1,
+            nodes.count { it.config.contains(SemanticsProperties.EditableText) },
+        )
         val setText = checkNotNull(queryNode.config.getOrNull(SemanticsActions.SetText)?.action)
         assertTrue(setText(AnnotatedString("updated invoice")))
         Snapshot.sendApplyNotifications()
@@ -801,6 +819,7 @@ class LiveTextFinderThemeTest {
         val darkTheme = mutableStateOf(true)
         val safeSize = mutableStateOf(IntSize.Zero)
         val useManualClicks = mutableIntStateOf(0)
+        val returnClicks = mutableIntStateOf(0)
         val query = mutableStateOf("retained private query")
         mount(widthDp = 360, heightDp = 800) {
             LiveTextFinderTheme(darkThemeOverride = darkTheme.value, dynamicColor = false) {
@@ -862,6 +881,9 @@ class LiveTextFinderThemeTest {
                                 onCancelCapture = ::ignoreAction,
                                 secondaryActionLabel = null,
                                 onSecondaryAction = ::ignoreAction,
+                                returnLabel = "Resume scanning",
+                                onReturn = { returnClicks.intValue++ },
+                                onCancelShare = ::ignoreAction,
                             )
                         },
                     )
@@ -887,8 +909,18 @@ class LiveTextFinderThemeTest {
                 }
             },
         )
-        assertFalse(nodes.any { it.config.contains(SemanticsProperties.EditableText) })
+        val queryNode = nodes.single {
+            it.config.getOrNull(SemanticsProperties.EditableText)?.text == query.value
+        }
+        assertTrue(queryNode.boundsInRoot.height > 0f)
         assertTrue(nodeWithText(nodes, "Saving…").boundsInRoot.height > 0f)
+        val returnAction = nodeWithText(nodes, "Resume scanning", clickable = true)
+        assertEquals(queryNode.boundsInRoot.width, returnAction.boundsInRoot.width)
+        assertTrue(returnAction.boundsInRoot.height >= 52f)
+        assertTrue(
+            checkNotNull(returnAction.config.getOrNull(SemanticsActions.OnClick)?.action)(),
+        )
+        assertEquals(1, returnClicks.intValue)
         val useManual = nodeWithText(nodes, "Use manual search", clickable = true)
         assertTouchBounds(useManual)
         assertTrue(checkNotNull(useManual.config.getOrNull(SemanticsActions.OnClick)?.action)())
