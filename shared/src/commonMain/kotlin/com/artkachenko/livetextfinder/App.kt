@@ -28,6 +28,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -54,6 +55,7 @@ import com.artkachenko.livetextfinder.camera.ImageShareStatus
 import com.artkachenko.livetextfinder.camera.ImportedImagePhase
 import com.artkachenko.livetextfinder.camera.ImportedImagePicker
 import com.artkachenko.livetextfinder.camera.ImportedImagePreview
+import com.artkachenko.livetextfinder.camera.LiveCaptureControls
 import com.artkachenko.livetextfinder.camera.LiveSearchAreaLifecycle
 import com.artkachenko.livetextfinder.camera.StillViewTransform
 import com.artkachenko.livetextfinder.camera.liveSearchAreaAvailable
@@ -111,6 +113,7 @@ import com.artkachenko.livetextfinder.ui.FinderSearchLists
 import com.artkachenko.livetextfinder.ui.FinderSecondaryAction
 import com.artkachenko.livetextfinder.ui.FinderSpacing
 import com.artkachenko.livetextfinder.ui.HighlightColorDialog
+import com.artkachenko.livetextfinder.ui.LiveCaptureControlRow
 import com.artkachenko.livetextfinder.ui.LiveTextFinderTheme
 import com.artkachenko.livetextfinder.ui.RetainedInspectionActionDispatcher
 import com.artkachenko.livetextfinder.ui.SearchTermResultsDialog
@@ -287,6 +290,28 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                         density.fontScale >= 1.3f
                 !managerOpenState.value && !isCompact && imeInsets.getBottom(density) == 0
             }
+            val captureContextCurrent = {
+                val phase = importedOwner.state.value.phase
+                frozenOwner.state.value.mode == FreezeMode.Live &&
+                    (phase == ImportedImagePhase.Live || phase == ImportedImagePhase.Error) &&
+                    areaEditorSession.draft == null && areaDialogSession.currentToken == null &&
+                    isContentVisible()
+            }
+            val captureSourceCurrent = {
+                val phase = importedOwner.state.value.phase
+                frozenOwner.state.value.mode != FreezeMode.Frozen &&
+                    (phase == ImportedImagePhase.Live || phase == ImportedImagePhase.Error) &&
+                    isContentVisible()
+            }
+            val latestCaptureContext by rememberUpdatedState(captureContextCurrent)
+            val latestCaptureSource by rememberUpdatedState(captureSourceCurrent)
+            val liveCaptureControls = remember {
+                LiveCaptureControls(
+                    isContextCurrent = { latestCaptureContext() },
+                    isCaptureContextCurrent = { latestCaptureSource() },
+                )
+            }
+            val liveCaptureState = liveCaptureControls.state.value
             val presentationOwner = remember { SearchPresentationOwner() }
             val presentation = remember(
                 activeSearch,
@@ -743,8 +768,10 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                     FreezeMode.Live -> {
                         resetLiveArea()
                         frozenOwner.freeze(
-                            cameraReady = state.status == OcrStatus.Scanning ||
-                                state.status == OcrStatus.TextRecognized,
+                            cameraReady = !liveCaptureControls.state.value.zoomPending &&
+                                captureContextCurrent() &&
+                                (state.status == OcrStatus.Scanning ||
+                                    state.status == OcrStatus.TextRecognized),
                         )
                     }
                     FreezeMode.Frozen -> {
@@ -984,6 +1011,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                                 else -> CameraPreview(
                                     Modifier.fillMaxSize(),
                                     frozenOwner,
+                                    liveCaptureControls,
                                     isContentVisible,
                                 ) { state = it }
                             }
@@ -1152,6 +1180,13 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                                     color = Color.White,
                                 )
                             }
+                            if (sourceIdentity == null) {
+                                LiveCaptureControlRow(
+                                    controls = liveCaptureControls,
+                                    contextEnabled = captureContextCurrent(),
+                                    modifier = Modifier.align(Alignment.TopCenter).padding(8.dp),
+                                )
+                            }
                         }
                     }
                 },
@@ -1228,8 +1263,9 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                             FinderCaptureControls(
                                 captureLabel = captureLabel,
                                 captureEnabled = freezeState.mode != FreezeMode.Live ||
-                                    state.status == OcrStatus.Scanning ||
-                                    state.status == OcrStatus.TextRecognized,
+                                    !liveCaptureState.zoomPending &&
+                                    (state.status == OcrStatus.Scanning ||
+                                        state.status == OcrStatus.TextRecognized),
                                 onCapture = onCapture,
                                 pendingCaptureLabel = pendingCaptureLabel,
                                 onCancelCapture = frozenOwner::cancel,
@@ -1366,8 +1402,9 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                             saving = sessionState.saving,
                             captureLabel = captureLabel,
                             captureEnabled = freezeState.mode != FreezeMode.Live ||
-                                state.status == OcrStatus.Scanning ||
-                                state.status == OcrStatus.TextRecognized,
+                                !liveCaptureState.zoomPending &&
+                                (state.status == OcrStatus.Scanning ||
+                                    state.status == OcrStatus.TextRecognized),
                             onCapture = onCapture,
                             pendingCaptureLabel = pendingCaptureLabel,
                             onCancelCapture = frozenOwner::cancel,
@@ -1603,10 +1640,11 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                     },
                     onLiveArea = {
                         optionsOpen = false
-                        val canDirectEdit = sourceIdentity == null &&
-                            freezeState.mode == FreezeMode.Live &&
-                            (importedState.phase == ImportedImagePhase.Live ||
-                                importedState.phase == ImportedImagePhase.Error) &&
+                        val latestPhase = importedOwner.state.value.phase
+                        val canDirectEdit = !liveCaptureControls.state.value.zoomPending &&
+                            frozenOwner.state.value.mode == FreezeMode.Live &&
+                            (latestPhase == ImportedImagePhase.Live ||
+                                latestPhase == ImportedImagePhase.Error) &&
                             liveSearchAreaAvailable() && isContentVisible()
                         if (canDirectEdit) {
                             beginAreaEditor(areaState ?: NormalizedSearchArea.CENTERED_DEFAULT)

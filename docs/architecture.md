@@ -160,3 +160,28 @@ behavior remain device checks. Compilation/resource/lint validation is not a sig
 References: [Android backup rules](https://developer.android.com/identity/data/autobackup),
 [adaptive icons](https://developer.android.com/develop/ui/compose/system/icon_design_adaptive),
 [CameraX analysis](https://developer.android.com/media/camera/camerax/analyze).
+
+## Live capture control ownership
+
+A remembered common `LiveCaptureControls` publishes immutable capabilities/observed state and
+issues monotonically identified action leases. Rendered callbacks retain their lease and recheck
+latest common source/freeze/visibility/editor context. Capture source admission permits Freezing
+while action admission requires Live. Android adds a narrow `AndroidLiveCaptureControls` adapter
+for the bound CameraInfo/CameraControl, owned ZoomState/TorchState observers and measured-center
+AF-only focus support. The native adapter also reads current permission, lifecycle, attached
+measured stream and visibility before dispatch. iOS never attaches a native control lease.
+
+Camera session replacement releases the prior control lease before binding new hardware. Owned
+teardown removes only its observers and independently attempts torch-off and focus cancellation
+before unbinding; stale teardown and asynchronous results cannot issue replacement-lease commands.
+Native teardown also runs directly on lifecycle stop. A stop-only restart epoch recreates the feed
+even when stop/start events coalesce; pause/resume alone preserves the valid camera session.
+Mutable state and future completion remain on main. A rejected completion executor falls back to
+main posting; futures are read only after completion. Focus success uses the actual result flag.
+
+Accepted zoom requests suspend `LiveFrameTracker` content at both start and completion, advancing
+its generation and clearing snapshots/projections without changing running state or scan-area
+bounds. The session rejects pending capture/results; optimistic ZoomState changes do not release
+the gate. Failure/cancellation also requires fresh post-request content. This preserves existing
+analyzer execution, proxy closure and recognizer lifetime ownership without rebinding analysis.
+Physical zoom/crop/rotation alignment still requires a camera-device check.

@@ -77,6 +77,7 @@ internal actual fun liveSearchAreaAvailable(): Boolean = true
 internal actual fun CameraPreview(
     modifier: Modifier,
     owner: FrozenFrameOwner,
+    controls: LiveCaptureControls,
     isContentVisible: () -> Boolean,
     onState: (OcrUiState) -> Unit,
 ) {
@@ -89,19 +90,21 @@ internal actual fun CameraPreview(
         mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))
     }
     var permissionRevision by remember { mutableStateOf(0) }
+    var restartEpoch by remember { mutableIntStateOf(0) }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         granted = it
         requested = true
         permissionRevision++
     }
     DisposableEffect(lifecycleOwner, context) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
+        val observer = CameraFeedLifecycleObserver(
+            onForegroundChanged = { foreground = it },
+            onResume = {
                 granted = context.hasCameraPermission()
                 permissionRevision++
-            }
-            foreground = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
-        }
+            },
+            onStop = { restartEpoch++ },
+        )
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
@@ -156,7 +159,13 @@ internal actual fun CameraPreview(
             }
         }
 
-        foreground -> AndroidCameraFeed(modifier, owner, onState)
+        foreground -> key(restartEpoch) {
+            AndroidCameraFeed(
+                modifier, owner, controls,
+                { context.hasCameraPermission() && foreground && isContentVisible() },
+                onState,
+            )
+        }
         else -> Box(modifier)
     }
 }
@@ -165,11 +174,14 @@ internal actual fun CameraPreview(
 private fun AndroidCameraFeed(
     modifier: Modifier,
     frameOwner: FrozenFrameOwner,
+    controls: LiveCaptureControls,
+    isControlsContextCurrent: () -> Boolean,
     onState: (OcrUiState) -> Unit,
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val report by rememberUpdatedState(onState)
+    val latestContext by rememberUpdatedState(isControlsContextCurrent)
     var attempt by remember { mutableIntStateOf(0) }
     // A retried/replaced session gets a fresh native transform and stream state.
     val preview = remember(context, lifecycleOwner, attempt) {
@@ -187,6 +199,8 @@ private fun AndroidCameraFeed(
                 context = context,
                 owner = lifecycleOwner,
                 view = preview,
+                controls = controls,
+                isControlsContextCurrent = { latestContext() },
                 onCaptured = frameOwner::accept,
                 onCaptureFailure = frameOwner::fail,
             ) { state ->

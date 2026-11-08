@@ -195,3 +195,18 @@ For frozen/imported images, tapping a nonzero term row locates its first matchin
 Substring remains the default. The Options Matching selector applies the chosen mode to manual and active-list terms after existing whitespace normalization, without changing literal casing, source provenance, UTF-16 offsets, independent terms, or per-term palette slots. Whole words accepts a literal occurrence only when both outer neighbors are absent or are not Unicode letters, numbers, combining marks, or underscore. Punctuation, hyphens, apostrophes, whitespace and emoji separate words. Apply boundaries to the complete phrase; keep its internal punctuation and spacing literal. Rejected overlapping candidates advance by one code unit so a later valid occurrence remains discoverable; accepted repeats remain non-overlapping. No user-query regex, stemming, synonyms or classifier is introduced.
 
 Persist `substring` or `whole_word` as required schema-5 state. Schema 1–4 loads default to Substring without rewriting until an ordinary save. Schema 5 requires its exact root field count and a known mode key; malformed/missing/unknown values and extra fields follow existing recovery while preserving original bytes. Keep palette-slot validation and migration rules. Mode belongs in manual and list search identities so existing source/search guards invalidate stale projection, copy, navigation and pending share work; manual highlight colour stays outside identity. iOS keeps mode in memory. The scrollable Options selector uses measured 48dp rows, selected/disabled radio semantics and existing healthy-load/recovery gates. Help briefly explains literal whole-word boundaries.
+
+## Live capture assistance
+
+Android exposes hardware zoom, flashlight and measured-center autofocus only when the bound rear
+camera reports support. Controls use named 48dp targets, observed torch state and zoom limits;
+unsupported actions are absent. Live zoom adjusts CameraX rather than scaling the Compose preview.
+The compact strip overlays the preview without moving the shared search or primary-action dock.
+Frozen-image zoom/pan remains independent. No pinch/tap gesture competes with scan-area editing.
+
+Zoom immediately clears live results and blocks OCR/capture admission until the hardware request
+completes, then requires a fresh frame. Applied scan-area bounds survive zoom. New adjustments are
+disabled during freeze capture and area editing; an enabled light remains on through requested
+capture, then owned camera disposal requests light-off. Source, visibility, permission, lifecycle,
+stream and lease changes reject stale actions. No blur, lighting or distance advice is inferred.
+iOS retains its explicit unsupported camera placeholder.

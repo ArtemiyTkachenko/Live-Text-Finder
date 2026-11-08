@@ -29,6 +29,7 @@ internal expect class FrozenFrameOwner() {
 internal expect fun CameraPreview(
     modifier: Modifier,
     owner: FrozenFrameOwner,
+    controls: LiveCaptureControls,
     isContentVisible: () -> Boolean,
     onState: (OcrUiState) -> Unit,
 )

@@ -196,4 +196,10 @@
         <item quantity="one">%1$d outlined element</item>
         <item quantity="other">%1$d outlined elements</item>
     </plurals>
+    <string name="capture_zoom_in">Zoom in</string>
+    <string name="capture_zoom_out">Zoom out</string>
+    <string name="capture_light">Light</string>
+    <string name="capture_light_on">Light on</string>
+    <string name="capture_light_off">Light off</string>
+    <string name="capture_focus">Focus</string>
 </resources>

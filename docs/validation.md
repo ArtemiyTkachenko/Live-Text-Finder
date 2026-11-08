@@ -702,3 +702,49 @@ clipboard, share destination, or backup/restore checks were performed.
 
 
 The correction-cycle Compose captures are in `/Users/artemii/Documents/Codex/2026-10-30/rea/work/journey-refresh/feedback/`: `camera-feedback-paused-retry-light.png`, `camera-feedback-paused-retry-dark-large-text.png`, `search-results-importing-dark.png`, `search-results-freezing-dark.png`, `search-results-missing-import-dark.png`, `search-results-missing-frame-dark.png`, `options-sheet-dark-compact.png`, `options-sheet-light.png`, `highlight-palette-dark-custom-label-large-text.png`, `highlight-palette-light-ready-gated.png` and `custom-highlight-editor-dark-large-text.png`. The paused captures show the message and Retry with a visible gap; missing/import/freezing dialogs show recovery text without stale numeric counts; options/palette captures show friendly labels, and the advanced editor retains its exact hex preview. The final host XML totals 372 tests across 50 suites, with zero failures, errors or skips. `git diff --check`, changed Kotlin import-order audit, 100-column audit and case-insensitive visible “live area” wording audit passed. No physical device, OCR accuracy/timing, camera permission/system-picker, TalkBack or share/backup handoff verification was performed.
+
+## Live capture assistance — 2026-11-08
+
+Hardware capture controls now use production common lease ownership and a narrow CameraX adapter.
+Focused ownership/adapter/rendered-control/tracker/frozen-owner/lifecycle checks passed
+**27 tests**, covering
+stale UI leases, updates, detach and delayed completion; observed zoom/torch capabilities; AF-only
+focus and actual result flags; synchronous, failed and cancelled futures; optimistic zoom state;
+rejected completion executors including background-to-main recovery; snapshot/generation and
+capture gates at zoom start/end; freeze illumination; cleanup failures; and unsupported controls.
+Production control-row renders at 320dp and 1.5× text were inspected, including 48dp targets,
+zoom-boundary disabling, observed light toggle semantics and transient-readiness bounds.
+Lifecycle tests verify permission refresh without feed replacement across pause/resume, and one
+restart epoch plus retired-session teardown across a stop/start coalesced before a Compose frame.
+
+After the final source changes, the focused command passed again and the canonical aggregate
+passed Android debug Kotlin compilation, the full host suite (**382 tests across 54 suites, zero
+failures/errors/skips**), Android lint (**zero errors, 11 warnings**) and iOS simulator shared
+compilation. The final aggregate completed in 26s, with 17 tasks executed and 56 up-to-date.
+Whitespace, changed/new Kotlin 100-column checks and one ASCII-sorted explicit import-block checks
+pass. No Kotlin formatter is configured. Existing validation entries remain unchanged. Logs and
+native control renders are outside the checkout in the capture scratch directory. A generated-output
+hashing stall was diagnosed, its daemon trace/log and generated outputs preserved there, and one
+clean-output recovery succeeded. Final counts use only clean regenerated XML reports.
+
+These are production owner/adapter/component host checks with controlled camera futures and real
+LiveData, plus session wiring inspection. They do not establish physical camera behavior or a full
+App/device render. Hardware zoom/crop/rotation alignment, autofocus effectiveness, flashlight
+behavior through real capture/retry/background transitions, TalkBack, and rapid device lifecycle
+transitions remain pending. Retained-image transforms, OCR engine and analyzer execution were not
+changed; existing source/projection/area/copy/recognizer-lifetime tests remain in the passing suite.
+No APK or device test was run; iOS camera support remains explicitly unavailable.
+
+
+### Integrated camera controls and feedback — 2026-11-08
+
+The accepted camera patch was integrated with the accepted language/recovery changes. The resolved
+camera feed preserves the tested Starting-before-session and attempt-bound Retry helpers, spaced
+paused recovery UI, and the stop-only feed restart key while passing live control ownership/context.
+The complete prior validation history is preserved. Independent integration review passed with
+device limitations. The canonical four-task run passed on the merged source: **386 tests across
+54 suites, zero failures/errors/skips**, Android lint **11 warnings and zero errors**, Android
+compilation and shared iOS simulator compilation. Log: `work/journey-refresh/integration/final-checks.log`.
+The isolated worktree had older generated duplicate report copies; canonical report filenames
+correspond to its recorded 382 tests/54 suites. Merged MAIN reports are the integration evidence.
+No APK, installation, device OCR/alignment/focus/torch, or TalkBack check was performed.
