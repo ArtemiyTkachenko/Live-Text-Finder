@@ -608,7 +608,7 @@ class StillInspectionUiTest {
         assertEquals(0, transferRevision)
         assertEquals(2, clearFocusCalls)
         assertEquals(2, hideKeyboardCalls)
-        assertTrue(nodes(composeRoot()).any { nodeText(it) == "Find in recognized text" })
+        assertTrue(nodes(composeRoot()).any { nodeText(it) == "Find text" })
         clickTextWithPopup("More")
         clickPopupText("Lists")
         assertTrue(managerOpen.value)
@@ -622,7 +622,7 @@ class StillInspectionUiTest {
         assertFalse(managerOpen.value)
         assertFalse(editor.value.isOpen)
         assertEquals(2, transferRevision)
-        assertTrue(nodes(composeRoot()).any { nodeText(it) == "Find in recognized text" })
+        assertTrue(nodes(composeRoot()).any { nodeText(it) == "Find text" })
 
         sharePreparing.value = true
         measureCurrentComposition()
@@ -714,7 +714,7 @@ class StillInspectionUiTest {
             }
             val labels = nodes(composeRoot()).map(::nodeText)
             listOf(
-                "Find in recognized text",
+                "Find text",
                 "Terms",
                 "Resume scanning",
                 "Results (0)",

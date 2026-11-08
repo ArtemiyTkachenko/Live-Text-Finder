@@ -181,29 +181,60 @@ private fun AndroidCameraFeed(
     var failed by remember { mutableStateOf(false) }
     DisposableEffect(preview, lifecycleOwner, attempt) {
         failed = false
-        report(OcrUiState(OcrStatus.Starting, "Starting rear camera and bundled text recognizer…"))
-        val session = AndroidCameraSession(
-            context = context,
-            owner = lifecycleOwner,
-            view = preview,
-            onCaptured = frameOwner::accept,
-            onCaptureFailure = frameOwner::fail,
-        ) { state ->
-            failed = state.status == OcrStatus.Error || state.status == OcrStatus.Unavailable
-            report(state)
+        var session: AndroidCameraSession? = null
+        startCameraAttempt(report) {
+            val newSession = AndroidCameraSession(
+                context = context,
+                owner = lifecycleOwner,
+                view = preview,
+                onCaptured = frameOwner::accept,
+                onCaptureFailure = frameOwner::fail,
+            ) { state ->
+                failed = state.status == OcrStatus.Error || state.status == OcrStatus.Unavailable
+                report(state)
+            }
+            session = newSession
+            frameOwner.attachSession(newSession::requestCapture, newSession::cancelCapture)
+            newSession.start()
         }
-        frameOwner.attachSession(session::requestCapture, session::cancelCapture)
-        session.start()
         onDispose {
             frameOwner.detachSession()
-            session.close()
+            session?.close()
         }
     }
     Box(modifier) {
         key(preview) {
             AndroidView(factory = { preview }, modifier = Modifier.matchParentSize())
         }
-        CameraPreviewFeedbackLayer(preview.previewStreamState, failed) { attempt++ }
+        val expectedAttempt = attempt
+        val retryCallback = cameraAttemptRetryCallback(
+            expectedAttempt = expectedAttempt,
+            currentAttempt = { attempt },
+            updateAttempt = { attempt = it },
+        )
+        CameraPreviewFeedbackLayer(preview.previewStreamState, failed, retryCallback)
+    }
+}
+
+internal fun publishCameraStarting(report: (OcrUiState) -> Unit) {
+    report(OcrUiState(OcrStatus.Starting, "Starting rear camera and bundled text recognizer…"))
+}
+
+internal fun startCameraAttempt(
+    report: (OcrUiState) -> Unit,
+    startSession: () -> Unit,
+) {
+    publishCameraStarting(report)
+    startSession()
+}
+
+internal fun cameraAttemptRetryCallback(
+    expectedAttempt: Int,
+    currentAttempt: () -> Int,
+    updateAttempt: (Int) -> Unit,
+): () -> Unit = {
+    if (currentAttempt() == expectedAttempt) {
+        updateAttempt(expectedAttempt + 1)
     }
 }
 
@@ -223,38 +254,58 @@ internal fun CameraPreviewFeedbackLayer(
         onDispose { streamObserver.close() }
     }
     Box(Modifier.fillMaxSize()) {
-        if (shouldShowStreamFeedback(feedback, failed)) {
-            CameraStreamFeedback(feedback)
-        }
-        if (failed) {
-            FinderPrimaryAction(
-                label = "Retry camera",
-                enabled = true,
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .heightIn(min = CAMERA_RETRY_MIN_HEIGHT_DP.dp),
-                onClick = onRetry,
+        when {
+            failed -> CameraRetryAction(
+                modifier = Modifier.align(Alignment.Center),
+                onRetry = onRetry,
             )
+            feedback == PreviewStreamFeedback.Starting -> CameraStreamFeedback(
+                feedback = feedback,
+                modifier = Modifier.align(Alignment.Center),
+            )
+            feedback == PreviewStreamFeedback.Paused -> Column(
+                modifier = Modifier.align(Alignment.Center),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                CameraStreamFeedback(feedback = feedback)
+                CameraRetryAction(onRetry = onRetry)
+            }
         }
     }
 }
 
 @Composable
-private fun CameraStreamFeedback(feedback: PreviewStreamFeedback) {
+private fun CameraStreamFeedback(
+    feedback: PreviewStreamFeedback,
+    modifier: Modifier = Modifier,
+) {
     val message = when (feedback) {
         PreviewStreamFeedback.Starting -> stringResource(Res.string.camera_preview_starting)
         PreviewStreamFeedback.Paused -> stringResource(Res.string.camera_preview_paused)
         PreviewStreamFeedback.Streaming -> return
     }
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Surface(
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
-            contentColor = MaterialTheme.colorScheme.onSurface,
-            shape = MaterialTheme.shapes.medium,
-        ) {
-            Text(message, Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
-        }
+    Surface(
+        modifier = modifier,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        shape = MaterialTheme.shapes.medium,
+    ) {
+        Text(message, Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
     }
+}
+
+@Composable
+private fun CameraRetryAction(
+    modifier: Modifier = Modifier,
+    onRetry: () -> Unit,
+) {
+    FinderPrimaryAction(
+        label = "Retry camera",
+        enabled = true,
+        modifier = modifier.heightIn(min = CAMERA_RETRY_MIN_HEIGHT_DP.dp),
+        onClick = onRetry,
+    )
 }
 
 private fun Context.hasCameraPermission() =

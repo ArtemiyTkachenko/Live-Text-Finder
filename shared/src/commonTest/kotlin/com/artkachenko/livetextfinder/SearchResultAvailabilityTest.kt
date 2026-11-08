@@ -17,6 +17,7 @@ import com.artkachenko.livetextfinder.search.SearchPresentation
 import com.artkachenko.livetextfinder.search.SearchTerm
 import com.artkachenko.livetextfinder.search.TextSearchResult
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -104,6 +105,90 @@ class SearchResultAvailabilityTest {
             ),
         )
     }
+
+    @Test
+    fun unavailableGuidanceExplainsCurrentStateAndPrioritizesActiveTerms() {
+        assertEquals(
+            null,
+            guidance(hasUsableTerms = false, status = OcrStatus.Paused),
+        )
+        assertEquals(
+            UnavailableResultsGuidance.Importing,
+            guidance(importPhase = ImportedImagePhase.Picking, status = OcrStatus.Paused),
+        )
+        assertEquals(
+            UnavailableResultsGuidance.Freezing,
+            guidance(
+                freezeState = FreezePresentationState(mode = FreezeMode.Freezing),
+                status = OcrStatus.Paused,
+            ),
+        )
+        assertEquals(
+            UnavailableResultsGuidance.MissingImportedSource,
+            guidance(importPhase = ImportedImagePhase.Imported),
+        )
+        assertEquals(
+            UnavailableResultsGuidance.MissingFrozenSource,
+            guidance(freezeState = FreezePresentationState(mode = FreezeMode.Frozen)),
+        )
+        assertEquals(
+            UnavailableResultsGuidance.Waiting,
+            guidance(importedState = ImportedImageState(
+                phase = ImportedImagePhase.Imported,
+                snapshot = ImportedTextSnapshot("fox", emptyList(), 300, 200, 4L),
+            )),
+        )
+        assertEquals(
+            UnavailableResultsGuidance.Waiting,
+            guidance(freezeState = FreezePresentationState(
+                mode = FreezeMode.Frozen,
+                frame = FrozenSearchFrame(1L, FrameIdentity(1L, 1L), liveSnapshot),
+            )),
+        )
+        assertEquals(
+            UnavailableResultsGuidance.Permission,
+            guidance(status = OcrStatus.PermissionRequired),
+        )
+        assertEquals(UnavailableResultsGuidance.Starting, guidance(status = OcrStatus.Starting))
+        assertEquals(UnavailableResultsGuidance.Paused, guidance(status = OcrStatus.Paused))
+        assertEquals(UnavailableResultsGuidance.Error, guidance(status = OcrStatus.Error))
+        assertEquals(
+            UnavailableResultsGuidance.Unavailable,
+            guidance(status = OcrStatus.Unavailable),
+        )
+        assertEquals(UnavailableResultsGuidance.HiddenPreview, guidance(visible = false))
+        assertEquals(
+            UnavailableResultsGuidance.HiddenPreview,
+            guidance(visible = false, status = OcrStatus.Paused),
+        )
+        assertEquals(
+            UnavailableResultsGuidance.AreaMapping,
+            guidance(areaSelected = true, areaReady = false),
+        )
+        assertEquals(UnavailableResultsGuidance.Waiting, guidance())
+        assertEquals(null, guidance(resultsAvailable = true, status = OcrStatus.Paused))
+    }
+
+    private fun guidance(
+        resultsAvailable: Boolean = false,
+        hasUsableTerms: Boolean = true,
+        importPhase: ImportedImagePhase = ImportedImagePhase.Live,
+        importedState: ImportedImageState? = null,
+        freezeState: FreezePresentationState = FreezePresentationState(),
+        status: OcrStatus = OcrStatus.Scanning,
+        visible: Boolean = true,
+        areaSelected: Boolean = false,
+        areaReady: Boolean = true,
+    ) = unavailableResultsGuidance(
+        resultsAvailable = resultsAvailable,
+        hasUsableTerms = hasUsableTerms,
+        importedState = importedState ?: ImportedImageState(importPhase),
+        freezeState = freezeState,
+        ocrState = OcrUiState(status),
+        shouldShowViews = visible,
+        areaSelected = areaSelected,
+        areaReady = areaReady,
+    )
 
     private fun liveAvailable(
         identity: String = spec.identity,

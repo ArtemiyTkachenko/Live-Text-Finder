@@ -669,3 +669,36 @@ canonical `:androidApp:compileDebugKotlin :shared:testAndroidHostTest :androidAp
 in 50 suites, zero failures/errors/skips, Android lint 11 warnings and zero errors, and iOS
 simulator compilation. The stage log and inspected captures are held in the ignored coordinator
 workspace. Physical-device camera, keyboard and accessibility checks remain deferred to the user.
+
+## Feedback language and camera recovery — 2026-11-08
+
+Options now says “Contains text” and explains whole words with the cat/catalog example. Both query
+fields say “Find text”; visible live-area labels and resize handles say “Scan area”. Custom colors
+use a localized “Custom color” label with the existing swatch, while the advanced RGB editor keeps
+the exact hexadecimal preview and Apply/Cancel behavior. Help now describes the bundled on-device
+recognizer, system photo picker, clipboard, share sheet and saved Android settings without claiming
+that system handoffs or backups never leave the device.
+
+Search-result availability logic is unchanged. A separate resolver supplies import, permission,
+startup, pause, error, cause-neutral unavailable, hidden-preview, area-mapping and current-text guidance;
+it returns no explanation for available results or a search with no usable active terms. The
+results action remains “Search results”, and unavailable counts remain hidden. Camera preview
+feedback offers its existing Retry camera action after a preview stream pauses, as well as after an
+error. The retry callback is guarded by the preview attempt it belongs to. Paused feedback and Retry are
+stacked with non-overlapping bounds and a minimum 48dp recovery target. Host tests combine the
+production live frame tracker, camera feedback layer and status region through Starting, stream,
+pause, retry, replacement attempt, hidden teardown/fresh start and error states; startup produces no
+paused status or fabricated match. Stale stream and stale retry callbacks cannot advance a newer
+attempt. Importing/freezing take priority over residual camera feedback; missing retained sources get
+recovery guidance, while existing retained content waiting to be recognized remains Waiting.
+
+Final canonical validation passed: `:androidApp:compileDebugKotlin`, `:shared:testAndroidHostTest`
+(372 tests, 0 failures, 0 errors, 0 skipped), `:androidApp:lintDebug` (11 warnings, 0 errors) and
+`:shared:compileKotlinIosSimulatorArm64`. The exact command log is
+`/Users/artemii/Documents/Codex/2026-10-30/rea/work/journey-refresh/feedback/final-checks.log`.
+Host-rendered Compose checks cover the updated options/help/results/camera feedback UI at compact
+and large text sizes. No physical-device, camera/OCR accuracy or timing, TalkBack, system picker,
+clipboard, share destination, or backup/restore checks were performed.
+
+
+The correction-cycle Compose captures are in `/Users/artemii/Documents/Codex/2026-10-30/rea/work/journey-refresh/feedback/`: `camera-feedback-paused-retry-light.png`, `camera-feedback-paused-retry-dark-large-text.png`, `search-results-importing-dark.png`, `search-results-freezing-dark.png`, `search-results-missing-import-dark.png`, `search-results-missing-frame-dark.png`, `options-sheet-dark-compact.png`, `options-sheet-light.png`, `highlight-palette-dark-custom-label-large-text.png`, `highlight-palette-light-ready-gated.png` and `custom-highlight-editor-dark-large-text.png`. The paused captures show the message and Retry with a visible gap; missing/import/freezing dialogs show recovery text without stale numeric counts; options/palette captures show friendly labels, and the advanced editor retains its exact hex preview. The final host XML totals 372 tests across 50 suites, with zero failures, errors or skips. `git diff --check`, changed Kotlin import-order audit, 100-column audit and case-insensitive visible “live area” wording audit passed. No physical device, OCR accuracy/timing, camera permission/system-picker, TalkBack or share/backup handoff verification was performed.

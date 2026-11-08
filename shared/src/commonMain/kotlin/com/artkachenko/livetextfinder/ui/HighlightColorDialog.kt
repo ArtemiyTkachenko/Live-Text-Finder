@@ -182,7 +182,7 @@ private fun CustomColorRow(
     onClick: () -> Unit,
 ) {
     val label = if (selected) {
-        stringResource(Res.string.highlight_color_custom_selected, color.displayName)
+        stringResource(Res.string.highlight_color_custom_selected)
     } else {
         stringResource(Res.string.highlight_color_custom)
     }
@@ -210,7 +210,10 @@ private fun CustomColorRow(
         Column {
             Text(stringResource(Res.string.highlight_color_custom))
             if (selected) {
-                Text(color.displayName, style = MaterialTheme.typography.bodySmall)
+                Text(
+                    stringResource(Res.string.highlight_color_selected),
+                    style = MaterialTheme.typography.bodySmall,
+                )
             }
         }
     }
@@ -370,6 +373,10 @@ private fun HighlightColorSwatch(
         }
     }
 }
+
+@Composable
+internal fun localizedHighlightColorName(color: HighlightColor): String =
+    stringResource(color.resourceLabel())
 
 private fun HighlightColor.resourceLabel() = when (argb) {
     HighlightColor.Yellow.argb -> Res.string.highlight_color_yellow

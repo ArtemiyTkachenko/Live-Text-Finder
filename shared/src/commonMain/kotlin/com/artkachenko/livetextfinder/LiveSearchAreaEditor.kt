@@ -186,7 +186,7 @@ internal fun LiveSearchAreaEditorOverlay(
                         .size(regionWidth, regionHeight)
                         .focusable()
                         .semantics {
-                            contentDescription = "Movable live search area"
+                            contentDescription = "Movable scan area"
                             stateDescription = boundsDescription(area)
                             customActions = listOf(
                                 CustomAccessibilityAction("Move left by 5%") { moveBy(-1, 0) },
@@ -201,7 +201,7 @@ internal fun LiveSearchAreaEditorOverlay(
                 Modifier.align(Alignment.TopStart)
                     .offset(x = with(density) { x.toDp() }, y = with(density) { y.toDp() })
                     .size(48.dp).background(Color.Transparent).focusable().semantics {
-                        contentDescription = "Resize live area $corner handle"
+                        contentDescription = "Resize scan area $corner handle"
                         stateDescription = boundsDescription(area)
                         customActions = listOf(
                             resizeAction("left", -1, 0),

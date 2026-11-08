@@ -97,7 +97,7 @@ internal fun LiveSearchAreaDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Text("Live search area")
+            Text("Scan area")
         },
         text = {
             Column(

@@ -872,7 +872,7 @@ class LiveTextFinderThemeTest {
                                 onTerms = ::ignoreAction,
                                 onUseManual = { useManualClicks.intValue++ },
                                 onResults = ::ignoreAction,
-                                resultsLabel = "Results unavailable",
+                                resultsLabel = "Search results",
                                 saving = true,
                                 captureLabel = "Freeze frame",
                                 captureEnabled = true,

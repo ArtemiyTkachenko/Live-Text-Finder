@@ -61,3 +61,65 @@ internal fun hasAvailableSearchResults(
 internal fun isFreshLiveReceipt(receiptMillis: Long, nowMillis: Long): Boolean =
     nowMillis >= receiptMillis &&
         nowMillis - receiptMillis < SearchPresentationOwner.RESULT_AGE_MILLIS
+
+internal enum class UnavailableResultsGuidance {
+    Importing,
+    Freezing,
+    MissingImportedSource,
+    MissingFrozenSource,
+    Permission,
+    Starting,
+    Paused,
+    Error,
+    Unavailable,
+    HiddenPreview,
+    AreaMapping,
+    Waiting,
+}
+
+internal fun unavailableResultsGuidance(
+    resultsAvailable: Boolean,
+    hasUsableTerms: Boolean,
+    importedState: ImportedImageState,
+    freezeState: FreezePresentationState,
+    ocrState: OcrUiState,
+    shouldShowViews: Boolean,
+    areaSelected: Boolean,
+    areaReady: Boolean,
+): UnavailableResultsGuidance? {
+    if (resultsAvailable || !hasUsableTerms) return null
+    if (importedState.phase == ImportedImagePhase.Picking ||
+        importedState.phase == ImportedImagePhase.Reading ||
+        importedState.phase == ImportedImagePhase.Recognizing
+    ) {
+        return UnavailableResultsGuidance.Importing
+    }
+    if (importedState.phase == ImportedImagePhase.Imported) {
+        return if (importedState.snapshot == null) {
+            UnavailableResultsGuidance.MissingImportedSource
+        } else {
+            UnavailableResultsGuidance.Waiting
+        }
+    }
+    if (freezeState.mode == FreezeMode.Freezing) {
+        return UnavailableResultsGuidance.Freezing
+    }
+    if (freezeState.mode == FreezeMode.Frozen) {
+        return if (freezeState.frame?.snapshot == null) {
+            UnavailableResultsGuidance.MissingFrozenSource
+        } else {
+            UnavailableResultsGuidance.Waiting
+        }
+    }
+    when (ocrState.status) {
+        OcrStatus.PermissionRequired -> return UnavailableResultsGuidance.Permission
+        OcrStatus.Error -> return UnavailableResultsGuidance.Error
+        OcrStatus.Unavailable -> return UnavailableResultsGuidance.Unavailable
+        OcrStatus.Starting, OcrStatus.Paused, OcrStatus.Scanning, OcrStatus.TextRecognized -> Unit
+    }
+    if (!shouldShowViews) return UnavailableResultsGuidance.HiddenPreview
+    if (ocrState.status == OcrStatus.Starting) return UnavailableResultsGuidance.Starting
+    if (ocrState.status == OcrStatus.Paused) return UnavailableResultsGuidance.Paused
+    if (areaSelected && !areaReady) return UnavailableResultsGuidance.AreaMapping
+    return UnavailableResultsGuidance.Waiting
+}

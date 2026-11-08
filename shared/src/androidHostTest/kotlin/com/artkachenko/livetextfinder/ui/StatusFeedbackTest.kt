@@ -57,6 +57,7 @@ import com.artkachenko.livetextfinder.FinderStatusRegion
 import com.artkachenko.livetextfinder.SearchFeedback
 import com.artkachenko.livetextfinder.SearchFeedbackKind
 import com.artkachenko.livetextfinder.StatusSource
+import com.artkachenko.livetextfinder.UnavailableResultsGuidance
 import com.artkachenko.livetextfinder.UsageHelpDialog
 import com.artkachenko.livetextfinder.camera.CameraPreviewFeedbackLayer
 import com.artkachenko.livetextfinder.camera.FreezeMode
@@ -64,8 +65,11 @@ import com.artkachenko.livetextfinder.camera.FreezePresentationState
 import com.artkachenko.livetextfinder.camera.FrozenSearchFrame
 import com.artkachenko.livetextfinder.camera.ImportedImagePhase
 import com.artkachenko.livetextfinder.camera.ImportedImageState
+import com.artkachenko.livetextfinder.camera.cameraAttemptRetryCallback
+import com.artkachenko.livetextfinder.camera.startCameraAttempt
 import com.artkachenko.livetextfinder.ocr.FrameInfo
 import com.artkachenko.livetextfinder.ocr.ImportedTextSnapshot
+import com.artkachenko.livetextfinder.ocr.LiveFrameTracker
 import com.artkachenko.livetextfinder.ocr.OcrSnapshot
 import com.artkachenko.livetextfinder.ocr.OcrStatus
 import com.artkachenko.livetextfinder.ocr.OcrUiState
@@ -96,6 +100,7 @@ import com.artkachenko.livetextfinder.ui.FinderSearchLists
 import com.artkachenko.livetextfinder.ui.HighlightColorDialog
 import com.artkachenko.livetextfinder.ui.SearchTermResultsDialog
 import com.artkachenko.livetextfinder.ui.sourceStatusMessage
+import com.artkachenko.livetextfinder.unavailableResultsExplanation
 import java.io.File
 import java.io.FileOutputStream
 import kotlin.math.roundToInt
@@ -190,7 +195,14 @@ class StatusFeedbackTest {
         streamState.value = PreviewView.StreamState.IDLE
         measureCurrentComposition()
         nodes = semanticsNodes(composeView)
-        assertTrue(nodes.any { it.textValues().contains("Camera paused") })
+        val pausedMessage = nodeWithText(nodes, "Camera paused")
+        val pausedRetry = nodeWithText(nodes, "Retry camera", clickable = true)
+        val previewBounds = nodeWithDescription(nodes, "Preview viewport").boundsInRoot
+        assertNoIntersection(pausedMessage, pausedRetry)
+        assertContained(pausedMessage, previewBounds)
+        assertContained(pausedRetry, previewBounds)
+        assertTouchBounds(pausedRetry)
+        assertRendered("camera-feedback-paused-retry-light.png")
         assertEquals(viewportBounds, layoutBounds(nodeWithDescription(nodes, "Preview viewport")))
         assertRendered("camera-feedback-paused-light.png")
     }
@@ -228,7 +240,21 @@ class StatusFeedbackTest {
         assertFalse(nodes.any { it.textValues().contains("Starting camera…") })
         oldStreamState.value = PreviewView.StreamState.IDLE
         measureCurrentComposition()
-        assertTrue(semanticsNodes(composeView).any { it.textValues().contains("Camera paused") })
+        nodes = semanticsNodes(composeView)
+        assertTrue(nodes.any { it.textValues().contains("Camera paused") })
+        val pausedRetry = nodeWithText(nodes, "Retry camera", clickable = true)
+        assertTouchBounds(pausedRetry)
+        assertNoIntersection(nodeWithText(nodes, "Camera paused"), pausedRetry)
+        assertRendered("camera-feedback-paused-retry-dark-large-text.png")
+        click(pausedRetry)
+        assertEquals(1, retryCount)
+        measureCurrentComposition()
+        var replacementStream = streamState.value
+        assertFalse(oldStreamState.hasObservers())
+        assertTrue(replacementStream.hasObservers())
+        assertTrue(
+            semanticsNodes(composeView).any { it.textValues().contains("Starting camera…") },
+        )
 
         failed.value = true
         measureCurrentComposition()
@@ -241,9 +267,9 @@ class StatusFeedbackTest {
         assertTrue(retry.size.height / density >= 52f)
         assertRendered("camera-feedback-retry-dark-large-text.png")
         click(retry)
-        assertEquals(1, retryCount)
+        assertEquals(2, retryCount)
         measureCurrentComposition()
-        val replacementStream = streamState.value
+        replacementStream = streamState.value
         assertFalse(oldStreamState.hasObservers())
         assertTrue(replacementStream.hasObservers())
         nodes = semanticsNodes(composeView)
@@ -267,6 +293,152 @@ class StatusFeedbackTest {
         nodes = semanticsNodes(composeView)
         assertTrue(nodes.any { it.textValues().contains("Retry camera") })
         assertEquals(viewportBounds, layoutBounds(nodeWithDescription(nodes, "Preview viewport")))
+    }
+
+    @Test
+    fun previewAndStatusStayAlignedAcrossStartPauseRetryAndFailure() {
+        var tracker = LiveFrameTracker(session = 11L) { 500L }
+        val state = mutableStateOf(tracker.state)
+        startCameraAttempt(report = { state.value = it }, startSession = {})
+        var oldStream = MutableLiveData(PreviewView.StreamState.IDLE)
+        val stream = mutableStateOf(oldStream)
+        val failed = mutableStateOf(false)
+        val previewVisible = mutableStateOf(true)
+        val attempt = mutableIntStateOf(0)
+        var retryCount = 0
+        var detachedTracker: LiveFrameTracker? = null
+        mount(widthDp = 360, heightDp = 600) {
+            LiveTextFinderTheme(darkThemeOverride = false, dynamicColor = false) {
+                Column(Modifier.fillMaxSize()) {
+                    Box(
+                        Modifier.weight(1f).fillMaxWidth()
+                            .semantics { contentDescription = "Preview viewport" },
+                    ) {
+                        if (previewVisible.value) {
+                            val expectedAttempt = attempt.intValue
+                            val retryCallback = cameraAttemptRetryCallback(
+                                expectedAttempt = expectedAttempt,
+                                currentAttempt = { attempt.intValue },
+                                updateAttempt = { nextAttempt ->
+                                    attempt.intValue = nextAttempt
+                                    retryCount++
+                                    detachedTracker = tracker
+                                    tracker.dispose()
+                                    tracker = LiveFrameTracker(session = 12L) { 600L }
+                                    startCameraAttempt(
+                                        report = { state.value = it },
+                                        startSession = {
+                                            oldStream = stream.value
+                                            stream.value = MutableLiveData(
+                                                PreviewView.StreamState.IDLE,
+                                            )
+                                            failed.value = false
+                                        },
+                                    )
+                                },
+                            )
+                            CameraPreviewFeedbackLayer(stream.value, failed.value, retryCallback)
+                        }
+                    }
+                    TestFinderStatusRegion(
+                        state = state.value,
+                        importedState = ImportedImageState(),
+                        sessionState = SearchSessionState(loaded = true),
+                        shouldShowViews = previewVisible.value,
+                    )
+                }
+            }
+        }
+
+        var nodes = semanticsNodes(composeView)
+        assertTrue(nodes.any { it.textValues().contains("Starting camera…") })
+        assertEquals(OcrStatus.Starting, state.value.status)
+        assertFalse(nodes.any { it.textValues().contains("Scanning paused") })
+        assertFalse(nodes.any { it.textValues().contains("1 match") })
+
+        stream.value.value = PreviewView.StreamState.STREAMING
+        tracker.setRunning(true)
+        state.value = tracker.state
+        measureCurrentComposition()
+        nodes = semanticsNodes(composeView)
+        assertFalse(nodes.any { it.textValues().contains("Starting camera…") })
+        assertFalse(nodes.any { it.textValues().contains("Scanning paused") })
+        assertFalse(nodes.any { it.textValues().contains("1 match") })
+
+        stream.value.value = PreviewView.StreamState.IDLE
+        tracker.setRunning(false)
+        state.value = tracker.state
+        measureCurrentComposition()
+        nodes = semanticsNodes(composeView)
+        assertTrue(nodes.any { it.textValues().contains("Camera paused") })
+        assertTrue(nodes.any { it.textValues().contains("Scanning paused") })
+        assertTouchBounds(nodeWithText(nodes, "Retry camera", clickable = true))
+        click(nodeWithText(nodes, "Retry camera", clickable = true))
+        assertEquals(1, retryCount)
+        measureCurrentComposition()
+        nodes = semanticsNodes(composeView)
+        assertTrue(nodes.any { it.textValues().contains("Starting camera…") })
+        assertFalse(nodes.any { it.textValues().contains("Scanning paused") })
+        assertFalse(oldStream.hasObservers())
+        assertTrue(stream.value.hasObservers())
+        oldStream.value = PreviewView.StreamState.STREAMING
+        oldStream.value = PreviewView.StreamState.IDLE
+        measureCurrentComposition()
+        assertEquals(OcrStatus.Starting, tracker.state.status)
+        assertEquals(OcrStatus.Starting, state.value.status)
+        val staleTracker = checkNotNull(detachedTracker)
+        assertFalse(staleTracker.receive(staleTracker.ticket(), OcrUiState()))
+
+        stream.value.value = PreviewView.StreamState.STREAMING
+        tracker.setRunning(true)
+        state.value = tracker.state
+        measureCurrentComposition()
+        nodes = semanticsNodes(composeView)
+        assertFalse(nodes.any { it.textValues().contains("Starting camera…") })
+        assertFalse(nodes.any { it.textValues().contains("1 match") })
+
+        val backgroundStream = stream.value
+        previewVisible.value = false
+        tracker.dispose()
+        state.value = tracker.state
+        measureCurrentComposition()
+        assertFalse(backgroundStream.hasObservers())
+
+        tracker = LiveFrameTracker(session = 13L) { 700L }
+        startCameraAttempt(
+            report = { state.value = it },
+            startSession = {
+                oldStream = backgroundStream
+                stream.value = MutableLiveData(PreviewView.StreamState.IDLE)
+                previewVisible.value = true
+            },
+        )
+        measureCurrentComposition()
+        assertEquals(OcrStatus.Starting, state.value.status)
+        nodes = semanticsNodes(composeView)
+        assertTrue(nodes.any { it.textValues().contains("Starting camera…") })
+        assertFalse(nodes.any { it.textValues().contains("Scanning paused") })
+        assertFalse(backgroundStream.hasObservers())
+        backgroundStream.value = PreviewView.StreamState.IDLE
+        measureCurrentComposition()
+        assertEquals(OcrStatus.Starting, state.value.status)
+
+        stream.value.value = PreviewView.StreamState.STREAMING
+        tracker.setRunning(true)
+        state.value = tracker.state
+        measureCurrentComposition()
+        nodes = semanticsNodes(composeView)
+        assertFalse(nodes.any { it.textValues().contains("Starting camera…") })
+        assertFalse(nodes.any { it.textValues().contains("Scanning paused") })
+        assertFalse(nodes.any { it.textValues().contains("1 match") })
+
+        failed.value = true
+        state.value = OcrUiState(OcrStatus.Error, "Camera session failed.")
+        measureCurrentComposition()
+        nodes = semanticsNodes(composeView)
+        assertTrue(nodes.any { it.textValues().contains("Retry camera") })
+        assertFalse(nodes.any { it.textValues().contains("Starting camera…") })
+        assertFalse(nodes.any { it.textValues().contains("Camera paused") })
     }
 
     @Test
@@ -308,7 +480,7 @@ class StatusFeedbackTest {
                             matchMode.value = it
                             matchModeCalls.intValue++
                         },
-                        liveAreaLabel = "Live area: Full frame",
+                        liveAreaLabel = "Scan area: Full frame",
                         showImport = showImport.value,
                         showListTransfer = false,
                         listTransferHelp = null,
@@ -349,18 +521,27 @@ class StatusFeedbackTest {
             nodeWithText(nodes, "Highlight color: Yellow", clickable = true),
             optionsDialog().window?.decorView,
         )
-        assertTrue(nodes.any { it.textValues().contains("Live area: Full frame") })
+        assertTrue(nodes.any { it.textValues().contains("Scan area: Full frame") })
+        assertTrue(
+            nodes.any {
+                it.textValues().contains(
+                    "Contains text finds the entered text anywhere. Whole words match cat, " +
+                        "but not catalog.",
+                )
+            },
+        )
+        assertFalse(nodes.any { it.textValues().contains("Substring") })
         assertTrue(nodes.any { it.textValues().contains("Import image") })
         assertTrue(nodes.any { it.textValues().contains("Help") })
         assertTouchBounds(
-            nodeWithText(nodes, "Substring", clickable = true),
+            nodeWithText(nodes, "Contains text", clickable = true),
             optionsDialog().window?.decorView,
         )
         assertTouchBounds(
             nodeWithText(nodes, "Whole words", clickable = true),
             optionsDialog().window?.decorView,
         )
-        val substringNode = nodeWithText(nodes, "Substring", clickable = true)
+        val substringNode = nodeWithText(nodes, "Contains text", clickable = true)
         val wholeWordsNode = nodeWithText(nodes, "Whole words", clickable = true)
         val density = checkNotNull(optionsDialog().window?.decorView)
             .resources.displayMetrics.density
@@ -368,7 +549,7 @@ class StatusFeedbackTest {
         assertTrue(wholeWordsNode.size.height / density >= 48f)
         assertEquals(true, substringNode.config.getOrNull(SemanticsProperties.Selected))
         assertEquals(false, wholeWordsNode.config.getOrNull(SemanticsProperties.Selected))
-        assertActionLayoutSize(nodeWithText(nodes, "Live area: Full frame", clickable = true))
+        assertActionLayoutSize(nodeWithText(nodes, "Scan area: Full frame", clickable = true))
         assertActionLayoutSize(nodeWithText(nodes, "Import image", clickable = true))
         val scrollViewport = nodes.firstOrNull {
             it.config.getOrNull(SemanticsActions.ScrollBy) != null
@@ -407,7 +588,7 @@ class StatusFeedbackTest {
             error("Could not scroll '$label' fully into the options sheet.")
         }
 
-        val visibleArea = scrollOptionIntoView("Live area: Full frame")
+        val visibleArea = scrollOptionIntoView("Scan area: Full frame")
         assertFullyVisibleInViewport(visibleArea, checkNotNull(scrollViewport))
         assertFullyVisibleInDialog(visibleArea, checkNotNull(optionsDialog().window?.decorView))
         assertTouchBounds(visibleArea, optionsDialog().window?.decorView)
@@ -435,7 +616,7 @@ class StatusFeedbackTest {
             ),
         )
 
-        click(nodeWithText(nodes, "Live area: Full frame", clickable = true))
+        click(nodeWithText(nodes, "Scan area: Full frame", clickable = true))
         assertEquals(1, areaCalls.intValue)
         assertEquals(0, importCalls.intValue)
         assertEquals(0, helpCalls.intValue)
@@ -454,7 +635,7 @@ class StatusFeedbackTest {
         assertEquals(1, highlightCalls.intValue)
         assertEquals(false, optionsOpen.value)
         nodes = semanticsNodes(composeView)
-        assertFalse(nodes.any { it.textValues().contains("Live area: Full frame") })
+        assertFalse(nodes.any { it.textValues().contains("Scan area: Full frame") })
         highlightEnabled.value = false
         matchModeEnabled.value = false
         showImport.value = false
@@ -1028,6 +1209,12 @@ class StatusFeedbackTest {
         val selectedRow = nodeWithSelectedDescription(nodes, "Magenta")
         assertEquals(true, selectedRow.config.getOrNull(SemanticsProperties.Selected))
         assertDialogRendered(dialog, "highlight-palette-dark-narrow-large-text.png")
+        scrollNodeIntoViewport(dialogRoot, "Custom color")
+        nodes = semanticsNodes(dialogRoot)
+        assertTrue(nodes.any { it.textValues().contains("Custom color") })
+        assertDialogRendered(dialog, "highlight-palette-dark-custom-label-large-text.png")
+        scrollNodeIntoViewport(dialogRoot, "Yellow")
+        nodes = semanticsNodes(dialogRoot)
 
         HighlightColor.entries.forEach { color ->
             click(nodeWithDescription(nodes, color.displayName))
@@ -1132,6 +1319,8 @@ class StatusFeedbackTest {
                 SearchTermResultsDialog(
                     terms = terms,
                     resultsAvailable = false,
+                    unavailableExplanation =
+                        "Camera preview paused. Tap Retry camera to try again.",
                     canLocate = false,
                     onDismiss = ::ignoreAction,
                 )
@@ -1144,7 +1333,7 @@ class StatusFeedbackTest {
         assertTrue(
             nodes.any {
                 it.textValues().contains(
-                    "Results are not current for this search and image.",
+                    "Camera preview paused. Tap Retry camera to try again.",
                 )
             },
         )
@@ -1156,6 +1345,58 @@ class StatusFeedbackTest {
         assertFalse(nodes.any { it.textValues().contains("8") })
         assertTouchBounds(nodeWithText(nodes, "Done"), dialog.window?.decorView)
         assertDialogRendered(dialog, "search-results-unavailable-dark.png")
+    }
+
+    @Test
+    fun unavailableSourceGuidanceShowsProgressAndRecoveryForMissingImages() {
+        val guidance = mutableStateOf(UnavailableResultsGuidance.Importing)
+        val terms = listOf(
+            SearchTermSummary("invoice", "invoice", HighlightColor.Yellow, 8),
+        )
+        mount(widthDp = 320, heightDp = 500) {
+            LiveTextFinderTheme(darkThemeOverride = true, dynamicColor = false) {
+                SearchTermResultsDialog(
+                    terms = terms,
+                    resultsAvailable = false,
+                    unavailableExplanation = unavailableResultsExplanation(guidance.value),
+                    canLocate = false,
+                    onDismiss = ::ignoreAction,
+                )
+            }
+        }
+        settleDialog()
+
+        fun assertGuidance(message: String, screenshot: String) {
+            val dialog = checkNotNull(ShadowDialog.getLatestDialog())
+            val nodes = semanticsNodes(findViewRoot(dialog.window?.decorView))
+            assertTrue(nodes.any { it.textValues().contains(message) })
+            assertFalse(nodes.any { it.textValues().contains("8") })
+            assertTrue(nodes.any { it.textValues().contains("Done") })
+            assertDialogRendered(dialog, screenshot)
+        }
+
+        assertGuidance(
+            "Choose or finish recognizing an image to see its results.",
+            "search-results-importing-dark.png",
+        )
+        guidance.value = UnavailableResultsGuidance.Freezing
+        measureCurrentComposition()
+        assertGuidance(
+            "Freezing the frame. Results will appear when capture finishes.",
+            "search-results-freezing-dark.png",
+        )
+        guidance.value = UnavailableResultsGuidance.MissingImportedSource
+        measureCurrentComposition()
+        assertGuidance(
+            "Image unavailable. Return to camera, then import another image.",
+            "search-results-missing-import-dark.png",
+        )
+        guidance.value = UnavailableResultsGuidance.MissingFrozenSource
+        measureCurrentComposition()
+        assertGuidance(
+            "Frozen frame unavailable. Return to camera and freeze a new frame.",
+            "search-results-missing-frame-dark.png",
+        )
     }
 
     @Test
@@ -1193,7 +1434,7 @@ class StatusFeedbackTest {
                                 )
                             },
                             onResults = ::ignoreAction,
-                            resultsLabel = "Results unavailable",
+                            resultsLabel = "Search results",
                             onUseManual = {
                                 dispatchSearchListSelection(session, null) {
                                     invalidatedBeforeMutation =
@@ -1233,7 +1474,7 @@ class StatusFeedbackTest {
         }
 
         var nodes = semanticsNodes(composeView)
-        assertEquals(1, nodes.count { it.textValues().contains("Substring") })
+        assertEquals(1, nodes.count { it.textValues().contains("Contains text") })
         assertEquals(1, nodes.count { it.textValues().contains("2 terms") })
         val listContextNode = nodes.first { node ->
             node.textValues().any { it.contains(listName) }
@@ -1243,7 +1484,7 @@ class StatusFeedbackTest {
         val actionDensity = checkNotNull(composeView).resources.displayMetrics.density
         assertTrue(manualFieldAction.size.width / actionDensity >= 48f)
         assertTrue(manualFieldAction.size.height / actionDensity >= 48f)
-        assertTrue(nodes.any { node -> node.textValues().any { it.startsWith("Results") } })
+        assertTrue(nodes.any { node -> node.textValues().any { it.startsWith("Search results") } })
         assertFalse(nodes.any { it.textValues().contains("Results (0)") })
         fun assertActionSize(label: String) {
             val density = composeView!!.resources.displayMetrics.density
@@ -1277,7 +1518,7 @@ class StatusFeedbackTest {
         saving.value = false
         measureCurrentComposition()
         nodes = semanticsNodes(composeView)
-        assertEquals(1, nodes.count { it.textValues().contains("Substring") })
+        assertEquals(1, nodes.count { it.textValues().contains("Contains text") })
         assertRendered("search-context-idle-light-large-text.png")
 
         val identityBeforeModeChange = session.state.value.activeSearch.identity
@@ -1565,12 +1806,15 @@ class StatusFeedbackTest {
         dialog = checkNotNull(ShadowDialog.getLatestDialog())
         decorView = checkNotNull(dialog.window?.decorView)
         nodes = semanticsNodes(findViewRoot(decorView))
-        val selectedCustomRow = nodeWithDescription(nodes, "Custom color (#01FF00)")
+        val selectedCustomRow = nodeWithDescription(nodes, "Custom color selected")
         assertEquals(true, selectedCustomRow.config.getOrNull(SemanticsProperties.Selected))
         click(selectedCustomRow)
         nodes = semanticsNodes(findViewRoot(decorView))
         assertTrue(nodes.any { it.textValues().contains("#01FF00") })
         click(nodeWithText(nodes, "Cancel"))
+        nodes = semanticsNodes(findViewRoot(decorView))
+        assertFalse(nodes.any { it.textValues().contains("#01FF00") })
+        click(nodeWithDescription(nodes, "Custom color selected"))
         nodes = semanticsNodes(findViewRoot(decorView))
         assertTrue(nodes.any { it.textValues().contains("#01FF00") })
         assertEquals(1, selectedColors.size)
@@ -1595,7 +1839,7 @@ class StatusFeedbackTest {
         val dialog = checkNotNull(ShadowDialog.getLatestDialog())
         val decorView = checkNotNull(dialog.window?.decorView)
         val nodes = semanticsNodes(findViewRoot(decorView))
-        val customRow = nodeWithDescription(nodes, "Custom color (#12ABEF)")
+        val customRow = nodeWithDescription(nodes, "Custom color selected")
         assertEquals(true, customRow.config.getOrNull(SemanticsProperties.Selected))
         click(customRow)
 
@@ -1622,9 +1866,9 @@ class StatusFeedbackTest {
         setNativeDialogSize(dialog, widthDp = 320, heightDp = 420)
         val customColorRow = nodeWithDescription(
             semanticsNodes(findViewRoot(decorView)),
-            "Custom color (#12ABEF)",
+            "Custom color selected",
         )
-        scrollNodeIntoViewport(findViewRoot(decorView), "Custom color (#12ABEF)")
+        scrollNodeIntoViewport(findViewRoot(decorView), "Custom color selected")
         click(customColorRow)
         val dialogRoot = findViewRoot(decorView)
         var nodes = semanticsNodes(dialogRoot)
@@ -2109,7 +2353,7 @@ class StatusFeedbackTest {
                                     onOptions = ::ignoreAction,
                                     onUseManual = { useManualClicks.intValue++ },
                                     resultsLabel = when {
-                                        !resultsAvailable -> "Results unavailable"
+                                        !resultsAvailable -> "Search results"
                                         listMode -> "Results (2)"
                                         else -> "Results (1)"
                                     },
@@ -2182,7 +2426,7 @@ class StatusFeedbackTest {
         val resultsAction = nodeWithText(
             nodes,
             when {
-                !resultsAvailable -> "Results unavailable"
+                !resultsAvailable -> "Search results"
                 listMode -> "Results (2)"
                 else -> "Results (1)"
             },
@@ -2495,6 +2739,22 @@ class StatusFeedbackTest {
     }
 
     private fun layoutBounds(node: SemanticsNode) = node.positionInRoot to node.size
+
+    private fun assertNoIntersection(first: SemanticsNode, second: SemanticsNode) {
+        val firstBounds = first.boundsInRoot
+        val secondBounds = second.boundsInRoot
+        assertTrue(
+            firstBounds.right <= secondBounds.left || secondBounds.right <= firstBounds.left ||
+                firstBounds.bottom <= secondBounds.top || secondBounds.bottom <= firstBounds.top,
+            "Elements overlap: first=$firstBounds second=$secondBounds",
+        )
+    }
+
+    private fun assertContained(node: SemanticsNode, container: Rect) {
+        val bounds = node.boundsInRoot
+        assertTrue(bounds.left >= container.left && bounds.right <= container.right)
+        assertTrue(bounds.top >= container.top && bounds.bottom <= container.bottom)
+    }
 
     private fun selectionBounds(
         nodes: List<SemanticsNode>,

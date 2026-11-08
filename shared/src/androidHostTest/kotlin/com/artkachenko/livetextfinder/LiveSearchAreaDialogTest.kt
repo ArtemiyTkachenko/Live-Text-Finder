@@ -136,12 +136,12 @@ class LiveSearchAreaDialogTest {
         val semantics = checkNotNull(findViewRoot(view)).semanticsOwner.rootSemanticsNode
         val handles = nodes(semantics).filter { node ->
             node.config.getOrNull(SemanticsProperties.ContentDescription)?.singleOrNull()
-                ?.startsWith("Resize live area") == true
+                ?.startsWith("Resize scan area") == true
         }.toList()
         assertEquals(4, handles.size)
         val movableRegion = checkNotNull(nodes(semantics).firstOrNull { node ->
             node.config.getOrNull(SemanticsProperties.ContentDescription) ==
-                listOf("Movable live search area")
+                listOf("Movable scan area")
         })
         assertEquals(0.6, movableRegion.size.width.toDouble() / dimension, 0.01)
         assertEquals(0.6, movableRegion.size.height.toDouble() / dimension, 0.01)
@@ -375,7 +375,7 @@ class LiveSearchAreaDialogTest {
         val density = checkNotNull(activity).resources.displayMetrics.density
         val title = checkNotNull(find(semanticsRoot()) { node ->
             node.config.getOrNull(SemanticsProperties.Text)
-                ?.any { it.text == "Live search area" } == true
+                ?.any { it.text == "Scan area" } == true
         })
         assertEquals(1.5f, title.layoutInfo.density.fontScale)
         listOf("Width", "Height", "Horizontal position", "Vertical position").forEach { label ->

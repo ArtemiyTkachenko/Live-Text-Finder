@@ -88,6 +88,7 @@ import com.artkachenko.livetextfinder.search.importedHighlightsForDraw
 import com.artkachenko.livetextfinder.search.inMemorySearchSessionController
 import com.artkachenko.livetextfinder.search.isPresentationCurrentAreaRevision
 import com.artkachenko.livetextfinder.search.normalizeEditorDraftArea
+import com.artkachenko.livetextfinder.search.normalizeRecognizedText
 import com.artkachenko.livetextfinder.search.occurrenceBounds
 import com.artkachenko.livetextfinder.search.projectFrozenHighlights
 import com.artkachenko.livetextfinder.search.projectHighlights
@@ -117,6 +118,7 @@ import com.artkachenko.livetextfinder.ui.StillInspectionControls
 import com.artkachenko.livetextfinder.ui.StillInspectionViewport
 import com.artkachenko.livetextfinder.ui.StillMatchNavigationControls
 import com.artkachenko.livetextfinder.ui.StillMatchesDialog
+import com.artkachenko.livetextfinder.ui.localizedHighlightColorName
 import com.artkachenko.livetextfinder.ui.rememberStillViewTransform
 import com.artkachenko.livetextfinder.utils.MonotonicClock
 import kotlinx.coroutines.delay
@@ -604,6 +606,19 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                 shouldShowViews = shouldShowViews,
                 nowMillis = MonotonicClock.nowMillis(),
             )
+            val unavailableGuidance = unavailableResultsGuidance(
+                resultsAvailable = resultsAvailable,
+                hasUsableTerms = activeSearch.terms.any {
+                    normalizeRecognizedText(it.text).isNotEmpty()
+                },
+                importedState = importedState,
+                freezeState = freezeState,
+                ocrState = state,
+                shouldShowViews = shouldShowViews,
+                areaSelected = areaState != null,
+                areaReady = presentation.areaReady,
+            )
+            val unavailableExplanation = unavailableResultsExplanation(unavailableGuidance)
             val copyFailedMessage = stringResource(Res.string.still_match_copy_failed)
             val copiedMessage = stringResource(Res.string.still_match_copied)
             val copySelectedMatch: () -> Unit = {
@@ -681,7 +696,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                 hasLiveCaptureControls && freezeState.mode == FreezeMode.Live &&
                 liveSearchAreaAvailable()
             ) {
-                if (areaState == null) "Live area: Full frame" else "Live area: Custom"
+                if (areaState == null) "Scan area: Full frame" else "Scan area: Custom"
             } else {
                 null
             }
@@ -1129,7 +1144,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                                 isContentVisible()
                             ) {
                                 Text(
-                                    "Live area",
+                                    "Scan area",
                                     modifier = Modifier.align(Alignment.TopStart)
                                         .padding(8.dp)
                                         .background(Color.Black.copy(alpha = 0.7f))
@@ -1154,7 +1169,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                                 ),
                             ) {
                                 Text(
-                                    "Editing live area",
+                                    "Editing scan area",
                                     style = MaterialTheme.typography.labelLarge,
                                 )
                                 androidx.compose.foundation.layout.FlowRow(
@@ -1417,6 +1432,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                 SearchTermResultsDialog(
                     terms = termSummaries,
                     resultsAvailable = resultsAvailable,
+                    unavailableExplanation = unavailableExplanation,
                     canLocate = shouldShowViews && sourceIdentity != null && resultsAvailable,
                     onSelect = { termId ->
                         val row = matchRows.firstOrNull {
@@ -1552,7 +1568,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                 FinderOptionsSheet(
                     highlightLabel = stringResource(
                         Res.string.finder_options_highlight,
-                        sessionState.persisted.highlightColor.displayName,
+                        localizedHighlightColorName(sessionState.persisted.highlightColor),
                     ),
                     highlightEnabled = sessionState.loaded && !sessionState.recoveryRequired,
                     matchMode = sessionState.persisted.matchMode,

@@ -290,6 +290,7 @@ internal fun StillMatchesDialog(
 internal fun SearchTermResultsDialog(
     terms: List<SearchTermSummary>,
     resultsAvailable: Boolean = true,
+    unavailableExplanation: String? = null,
     canLocate: Boolean = true,
     onSelect: (String) -> Unit = {},
     onDismiss: () -> Unit,
@@ -337,7 +338,8 @@ internal fun SearchTermResultsDialog(
                 }
                 if (!resultsAvailable) {
                     Text(
-                        stringResource(Res.string.search_results_unavailable_explanation),
+                        unavailableExplanation
+                            ?: stringResource(Res.string.search_results_unavailable_explanation),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }

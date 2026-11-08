@@ -54,11 +54,15 @@ internal fun UsageHelpDialog(onDismissRequest: () -> Unit) {
                         "keyboard or close lists to see it; compact windows may need more space. " +
                         "Freeze frame keeps one image until Resume live. Import one " +
                         "JPEG, PNG, or WebP image; Return to camera exits it. " +
-                        "Images and OCR stay in memory, are not saved, and are discarded " +
-                        "when the app is backgrounded " +
+                        "OCR runs with the bundled on-device model. When you import, the system " +
+                        "photo picker supplies the image. Copied text goes to the system " +
+                        "clipboard, and sharing opens the system share sheet. Android saves " +
+                        "search settings; device backup settings may affect saved app data. " +
+                        "Images and OCR results stay in memory and are discarded when the app " +
+                        "is backgrounded " +
                         "or the screen is recreated. An open photo picker can still complete " +
                         "after you return." + if (liveSearchAreaAvailable()) {
-                            " The optional live area restricts live matches to fully contained " +
+                            " The optional scan area restricts live matches to fully contained " +
                                 "words and phrases; it does not crop capture. Frozen, imported, " +
                                 "and shared images use the whole source. Freeze, Import, " +
                                 "backgrounding, or recreation resets the area."

@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.artkachenko.livetextfinder.search.SearchMatchMode
 import livetextfinder.shared.generated.resources.Res
+import livetextfinder.shared.generated.resources.finder_find_text
 import livetextfinder.shared.generated.resources.inspection_lists
 import livetextfinder.shared.generated.resources.inspection_more
 import livetextfinder.shared.generated.resources.search_context_list_identity
@@ -76,7 +77,7 @@ internal fun FinderLiveDock(
             OutlinedTextField(
                 value = query,
                 onValueChange = onQueryChange,
-                label = { Text("Find in recognized text") },
+                label = { Text(stringResource(Res.string.finder_find_text)) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
                 shape = MaterialTheme.shapes.medium,

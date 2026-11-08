@@ -19,6 +19,42 @@ import org.robolectric.annotation.Config
 @Config(sdk = [35])
 class PreviewStreamFeedbackObserverTest {
     @Test
+    fun cameraStartPublishesStartingBeforeSessionStartAndOldRetryCannotAdvanceReplacement() {
+        val startOrder = mutableListOf<String>()
+        var publishedState = OcrUiState(OcrStatus.Paused)
+        startCameraAttempt(
+            report = { state ->
+                publishedState = state
+                startOrder += "published"
+            },
+            startSession = {
+                assertEquals(OcrStatus.Starting, publishedState.status)
+                startOrder += "session-start"
+            },
+        )
+        assertEquals(listOf("published", "session-start"), startOrder)
+
+        var attempt = 6
+        val retryFromAttemptA = cameraAttemptRetryCallback(
+            expectedAttempt = 5,
+            currentAttempt = { attempt },
+            updateAttempt = { attempt = it },
+        )
+        retryFromAttemptA()
+        assertEquals(6, attempt)
+
+        val retryFromAttemptB = cameraAttemptRetryCallback(
+            expectedAttempt = attempt,
+            currentAttempt = { attempt },
+            updateAttempt = { attempt = it },
+        )
+        retryFromAttemptB()
+        assertEquals(7, attempt)
+        retryFromAttemptA()
+        assertEquals(7, attempt)
+    }
+
+    @Test
     fun lifecycleGatesFeedbackReplaysCurrentStateAndDestroyDetachesObserver() {
         val owner = TestLifecycleOwner()
         owner.lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)

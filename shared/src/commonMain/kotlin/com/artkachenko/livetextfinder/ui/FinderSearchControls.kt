@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import com.artkachenko.livetextfinder.search.SearchMatchMode
 import livetextfinder.shared.generated.resources.Res
+import livetextfinder.shared.generated.resources.finder_find_text
 import livetextfinder.shared.generated.resources.finder_options
 import livetextfinder.shared.generated.resources.search_context_manual_inactive
 import livetextfinder.shared.generated.resources.search_context_use_manual
@@ -74,7 +75,7 @@ internal fun FinderSearchControls(
             OutlinedTextField(
                 value = query,
                 onValueChange = onQueryChange,
-                label = { Text("Find in recognized text") },
+                label = { Text(stringResource(Res.string.finder_find_text)) },
                 trailingIcon = if (activeListName != null) {
                     {
                         FinderSecondaryAction(
