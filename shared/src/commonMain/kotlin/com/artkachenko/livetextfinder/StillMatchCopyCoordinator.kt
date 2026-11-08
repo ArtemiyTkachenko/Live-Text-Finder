@@ -5,6 +5,7 @@ import com.artkachenko.livetextfinder.camera.FrozenFrameOwner
 import com.artkachenko.livetextfinder.camera.ImportedImageOwner
 import com.artkachenko.livetextfinder.camera.ImportedImagePhase
 import com.artkachenko.livetextfinder.search.SearchSessionController
+import com.artkachenko.livetextfinder.search.StillMatchCopyPayload
 import com.artkachenko.livetextfinder.search.StillMatchRow
 import com.artkachenko.livetextfinder.search.StillMatchSourceState
 import com.artkachenko.livetextfinder.search.TextSearchResult
@@ -33,6 +34,7 @@ internal class StillMatchCopyCoordinator(
         searchIdentity: String,
         selectedMatchIndex: Int,
         ownerToken: Any,
+        payload: StillMatchCopyPayload = StillMatchCopyPayload.MatchedText,
     ): StillMatchCopyOutcome {
         return try {
             val copied = copyStillMatch(
@@ -71,6 +73,7 @@ internal class StillMatchCopyCoordinator(
                 currentSelectedIndex = selectedIndex,
                 writeText = writeText,
                 currentContextCurrent = contextIsCurrent,
+                payload = payload,
             )
             if (copied) StillMatchCopyOutcome.Copied else StillMatchCopyOutcome.Stale
         } catch (cancelled: CancellationException) {

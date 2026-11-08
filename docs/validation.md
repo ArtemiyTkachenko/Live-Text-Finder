@@ -748,3 +748,42 @@ compilation and shared iOS simulator compilation. Log: `work/journey-refresh/int
 The isolated worktree had older generated duplicate report copies; canonical report filenames
 correspond to its recorded 382 tests/54 suites. Merged MAIN reports are the integration evidence.
 No APK, installation, device OCR/alignment/focus/torch, or TalkBack check was performed.
+
+## Still contextual copying and dialog ownership — 2026-11-08
+
+The occurrence dialog now offers Copy line alongside Copy matched text, with Show on image as its
+primary action. Both copy payloads validate the selected original occurrence and its line context
+against reconstructed OCR elements, preserving normalized whitespace and original case. The current
+source ID, exact snapshot, owner token, search/mode, selection and pre-write context guards remain
+in force; copying remains available when locating the image is unavailable. Dialog-opening and
+request identities prevent an earlier suspended clipboard completion or retained callback from
+changing a reopened dialog. Disposed remembered sessions are invalidated, including replacement
+with the same keys. A platform clipboard write that has already started cannot be revoked; tests
+separately verify zero writes before a stale start and suppressed UI completion after a valid start.
+
+The production content assembly reproduced caption-dependent viewport resizing when moving from a
+short navigation caption to a long saved-list term. A one-line ellipsized caption now
+keeps the viewport and focused transform stable across previous/next navigation; its full semantic
+description is retained. This reproduction established resizing, not a downstream transform reset.
+The dialog actions scroll into full view at 320×480dp/1.5× and 320×360dp/2× font, with at least 48dp
+hit targets; short windows require scrolling. Native actions exercise matched and line clipboard
+entries, selection, Show on image and cancellation, including line copy with locating unavailable.
+
+Focused coordinator/session/row/native-Compose checks passed **27 tests**. The expanded frozen-owner
+coordinator suite then passed **3 tests**, including exact normalized line context from OCR elements
+and zero writes for a replaced owner sharing the same snapshot and frame identity. The final
+canonical command passed Android debug Kotlin compilation, the complete host suite (**396 tests across
+55 suites; zero failures, errors or skips**), Android lint (**11 warnings, zero errors**) and shared
+iOS simulator compilation. Explicit ASCII-sorted contiguous imports, changed/new Kotlin 100-column
+and tab checks, `git diff --check`, and preservation of this document's historical prefix passed.
+No repository Kotlin formatter is configured. Logs and 117 regenerated native PNGs are outside the
+checkout in `/Users/artemii/Documents/Codex/2026-10-30/rea/work/journey-refresh/context-copy/`.
+The final log is `correction-final-checks.log`; XML counts are preserved in
+`correction-results-summary.txt` and `correction-host-results/`. Representative captures are
+`retained-dark-live-selected-false.png`, `retained-light-frozen-selected-true.png`,
+`still-matches-dialog-dark-tall-large-text-all-actions.png` and
+`still-matches-dialog-dark-short-double-text-actions.png`. Dock captures show current Find text and
+Contains text language. These are host fixtures and production workflow checks, not a full App or
+physical-device render. Physical clipboard behavior, TalkBack, camera/OCR accuracy, capture-control
+hardware behavior and real crop/rotation/zoom alignment remain pending. No APK, device query,
+installation, network OCR, alerts, persistence or engine changes were performed.

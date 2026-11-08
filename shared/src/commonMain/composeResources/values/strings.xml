@@ -173,7 +173,7 @@
     <string name="status_share_image">Share image</string>
     <string name="status_cancel">Cancel</string>
     <string name="help_still_title">Inspect an image</string>
-    <string name="help_still_body">On a frozen or imported image, pinch to zoom and drag to pan, or use Zoom in, Zoom out and Reset view. Open Matches, select a result and choose Copy matched text. Sharing still uses the whole image.</string>
+    <string name="help_still_body">On a frozen or imported image, pinch to zoom and drag to pan, or use Zoom in, Zoom out and Reset view. Open Matches, select a result and choose Show on image, Copy matched text or Copy line. Sharing still uses the whole image.</string>
     <string name="still_zoom_in">Zoom in</string>
     <string name="still_zoom_out">Zoom out</string>
     <string name="still_reset_view">Reset view</string>
@@ -185,6 +185,7 @@
     <string name="still_match_position_description">Match %1$d of %2$d for %3$s: %4$s</string>
     <string name="still_match_show">Show on image</string>
     <string name="still_match_copy_short">Copy</string>
+    <string name="still_copy_line">Copy line</string>
     <string name="still_copy_match">Copy matched text</string>
     <string name="still_match_copied">Matched text copied</string>
     <string name="still_match_copy_failed">Could not copy this match. Select it again.</string>

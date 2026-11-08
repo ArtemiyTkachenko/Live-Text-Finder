@@ -81,6 +81,7 @@ import com.artkachenko.livetextfinder.search.SearchListEditorState
 import com.artkachenko.livetextfinder.search.SearchListTransferCopy
 import com.artkachenko.livetextfinder.search.SearchPresentationOwner
 import com.artkachenko.livetextfinder.search.SearchSessionController
+import com.artkachenko.livetextfinder.search.StillMatchCopyPayload
 import com.artkachenko.livetextfinder.search.StillMatchRow
 import com.artkachenko.livetextfinder.search.dispatchSearchListSelection
 import com.artkachenko.livetextfinder.search.drawHighlightOutlines
@@ -420,17 +421,15 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
             val termSummaries = remember(search, sessionState.persisted.highlightColor) {
                 searchTermSummaries(search, sessionState.persisted.highlightColor)
             }
-            var matchesDialogOpen by remember(inspectionIdentity, activeSearch.identity) {
-                mutableStateOf(false)
-            }
+            val copySession = rememberStillMatchCopySession(
+                inspectionIdentity,
+                activeSearch.identity,
+            )
             val selectedMatchState = remember(inspectionIdentity, activeSearch.identity) {
                 mutableStateOf<Int?>(null)
             }
             var selectedMatch by selectedMatchState
             var selectedTermId by remember(inspectionIdentity, activeSearch.identity) {
-                mutableStateOf<String?>(null)
-            }
-            var copyMessage by remember(inspectionIdentity, activeSearch.identity) {
                 mutableStateOf<String?>(null)
             }
             val clipboard = LocalClipboard.current
@@ -564,7 +563,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                 if (sourceIdentity == null || freezeState.mode != FreezeMode.Frozen &&
                     importedState.phase != ImportedImagePhase.Imported
                 ) {
-                    matchesDialogOpen = false
+                    copySession.updateDialogOpen(false)
                     selectedMatch = null
                 }
             }
@@ -646,20 +645,25 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
             val unavailableExplanation = unavailableResultsExplanation(unavailableGuidance)
             val copyFailedMessage = stringResource(Res.string.still_match_copy_failed)
             val copiedMessage = stringResource(Res.string.still_match_copied)
-            val copySelectedMatch: () -> Unit = {
+            val copyOpening = copySession.openingToken
+            val copySelectedMatch: (StillMatchCopyPayload) -> Unit = copy@{ payload ->
                 val selectedIndex = expectedSelectedIndex
                 val row = matchRows.firstOrNull { it.index == selectedIndex }
                 val copyOwnerToken = expectedOwnerToken
+                if (!copySession.acceptsOpening(copyOpening)) return@copy
                 if (sourceIdentity == null || selectedIndex == null || row == null ||
-                    copyOwnerToken == null ||
-                    !copyActionIsCurrent(row, selectedIndex) ||
-                    stillMatchText(row, search) != row.matchedText
+                    copyOwnerToken == null || !copyActionIsCurrent(row, selectedIndex)
                 ) {
-                    copyMessage = copyFailedMessage
+                    copySession.fail(copyOpening, copyFailedMessage)
                 } else {
                     coroutineScope.launch {
-                        try {
-                            val outcome = StillMatchCopyCoordinator(
+                        copySession.copy(
+                            token = copyOpening,
+                            contextIsCurrent = { copyActionIsCurrent(row, selectedIndex) },
+                            copiedMessage = copiedMessage,
+                            failureMessage = copyFailedMessage,
+                        ) { requestIsCurrent ->
+                            StillMatchCopyCoordinator(
                                 importedOwner = importedOwner,
                                 frozenOwner = frozenOwner,
                                 session = session,
@@ -667,9 +671,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                                 writeText = { text ->
                                     clipboard.setClipEntry(plainTextClipEntry(text))
                                 },
-                                contextIsCurrent = {
-                                    copyActionIsCurrent(row, selectedIndex)
-                                },
+                                contextIsCurrent = requestIsCurrent,
                             ).copy(
                                 row,
                                 search,
@@ -677,24 +679,8 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                                 activeSearch.identity,
                                 selectedIndex,
                                 copyOwnerToken,
+                                payload,
                             )
-                            if (!copyActionIsCurrent(row, selectedIndex)) return@launch
-                            when (outcome) {
-                                StillMatchCopyOutcome.Copied -> {
-                                    copyMessage = copiedMessage
-                                    matchesDialogOpen = false
-                                }
-                                StillMatchCopyOutcome.Stale,
-                                StillMatchCopyOutcome.Failed -> {
-                                    copyMessage = copyFailedMessage
-                                }
-                            }
-                        } catch (cancelled: kotlinx.coroutines.CancellationException) {
-                            throw cancelled
-                        } catch (error: Exception) {
-                            if (copyActionIsCurrent(row, selectedIndex)) {
-                                copyMessage = copyFailedMessage
-                            }
                         }
                     }
                 }
@@ -754,7 +740,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
             val onShowTerms = {
                 RetainedInspectionActionDispatcher.showTerms(
                     { searchResultsDialogOpen = it },
-                    { matchesDialogOpen = it },
+                    { copySession.updateDialogOpen(it) },
                 )
             }
             val onUseManualSearch: () -> Unit = {
@@ -1321,7 +1307,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                                 onMatches = {
                                     focusManager.clearFocus()
                                     keyboardController?.hide()
-                                    matchesDialogOpen = true
+                                    copySession.updateDialogOpen(true)
                                 },
                             )
                             val selectedRow = selectedNavigationRow
@@ -1356,10 +1342,14 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                                             1,
                                         )?.let { locateMatch(it, expectedSelectedIndex) }
                                     },
-                                    onCopy = copySelectedMatch,
+                                    onCopy = {
+                                        copySelectedMatch(StillMatchCopyPayload.MatchedText)
+                                    },
                                 )
                             }
-                            copyMessage?.let { message -> ContextMessage(message = message) }
+                            copySession.message?.let { message ->
+                                ContextMessage(message = message)
+                            }
                         }
                     }
                     if (useSharedDock && !editorCanRemainOpen) {
@@ -1381,7 +1371,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                                     dockFocusManager::clearFocus,
                                     { dockKeyboardController?.hide() },
                                     { searchResultsDialogOpen = it },
-                                    { matchesDialogOpen = it },
+                                    { copySession.updateDialogOpen(it) },
                                 )
                             },
                             resultsLabel = if (
@@ -1433,13 +1423,14 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                     }
                 },
             )
-            if (matchesDialogOpen && sourceIdentity != null) {
+            if (copySession.dialogOpen && sourceIdentity != null) {
                 val selectedDialogRow = matchRows.firstOrNull { it.index == selectedMatch }
                 StillMatchesDialog(
                     rows = matchRows,
                     selectedIndex = selectedMatch,
-                    copyMessage = copyMessage,
-                    onSelect = { index ->
+                    copyMessage = copySession.message,
+                    onSelect = select@{ index ->
+                        if (!copySession.acceptsOpening(copyOpening)) return@select
                         val row = matchRows.firstOrNull { it.index == index }
                         if (row != null && stillActionIsCurrent(
                             row,
@@ -1449,14 +1440,20 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                             selectedMatch = index
                         }
                     },
-                    onDismiss = { matchesDialogOpen = false },
-                    onCopy = copySelectedMatch,
-                    onShowOnImage = {
+                    onDismiss = {
+                        if (copySession.acceptsOpening(copyOpening)) {
+                            copySession.updateDialogOpen(false)
+                        }
+                    },
+                    onCopy = { copySelectedMatch(StillMatchCopyPayload.MatchedText) },
+                    onCopyLine = { copySelectedMatch(StillMatchCopyPayload.Line) },
+                    onShowOnImage = show@{
+                        if (!copySession.acceptsOpening(copyOpening)) return@show
                         val row = selectedDialogRow
                         if (row != null) {
                             locateMatch(row, expectedSelectedIndex) {
                                 selectedTermId = null
-                                matchesDialogOpen = false
+                                copySession.updateDialogOpen(false)
                             }
                         }
                     },

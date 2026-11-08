@@ -2,6 +2,11 @@ package com.artkachenko.livetextfinder.search
 
 import com.artkachenko.livetextfinder.ocr.RecognizedTextContent
 
+internal enum class StillMatchCopyPayload {
+    MatchedText,
+    Line,
+}
+
 internal data class StillMatchSourceState(
     val sourceIdentity: String?,
     val content: RecognizedTextContent?,
@@ -21,11 +26,19 @@ internal suspend fun copyStillMatch(
     currentSelectedIndex: () -> Int?,
     writeText: suspend (String) -> Unit,
     currentContextCurrent: () -> Boolean = { true },
+    payload: StillMatchCopyPayload = StillMatchCopyPayload.MatchedText,
 ): Boolean {
     if (row.index != selectedIndex || result.spec.identity != expectedSearchIdentity) {
         return false
     }
-    val text = stillMatchText(row, result) ?: return false
+    val matchedText = stillMatchText(row, result) ?: return false
+    val line = result.content?.lines?.getOrNull(row.occurrence.lineIndex) ?: return false
+    val lineText = normalizedElementLine(line).text
+    if (row.lineContext != lineText) return false
+    val text = when (payload) {
+        StillMatchCopyPayload.MatchedText -> matchedText
+        StillMatchCopyPayload.Line -> lineText
+    }
 
     fun isCurrent(): Boolean {
         val current = currentSource()

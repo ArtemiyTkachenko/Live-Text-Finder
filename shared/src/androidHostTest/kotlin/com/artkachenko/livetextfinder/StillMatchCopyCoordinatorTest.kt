@@ -18,6 +18,7 @@ import com.artkachenko.livetextfinder.ocr.TextElement
 import com.artkachenko.livetextfinder.ocr.TextLine
 import com.artkachenko.livetextfinder.ocr.TextPoint
 import com.artkachenko.livetextfinder.search.FrameIdentity
+import com.artkachenko.livetextfinder.search.StillMatchCopyPayload
 import com.artkachenko.livetextfinder.search.inMemorySearchSessionController
 import com.artkachenko.livetextfinder.search.searchRecognizedContent
 import com.artkachenko.livetextfinder.search.searchRecognizedText
@@ -114,6 +115,95 @@ class StillMatchCopyCoordinatorTest {
             importedOwner.dispose()
             frozenOwner.stop()
             bitmap.recycle()
+        }
+    }
+
+    @Test
+    fun frozenLineCopyUsesExactElementsAndRejectsReplacedOwnerWithTheSameFrameIdentity() {
+        val importedOwner = ImportedImageOwner()
+        val frozenOwner = FrozenFrameOwner()
+        val session = inMemorySearchSessionController()
+        session.setManualQuery("mixed")
+        val snapshot = OcrSnapshot(
+            text = "Ignored aggregate diagnostic text",
+            lines = listOf(
+                TextLine(
+                    "Ignored line diagnostic text", null, emptyList(),
+                    listOf("  Before\t", "MiXeD", "after\n context  ").mapIndexed { index, text ->
+                        TextElement(
+                            text,
+                            TextBounds(index * 40, 0, (index + 1) * 40, 20),
+                            emptyList(),
+                        )
+                    },
+                ),
+            ),
+            frame = FrameInfo(
+                12, 160, 40, 0, TextBounds(0, 0, 160, 40),
+                listOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f),
+            ),
+        )
+        var requestId: Long? = null
+        frozenOwner.attachSession(
+            requestCapture = { id ->
+                requestId = id
+                true
+            },
+            cancelCapture = {
+            },
+        )
+        val bitmaps = mutableListOf<Bitmap>()
+        fun captureSameSnapshot() {
+            check(frozenOwner.freeze(cameraReady = true))
+            val bitmap = Bitmap.createBitmap(160, 40, Bitmap.Config.ARGB_8888)
+            bitmaps.add(bitmap)
+            check(
+                frozenOwner.accept(
+                    CapturedCameraFrame(
+                        checkNotNull(requestId), bitmap, snapshot, FrameIdentity(4, 12),
+                    ),
+                ),
+            )
+        }
+        val writes = mutableListOf<String>()
+        try {
+            captureSameSnapshot()
+            val result = searchRecognizedText(
+                session.state.value.activeSearch,
+                OcrUiState(OcrStatus.TextRecognized, snapshot = snapshot),
+            )
+            val row = stillMatchRows(result).single()
+            val firstFrame = checkNotNull(frozenOwner.state.value.frame)
+            val coordinator = StillMatchCopyCoordinator(
+                importedOwner, frozenOwner, session,
+                selectedIndex = { row.index },
+                writeText = { writes.add(it) },
+            )
+            fun copyLine(ownerToken: Any) = runBlocking {
+                coordinator.copy(
+                    row, result, "frozen:${firstFrame.identity}", result.spec.identity,
+                    row.index, ownerToken, StillMatchCopyPayload.Line,
+                )
+            }
+            assertEquals("MiXeD", row.matchedText)
+            assertEquals(StillMatchCopyOutcome.Copied, copyLine(firstFrame))
+            assertEquals(listOf("Before MiXeD after context"), writes)
+            writes.clear()
+
+            frozenOwner.resume()
+            captureSameSnapshot()
+            val replacementFrame = checkNotNull(frozenOwner.state.value.frame)
+            assertEquals(firstFrame.identity, replacementFrame.identity)
+            check(firstFrame.snapshot === replacementFrame.snapshot)
+            check(firstFrame !== replacementFrame)
+            assertEquals(StillMatchCopyOutcome.Stale, copyLine(firstFrame))
+            assertEquals(emptyList(), writes)
+            assertEquals(StillMatchCopyOutcome.Copied, copyLine(replacementFrame))
+            assertEquals(listOf("Before MiXeD after context"), writes)
+        } finally {
+            importedOwner.dispose()
+            frozenOwner.stop()
+            bitmaps.forEach(Bitmap::recycle)
         }
     }
 

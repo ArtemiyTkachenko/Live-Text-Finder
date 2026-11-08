@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.IntSize
 import com.artkachenko.livetextfinder.FinderStatusRegion
 import com.artkachenko.livetextfinder.StillMatchCopyCoordinator
 import com.artkachenko.livetextfinder.StillMatchCopyOutcome
+import com.artkachenko.livetextfinder.StillMatchCopySession
 import com.artkachenko.livetextfinder.StillMatchNavigationCoordinator
 import com.artkachenko.livetextfinder.adjacentStillMatchRow
 import com.artkachenko.livetextfinder.camera.FreezeMode
@@ -77,6 +78,7 @@ import com.artkachenko.livetextfinder.ocr.TextElement
 import com.artkachenko.livetextfinder.ocr.TextLine
 import com.artkachenko.livetextfinder.ocr.TextPoint
 import com.artkachenko.livetextfinder.performStillMatchLocate
+import com.artkachenko.livetextfinder.rememberStillMatchCopySession
 import com.artkachenko.livetextfinder.rememberStillMatchNavigationCoordinator
 import com.artkachenko.livetextfinder.search.ActiveSearchSpec
 import com.artkachenko.livetextfinder.search.ElementOutline
@@ -91,6 +93,7 @@ import com.artkachenko.livetextfinder.search.SearchMatchMode
 import com.artkachenko.livetextfinder.search.SearchPresentationOwner
 import com.artkachenko.livetextfinder.search.SearchSessionState
 import com.artkachenko.livetextfinder.search.SearchTerm
+import com.artkachenko.livetextfinder.search.StillMatchCopyPayload
 import com.artkachenko.livetextfinder.search.StillMatchRow
 import com.artkachenko.livetextfinder.search.TextSearchResult
 import com.artkachenko.livetextfinder.search.drawHighlightOutlines
@@ -892,6 +895,101 @@ class StillInspectionUiTest {
     }
 
     @Test
+    fun navigationCaptionKeepsViewportAndFocusedTransformAcrossSavedListTerms() {
+        val longTerm = mutableStateOf(false)
+        val viewport = mutableStateOf(IntSize.Zero)
+        var transform = StillViewTransform()
+        var setTransform: (StillViewTransform) -> Unit = {}
+        mount(320, 480, fontScale = 1.5f) {
+            LiveTextFinderTheme(darkThemeOverride = false, dynamicColor = false) {
+                var currentTransform by rememberStillViewTransform("import:1", viewport.value)
+                transform = currentTransform
+                setTransform = { currentTransform = it }
+                FinderContentAssembly(
+                    scrollState = androidx.compose.foundation.ScrollState(0),
+                    scrollable = false,
+                    modifier = Modifier.fillMaxSize(),
+                    topContent = {},
+                    managerContent = {},
+                    viewportContent = {
+                        Surface(
+                            Modifier.weight(1f).fillMaxWidth()
+                                .onSizeChanged { viewport.value = it },
+                        ) {}
+                    },
+                    footerContent = {
+                        StillMatchNavigationControls(
+                            position = if (longTerm.value) 2 else 1,
+                            count = 2,
+                            matchedTerm = if (longTerm.value) {
+                                "A long saved search list term with enough words to wrap"
+                            } else {
+                                "ID"
+                            },
+                            matchedText = "ID",
+                            canLocate = true,
+                            onPrevious = { longTerm.value = false },
+                            onNext = { longTerm.value = true },
+                            onCopy = {},
+                        )
+                    },
+                )
+            }
+        }
+        val initialViewport = viewport.value
+        setTransform(StillViewTransform(zoom = 2f))
+        measureCurrentComposition()
+        assertEquals(2f, transform.zoom)
+        clickText("Next")
+        measureCurrentComposition()
+        assertEquals(initialViewport, viewport.value)
+        assertEquals(2f, transform.zoom)
+        clickText("Previous")
+        measureCurrentComposition()
+        assertEquals(initialViewport, viewport.value)
+        assertEquals(2f, transform.zoom)
+        val rendered = renderRoot()
+        try {
+            saveVisual(rendered, "still-navigation-stable-viewport-large-text.png")
+        } finally {
+            rendered.recycle()
+        }
+    }
+
+    @Test
+    fun disposedCopySessionCannotOwnAReplacementWithTheSameKeys() {
+        val identity = mutableStateOf("import:1")
+        var current: StillMatchCopySession? = null
+        var renderedOpening: Any? = null
+        mount(320, 480) {
+            current = rememberStillMatchCopySession(identity.value, "same-query")
+            renderedOpening = checkNotNull(current).openingToken
+        }
+        val first = checkNotNull(current)
+        first.updateDialogOpen(true)
+        measureCurrentComposition()
+        val token = first.openingToken
+        assertTrue(token === renderedOpening)
+        first.updateDialogOpen(false)
+        first.updateDialogOpen(true)
+        measureCurrentComposition()
+        assertFalse(token === renderedOpening)
+        assertTrue(first.openingToken === renderedOpening)
+        identity.value = "import:2"
+        measureCurrentComposition()
+        assertFalse(first.acceptsOpening(token))
+        identity.value = "import:1"
+        measureCurrentComposition()
+        val replacement = checkNotNull(current)
+        assertFalse(first === replacement)
+        replacement.updateDialogOpen(true)
+        assertFalse(first.acceptsOpening(token))
+        assertTrue(replacement.dialogOpen)
+        disposeComposition()
+        assertFalse(replacement.acceptsOpening(replacement.openingToken))
+    }
+
+    @Test
     fun rememberedTransformResetsForSourceAndViewportButSurvivesSearchAndColorChanges() {
         val source = mutableStateOf("frozen:request-1")
         val viewport = mutableStateOf(IntSize(100, 100))
@@ -1278,6 +1376,7 @@ class StillInspectionUiTest {
     @Test
     fun dialogSelectionEnablesCopyAndUsesScrollableOccurrenceRows() {
         val darkTheme = mutableStateOf(false)
+        val contentVisible = mutableStateOf(true)
         val selected = mutableStateOf<Int?>(null)
         val session = inMemorySearchSessionController()
         val snapshot = importedSnapshot((0 until 30).map { "match $it context" })
@@ -1308,43 +1407,40 @@ class StillInspectionUiTest {
                 copied.add(checkNotNull(clipEntry).clipData.getItemAt(0).text.toString())
             }
         }
-        val coordinator = StillMatchCopyCoordinator(
-            importedOwner = importedOwner,
-            frozenOwner = frozenOwner,
-            session = session,
-            selectedIndex = { selected.value },
-            writeText = { clipboard.setClipEntry(plainTextClipEntry(it)) },
-        )
-        val copyMessage = mutableStateOf<String?>(null)
+        val copySession = StillMatchCopySession()
+        copySession.updateDialogOpen(true)
+        fun copyPayload(payload: StillMatchCopyPayload) {
+            val index = selected.value ?: return
+            val ownerToken = importedOwner.state.value.snapshot ?: return
+            runBlocking {
+                copySession.copy(
+                    copySession.openingToken,
+                    contextIsCurrent = { selected.value == index },
+                    copiedMessage = "Copied",
+                    failureMessage = "Could not copy this match. Select it again.",
+                ) { isCurrent ->
+                    StillMatchCopyCoordinator(
+                        importedOwner, frozenOwner, session, { selected.value },
+                        { clipboard.setClipEntry(plainTextClipEntry(it)) }, isCurrent,
+                    ).copy(
+                        rows[index], result, "import:${snapshot.sourceIdentity}",
+                        result.spec.identity, index, ownerToken, payload,
+                    )
+                }
+            }
+        }
         var showCount = 0
         mount(320, 480, fontScale = 1.5f) {
             LiveTextFinderTheme(darkThemeOverride = darkTheme.value, dynamicColor = false) {
                 StillMatchesDialog(
                     rows = rows,
                     selectedIndex = selected.value,
-                    copyMessage = copyMessage.value,
+                    copyMessage = copySession.message,
                     onSelect = { selected.value = it },
-                    onCopy = {
-                        val index = selected.value ?: return@StillMatchesDialog
-                        val ownerToken = importedOwner.state.value.snapshot
-                            ?: return@StillMatchesDialog
-                        val outcome = runBlocking {
-                            coordinator.copy(
-                                rows[index],
-                                result,
-                                "import:${snapshot.sourceIdentity}",
-                                result.spec.identity,
-                                index,
-                                ownerToken,
-                            )
-                        }
-                        if (outcome == StillMatchCopyOutcome.Copied) {
-                            copyMessage.value = "Copied"
-                        } else {
-                            copyMessage.value = "Could not copy this match. Select it again."
-                        }
-                    },
+                    onCopy = { copyPayload(StillMatchCopyPayload.MatchedText) },
+                    onCopyLine = { copyPayload(StillMatchCopyPayload.Line) },
                     onShowOnImage = { showCount++ },
+                    canLocate = contentVisible.value,
                     onDismiss = {
                     },
                 )
@@ -1364,6 +1460,7 @@ class StillInspectionUiTest {
         val title = nodes(dialogRoot).first { nodeText(it).contains("Matches in this image") }
         assertEquals(1.5f, title.layoutInfo.density.fontScale)
         fun assertDialogActionSize(label: String, minimumHeight: Float) {
+            scrollDialogActionIntoView(label)
             val action = nodes(dialogRoot).first { node ->
                 nodeText(node).contains(label) &&
                     node.config.getOrNull(SemanticsActions.OnClick) != null
@@ -1379,7 +1476,7 @@ class StillInspectionUiTest {
             )
         }
         val scrollable = nodes(dialogRoot).single { node ->
-            node.config.getOrNull(SemanticsActions.ScrollBy) != null
+            node.config.getOrNull(SemanticsActions.ScrollToIndex) != null
         }
         assertNotNull(scrollable)
         val disabledCopy = nodes(dialogRoot).first { node ->
@@ -1390,13 +1487,15 @@ class StillInspectionUiTest {
             nodeText(node) == "Show on image"
         }
         assertNotNull(disabledShow.config.getOrNull(SemanticsProperties.Disabled))
-        assertDialogActionSize("Copy matched text", 52f)
-        assertDialogActionSize("Show on image", 48f)
+        assertDialogActionSize("Copy matched text", 48f)
+        assertDialogActionSize("Copy line", 48f)
+        assertDialogActionSize("Show on image", 52f)
         assertDialogActionSize("Cancel", 48f)
         assertTrue(
             nodes(dialogRoot).any { node -> nodeText(node) == "50 matches" },
             "Dialog text: ${nodes(dialogRoot).map(::nodeText)}",
         )
+        scrollDialogContentToTop()
         val scrollToTargetAction = checkNotNull(
             scrollable.config.getOrNull(SemanticsActions.ScrollBy)?.action,
         )
@@ -1407,7 +1506,7 @@ class StillInspectionUiTest {
         }
         repeat(20) {
             val list = nodes(dialogComposeRoot()).single { node ->
-                node.config.getOrNull(SemanticsActions.ScrollBy) != null
+                node.config.getOrNull(SemanticsActions.ScrollToIndex) != null
             }
             val listTop = list.positionInRoot.y
             val listBottom = listTop + list.size.height
@@ -1429,6 +1528,7 @@ class StillInspectionUiTest {
         val rowClick = checkNotNull(rowNode).config.getOrNull(SemanticsActions.OnClick)?.action
         assertTrue(checkNotNull(rowClick)())
         measureCurrentComposition()
+        scrollDialogActionIntoView("Show on image")
         val show = nodes(dialogComposeRoot()).first { node ->
             nodeText(node) == "Show on image"
         }
@@ -1438,8 +1538,9 @@ class StillInspectionUiTest {
         darkTheme.value = true
         Snapshot.sendApplyNotifications()
         measureCurrentComposition()
-        assertDialogActionSize("Copy matched text", 52f)
-        assertDialogActionSize("Show on image", 48f)
+        assertDialogActionSize("Copy matched text", 48f)
+        assertDialogActionSize("Copy line", 48f)
+        assertDialogActionSize("Show on image", 52f)
         assertDialogActionSize("Cancel", 48f)
         saveDialog("still-matches-dialog-dark-large-text.png")
         assertTrue(
@@ -1447,6 +1548,7 @@ class StillInspectionUiTest {
                 node.config.getOrNull(SemanticsProperties.Selected) == true
             },
         )
+        scrollDialogActionIntoView("Copy matched text")
         val copy = nodes(dialogComposeRoot()).first { node ->
             nodeText(node).contains("Copy matched text") &&
                 node.config.getOrNull(SemanticsActions.OnClick) != null
@@ -1454,7 +1556,25 @@ class StillInspectionUiTest {
         assertTrue(checkNotNull(copy.config.getOrNull(SemanticsActions.OnClick)?.action)())
         measureCurrentComposition()
         assertEquals(listOf("match 2"), copied)
+        copySession.updateDialogOpen(true)
+        measureCurrentComposition()
+        contentVisible.value = false
+        measureCurrentComposition()
+        val hiddenShow = nodes(dialogComposeRoot()).first { nodeText(it) == "Show on image" }
+        assertNotNull(hiddenShow.config.getOrNull(SemanticsProperties.Disabled))
+        scrollDialogActionIntoView("Copy line")
+        val copyLine = nodes(dialogComposeRoot()).first { node ->
+            nodeText(node) == "Copy line" &&
+                node.config.getOrNull(SemanticsActions.OnClick) != null
+        }
+        assertTrue(checkNotNull(copyLine.config.getOrNull(SemanticsActions.OnClick)?.action)())
+        measureCurrentComposition()
+        assertEquals(listOf("match 2", "match 2 context"), copied)
+        contentVisible.value = true
+        copySession.updateDialogOpen(true)
+        measureCurrentComposition()
 
+        scrollDialogContentToTop()
         val scrollAction = checkNotNull(
             scrollable.config.getOrNull(SemanticsActions.ScrollBy)?.action,
         )
@@ -1470,15 +1590,115 @@ class StillInspectionUiTest {
         assertTrue(checkNotNull(lastRow.config.getOrNull(SemanticsActions.OnClick)?.action)())
         measureCurrentComposition()
         dialogNodes = nodes(dialogComposeRoot())
+        scrollDialogActionIntoView("Copy matched text")
+        dialogNodes = nodes(dialogComposeRoot())
         val copyScrolled = dialogNodes.first { node ->
             nodeText(node).contains("Copy matched text") &&
                 node.config.getOrNull(SemanticsActions.OnClick) != null
         }
         assertTrue(checkNotNull(copyScrolled.config.getOrNull(SemanticsActions.OnClick)?.action)())
         measureCurrentComposition()
-        assertEquals(listOf("match 2", "match 29"), copied)
+        assertEquals(listOf("match 2", "match 2 context", "match 29"), copied)
+        copySession.updateDialogOpen(true)
+        measureCurrentComposition()
+        dialog.window?.setLayout((360 * density).roundToInt(), (640 * density).roundToInt())
+        org.robolectric.Shadows.shadowOf(Looper.getMainLooper()).idle()
+        scrollDialogContentToTop()
+        saveDialog("still-matches-dialog-dark-tall-large-text-all-actions.png")
         importedOwner.dispose()
         frozenOwner.stop()
+    }
+
+    @Test
+    fun shortDialogKeepsAllActionsReachableAtDoubleFontScale() {
+        val rows = stillMatchRows(
+            searchRecognizedContent(
+                ActiveSearchSpec("compact", "Manual", listOf(SearchTerm("id", "match"))),
+                importedSnapshot(listOf("Before match after")),
+            ),
+        )
+        val calls = mutableListOf<String>()
+        mount(320, 360, fontScale = 2f) {
+            LiveTextFinderTheme(darkThemeOverride = true, dynamicColor = false) {
+                StillMatchesDialog(
+                    rows, rows.single().index, null,
+                    onSelect = { calls.add("select") },
+                    onCopy = { calls.add("copy") },
+                    onCopyLine = { calls.add("line") },
+                    onShowOnImage = { calls.add("show") },
+                    onDismiss = { calls.add("dismiss") },
+                )
+            }
+        }
+        val view = checkNotNull(ShadowDialog.getLatestDialog()?.window?.decorView)
+        val density = view.resources.displayMetrics.density
+        ShadowDialog.getLatestDialog()?.window?.setLayout(
+            (320 * density).roundToInt(), (360 * density).roundToInt(),
+        )
+        org.robolectric.Shadows.shadowOf(Looper.getMainLooper()).idle()
+        listOf("Show on image", "Copy matched text", "Copy line", "Cancel").forEach { label ->
+            val action = scrollDialogActionIntoView(label)
+            assertTrue(action.size.width / density >= 48f)
+            assertTrue(action.size.height / density >= 48f)
+            assertTrue(checkNotNull(action.config.getOrNull(SemanticsActions.OnClick)?.action)())
+            measureCurrentComposition()
+        }
+        assertEquals(listOf("show", "copy", "line", "dismiss"), calls)
+        saveDialog("still-matches-dialog-dark-short-double-text-actions.png")
+    }
+
+    private fun scrollDialogContentToTop() {
+        val scroll = nodes(dialogComposeRoot()).single { node ->
+            node.config.getOrNull(SemanticsActions.ScrollBy) != null &&
+                node.config.getOrNull(SemanticsActions.ScrollToIndex) == null
+        }
+        checkNotNull(scroll.config.getOrNull(SemanticsActions.ScrollBy)?.action)(0f, -10_000f)
+        measureCurrentComposition()
+    }
+
+    private fun scrollDialogActionIntoView(label: String): SemanticsNode {
+        repeat(3) {
+            val dialogNodes = nodes(dialogComposeRoot())
+            val action = dialogNodes.first { node ->
+                nodeText(node) == label &&
+                    node.config.getOrNull(SemanticsActions.OnClick) != null
+            }
+            val scroll = dialogNodes.single { node ->
+                node.config.getOrNull(SemanticsActions.ScrollBy) != null &&
+                    node.config.getOrNull(SemanticsActions.ScrollToIndex) == null
+            }
+            val top = scroll.positionInRoot.y
+            val bottom = top + scroll.size.height
+            val delta = when {
+                action.positionInRoot.y < top -> action.positionInRoot.y - top
+                action.positionInRoot.y + action.size.height > bottom ->
+                    action.positionInRoot.y + action.size.height - bottom
+                else -> 0f
+            }
+            if (delta != 0f) {
+                assertTrue(
+                    checkNotNull(scroll.config.getOrNull(SemanticsActions.ScrollBy)?.action)(
+                        0f, delta,
+                    ),
+                )
+                measureCurrentComposition()
+            }
+        }
+        val dialogNodes = nodes(dialogComposeRoot())
+        val action = dialogNodes.first { node ->
+            nodeText(node) == label && node.config.getOrNull(SemanticsActions.OnClick) != null
+        }
+        val scroll = dialogNodes.single { node ->
+            node.config.getOrNull(SemanticsActions.ScrollBy) != null &&
+                node.config.getOrNull(SemanticsActions.ScrollToIndex) == null
+        }
+        assertTrue(action.positionInRoot.y >= scroll.positionInRoot.y - 1f, label)
+        assertTrue(
+            action.positionInRoot.y + action.size.height <=
+                scroll.positionInRoot.y + scroll.size.height + 1f,
+            "$label is not fully reachable in the dialog scroll viewport",
+        )
+        return action
     }
 
     private fun mount(

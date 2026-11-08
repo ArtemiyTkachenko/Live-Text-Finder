@@ -17,7 +17,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -59,6 +61,7 @@ import livetextfinder.shared.generated.resources.search_results_title
 import livetextfinder.shared.generated.resources.search_results_unavailable_explanation
 import livetextfinder.shared.generated.resources.status_cancel
 import livetextfinder.shared.generated.resources.status_match_count
+import livetextfinder.shared.generated.resources.still_copy_line
 import livetextfinder.shared.generated.resources.still_copy_match
 import livetextfinder.shared.generated.resources.still_match_copy_short
 import livetextfinder.shared.generated.resources.still_match_next
@@ -196,7 +199,8 @@ internal fun StillMatchesDialog(
     copyMessage: String?,
     onSelect: (Int) -> Unit,
     onCopy: () -> Unit,
-    onShowOnImage: () -> Unit = {},
+    onCopyLine: () -> Unit,
+    onShowOnImage: () -> Unit,
     canLocate: Boolean = true,
     onDismiss: () -> Unit,
 ) {
@@ -211,7 +215,7 @@ internal fun StillMatchesDialog(
                     listState.scrollToItem(selectedItemIndex)
                 }
             }
-            Column(modifier = Modifier.heightIn(max = 180.dp)) {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                 Text(
                     pluralStringResource(
                         Res.plurals.status_match_count,
@@ -231,7 +235,7 @@ internal fun StillMatchesDialog(
                 }
                 LazyColumn(
                     state = listState,
-                    modifier = Modifier.weight(1f, fill = false).heightIn(max = 140.dp)
+                    modifier = Modifier.heightIn(max = 140.dp)
                         .semantics { selectableGroup() },
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
@@ -250,16 +254,26 @@ internal fun StillMatchesDialog(
                         color = MaterialTheme.colorScheme.error,
                     )
                 }
-            }
-        },
-        confirmButton = {
-            Column(horizontalAlignment = Alignment.End) {
                 FinderPrimaryAction(
+                    label = stringResource(Res.string.still_match_show),
+                    enabled = canLocate && selectedIndex != null &&
+                        rows.any { row -> row.index == selectedIndex },
+                    modifier = Modifier.fillMaxWidth().padding(top = FinderSpacing.small),
+                    onClick = onShowOnImage,
+                )
+                FinderSecondaryAction(
                     label = stringResource(Res.string.still_copy_match),
                     enabled = selectedIndex != null &&
                         rows.any { row -> row.index == selectedIndex },
                     modifier = Modifier.fillMaxWidth(),
                     onClick = onCopy,
+                )
+                FinderSecondaryAction(
+                    label = stringResource(Res.string.still_copy_line),
+                    enabled = selectedIndex != null &&
+                        rows.any { row -> row.index == selectedIndex },
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = onCopyLine,
                 )
                 FlowRow(
                     modifier = Modifier.fillMaxWidth(),
@@ -270,18 +284,13 @@ internal fun StillMatchesDialog(
                     verticalArrangement = Arrangement.Center,
                 ) {
                     FinderSecondaryAction(
-                        label = stringResource(Res.string.still_match_show),
-                        onClick = onShowOnImage,
-                        enabled = canLocate && selectedIndex != null &&
-                            rows.any { it.index == selectedIndex },
-                    )
-                    FinderSecondaryAction(
                         label = stringResource(Res.string.status_cancel),
                         onClick = onDismiss,
                     )
                 }
             }
         },
+        confirmButton = {},
         shape = MaterialTheme.shapes.extraLarge,
     )
 }
@@ -496,7 +505,7 @@ internal fun StillMatchNavigationControls(
         Text(
             text = "$matchedTerm: $matchedText",
             style = MaterialTheme.typography.bodySmall,
-            maxLines = 2,
+            maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
     }

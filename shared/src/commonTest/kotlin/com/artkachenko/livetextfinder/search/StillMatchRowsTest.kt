@@ -231,6 +231,60 @@ class StillMatchRowsTest {
         assertNull(stillMatchText(rows[0].copy(index = 9), result))
     }
 
+    @Test
+    fun bothPayloadsUseTrustedElementsAndRejectEveryStaleOrTamperedContext() {
+        val content = snapshot(listOf("  Before\t", "MiXeD", "  after\ntext  "))
+        val result = searchRecognizedText(
+            "mixed",
+            OcrUiState(OcrStatus.TextRecognized, snapshot = content),
+        )
+        val row = stillMatchRows(result).single()
+        val owner = Any()
+        val source = StillMatchSourceState("import:1", content, owner)
+        StillMatchCopyPayload.entries.forEach { payload ->
+            val writes = mutableListOf<String>()
+            fun attempt(
+                candidate: StillMatchRow = row,
+                currentSource: StillMatchSourceState = source,
+                searchIdentity: String = result.spec.identity,
+                selection: Int? = row.index,
+                contextCurrent: Boolean = true,
+            ): Boolean = runSuspend {
+                copyStillMatch(
+                    candidate, result, "import:1", result.spec.identity, row.index, owner,
+                    { currentSource }, { searchIdentity }, { selection }, { writes.add(it) },
+                    currentContextCurrent = { contextCurrent },
+                    payload = payload,
+                )
+            }
+            assertTrue(attempt())
+            assertEquals(
+                listOf(
+                    if (payload == StillMatchCopyPayload.Line) "Before MiXeD after text"
+                    else "MiXeD",
+                ),
+                writes,
+            )
+            writes.clear()
+            assertFalse(attempt(candidate = row.copy(lineContext = "untrusted UI context")))
+            assertFalse(attempt(candidate = row.copy(matchedText = "injected")))
+            assertFalse(attempt(candidate = row.copy(index = 1)))
+            assertFalse(attempt(currentSource = source.copy(sourceIdentity = "import:2")))
+            assertFalse(attempt(currentSource = source.copy(content = content.copy())))
+            assertFalse(attempt(currentSource = source.copy(ownerToken = Any())))
+            assertFalse(attempt(searchIdentity = manualSearchSpec("other").identity))
+            assertFalse(
+                attempt(
+                    searchIdentity = manualSearchSpec("mixed", SearchMatchMode.WholeWord).identity,
+                ),
+            )
+            assertFalse(attempt(selection = null))
+            assertFalse(attempt(selection = 1))
+            assertFalse(attempt(contextCurrent = false))
+            assertTrue(writes.isEmpty())
+        }
+    }
+
     private suspend fun copy(
         result: TextSearchResult,
         row: StillMatchRow,
