@@ -2,6 +2,7 @@ package com.artkachenko.livetextfinder.ui
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -21,6 +22,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 internal object FinderSpacing {
+    val absent: Dp = 0.dp
     val extraSmall: Dp = 4.dp
     val small: Dp = 8.dp
     val medium: Dp = 12.dp
@@ -157,7 +159,7 @@ internal fun FinderPrimaryAction(
     Button(
         onClick = onClick,
         enabled = enabled,
-        modifier = modifier.widthIn(min = 48.dp).heightIn(min = 52.dp),
+        modifier = modifier.padding(bottom = 16.dp).widthIn(min = 48.dp).heightIn(min = 52.dp),
         shape = MaterialTheme.shapes.medium,
         colors = if (destructive) {
             ButtonDefaults.buttonColors(

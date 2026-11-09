@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -1170,7 +1171,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                                 LiveCaptureControlRow(
                                     controls = liveCaptureControls,
                                     contextEnabled = captureContextCurrent(),
-                                    modifier = Modifier.align(Alignment.TopCenter).padding(8.dp),
+                                    modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp),
                                 )
                             }
                         }
@@ -1179,8 +1180,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                 footerContent = {
                     if (sourceIdentity == null) {
                         if (editorCanRemainOpen) {
-                            val actionToken = areaEditorToken
-                            androidx.compose.foundation.layout.Column(
+                            Column(
                                 Modifier.fillMaxWidth().padding(
                                     horizontal = FinderSpacing.large,
                                     vertical = FinderSpacing.extraSmall,
@@ -1193,7 +1193,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                                     "Editing scan area",
                                     style = MaterialTheme.typography.labelLarge,
                                 )
-                                androidx.compose.foundation.layout.FlowRow(
+                                FlowRow(
                                     horizontalArrangement = Arrangement.spacedBy(
                                         FinderSpacing.small,
                                     ),
@@ -1207,7 +1207,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                                         onClick = {
                                             val latestPhase = importedOwner.state.value.phase
                                             val latestFreeze = frozenOwner.state.value
-                                            val applied = applyAreaEditor(actionToken) {
+                                            val applied = applyAreaEditor(areaEditorToken) {
                                                 latestFreeze.mode == FreezeMode.Live &&
                                                     importedOwner.state.value.phase ==
                                                         latestPhase &&
@@ -1223,15 +1223,15 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                                         },
                                     )
                                     FinderSecondaryAction("Cancel", {
-                                        cancelAreaEditor(actionToken)
+                                        cancelAreaEditor(areaEditorToken)
                                     })
                                     FinderSecondaryAction("Full frame", {
-                                        updateAreaEditor(actionToken, null)
+                                        updateAreaEditor(areaEditorToken, null)
                                     })
                                     FinderSecondaryAction(
                                         "Precise",
                                         areaEditorSession.precisionAction(
-                                            actionToken,
+                                            areaEditorToken,
                                             isCurrent = {
                                                 val phase = importedOwner.state.value.phase
                                                 frozenOwner.state.value.mode == FreezeMode.Live &&

@@ -1,5 +1,6 @@
 package com.artkachenko.livetextfinder.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -7,12 +8,15 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialogDefaults
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -22,9 +26,11 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.artkachenko.livetextfinder.search.SearchMatchMode
+import com.artkachenko.livetextfinder.ui.icons.RightChevron
 import livetextfinder.shared.generated.resources.Res
 import livetextfinder.shared.generated.resources.finder_match_help
 import livetextfinder.shared.generated.resources.finder_match_substring
@@ -62,7 +68,10 @@ internal fun FinderOptionsSheet(
     onHelp: () -> Unit,
     onDismissRequest: () -> Unit,
 ) {
-    ModalBottomSheet(onDismissRequest = onDismissRequest) {
+    ModalBottomSheet(
+        onDismissRequest = onDismissRequest,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+    ) {
         Column(
             modifier = Modifier.fillMaxWidth()
                 .verticalScroll(rememberScrollState())
@@ -181,7 +190,7 @@ private fun OptionsGroupTitle(label: String) {
     Text(
         label,
         modifier = Modifier.padding(top = FinderSpacing.small),
-        style = MaterialTheme.typography.titleSmall,
+        style = MaterialTheme.typography.titleMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
 }
@@ -196,18 +205,20 @@ private fun FinderOptionsActionRow(
     TextButton(
         onClick = onClick,
         enabled = enabled,
-        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+        modifier = Modifier.fillMaxWidth()
+            .heightIn(min = 48.dp),
         contentPadding = PaddingValues(
-            horizontal = FinderSpacing.medium,
-            vertical = FinderSpacing.small,
+            horizontal = FinderSpacing.absent,
+            vertical = FinderSpacing.absent,
         ),
         shape = MaterialTheme.shapes.medium,
         colors = ButtonDefaults.textButtonColors(
             contentColor = MaterialTheme.colorScheme.onSurface,
+            containerColor = MaterialTheme.colorScheme.surfaceContainer
         ),
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().padding(FinderSpacing.small),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
@@ -219,7 +230,7 @@ private fun FinderOptionsActionRow(
                     )
                 }
             }
-            Text("›", style = MaterialTheme.typography.titleLarge)
+            RightChevron(Modifier.size(16.dp))
         }
     }
 }

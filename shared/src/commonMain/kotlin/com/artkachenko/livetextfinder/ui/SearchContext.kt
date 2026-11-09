@@ -98,8 +98,8 @@ internal fun SearchContext(
                 Text(
                     text = modeLabel,
                     modifier = Modifier.padding(
-                        horizontal = FinderSpacing.extraSmall,
-                        vertical = 4.dp,
+                        horizontal = FinderSpacing.small,
+                        vertical = FinderSpacing.extraSmall,
                     ),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSecondaryContainer,
