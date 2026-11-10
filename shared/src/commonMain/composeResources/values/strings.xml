@@ -203,4 +203,25 @@
     <string name="capture_light_on">Light on</string>
     <string name="capture_light_off">Light off</string>
     <string name="capture_focus">Focus</string>
+    <string name="capture_freeze">Freeze frame</string>
+    <string name="capture_resume">Resume live</string>
+    <string name="capture_cancel_freeze">Cancel freeze</string>
+    <string name="capture_return_to_camera">Return to camera</string>
+    <string name="capture_cancel_import">Cancel import</string>
+    <string name="search_lists_close">Close lists</string>
+    <string name="scan_area_badge">Scan area</string>
+    <string name="scan_area_editing">Editing scan area</string>
+    <string name="scan_area_apply">Apply</string>
+    <string name="scan_area_cancel">Cancel</string>
+    <string name="scan_area_full_frame">Full frame</string>
+    <string name="scan_area_precise">Precise</string>
+    <string name="scan_area_option_full_frame">Scan area: Full frame</string>
+    <string name="scan_area_option_custom">Scan area: Custom</string>
+    <string name="confirm_dialog_cancel">Cancel</string>
+    <string name="search_list_delete_title">Delete search list?</string>
+    <string name="search_list_delete_message">Delete %1$s? The saved manual query will be kept.</string>
+    <string name="search_list_delete_fallback_name">this list</string>
+    <string name="saved_search_reset_title">Reset saved searches?</string>
+    <string name="saved_search_reset_message">This removes the unreadable saved file and starts with an empty manual query, no lists, and Yellow highlight colour.</string>
+    <string name="saved_search_reset_confirm">Reset</string>
 </resources>

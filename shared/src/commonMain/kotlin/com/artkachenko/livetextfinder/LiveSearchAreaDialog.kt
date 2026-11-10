@@ -33,6 +33,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.artkachenko.livetextfinder.camera.liveSearchAreaAvailable
 import com.artkachenko.livetextfinder.search.LiveSearchAreaOwner
 import com.artkachenko.livetextfinder.search.NormalizedSearchArea
 import com.artkachenko.livetextfinder.ui.FinderPrimaryAction
@@ -257,4 +258,21 @@ private fun AreaSlider(
             },
         )
     }
+}
+
+/** Shows the precision dialog for the committed area or the direct-edit draft, when requested. */
+@Composable
+internal fun LiveSearchAreaDialogHost(liveArea: LiveSearchAreaState) {
+    val request = liveArea.dialogRequest
+    if (request == null || !liveSearchAreaAvailable()) return
+    val usesDraft = request.usesDraft
+    val draftArea = liveArea.editorDraft?.area
+    LiveSearchAreaDialog(
+        area = if (usesDraft) draftArea else liveArea.area,
+        revision = request.revision,
+        owner = liveArea.owner,
+        startFullFrame = usesDraft && draftArea == null,
+        onDismiss = { liveArea.dismissDialog(request) },
+        onDraftApply = { nextArea -> liveArea.applyDialogArea(request, nextArea) },
+    )
 }

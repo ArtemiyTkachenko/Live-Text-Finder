@@ -4,10 +4,17 @@ import androidx.compose.ui.unit.IntSize
 import com.artkachenko.livetextfinder.camera.FreezeMode
 import com.artkachenko.livetextfinder.camera.FreezePresentationState
 import com.artkachenko.livetextfinder.camera.FrozenFrameFit
+import com.artkachenko.livetextfinder.camera.FrozenFrameOwner
 import com.artkachenko.livetextfinder.camera.FrozenSearchFrame
+import com.artkachenko.livetextfinder.camera.ImageShareOwner
+import com.artkachenko.livetextfinder.camera.ImportedImageOwner
 import com.artkachenko.livetextfinder.camera.ImportedImagePhase
 import com.artkachenko.livetextfinder.camera.ImportedImageState
+import com.artkachenko.livetextfinder.camera.shareFrozen
+import com.artkachenko.livetextfinder.camera.shareImported
 import com.artkachenko.livetextfinder.ocr.ImportedTextSnapshot
+import com.artkachenko.livetextfinder.search.SearchSessionController
+import com.artkachenko.livetextfinder.search.TextSearchResult
 
 /** The retained still image displayed instead of the live camera preview. */
 internal sealed class StillSource {
@@ -77,4 +84,40 @@ internal fun stillSourceOf(
         StillSource.Imported(importedState.snapshot)
     freezeState.mode == FreezeMode.Frozen -> StillSource.Frozen(freezeState.frame)
     else -> null
+}
+
+/**
+ * Shares the displayed still image with its match outlines. The owner rechecks the current
+ * source, search and highlight colour before handing the rendered image to the chooser.
+ */
+internal fun ImageShareOwner.shareStillImage(
+    imported: Boolean,
+    importedOwner: ImportedImageOwner,
+    frozenOwner: FrozenFrameOwner,
+    session: SearchSessionController,
+    search: TextSearchResult,
+) {
+    val currentSearchIdentity = { session.state.value.activeSearch.identity }
+    val currentHighlightColor = { session.state.value.persisted.highlightColor }
+    if (imported) {
+        shareImported(
+            importedOwner,
+            search,
+            currentSourceIdentity = {
+                importedOwner.state.value.snapshot?.let(::importedSourceIdentity)
+            },
+            currentSearchIdentity = currentSearchIdentity,
+            currentHighlightColor = currentHighlightColor,
+        )
+    } else {
+        shareFrozen(
+            frozenOwner,
+            search,
+            currentSourceIdentity = {
+                frozenOwner.state.value.frame?.let(::frozenSourceIdentity)
+            },
+            currentSearchIdentity = currentSearchIdentity,
+            currentHighlightColor = currentHighlightColor,
+        )
+    }
 }

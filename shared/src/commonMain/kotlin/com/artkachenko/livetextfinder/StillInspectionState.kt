@@ -293,11 +293,14 @@ internal class StillInspectionState(
 }
 
 /**
- * Remembers the selection, zoom and copy state for [source] and returns this composition's
- * view of it. The remembered state resets when the source or the active search changes.
+ * Returns this composition's view of the inspection state for [source].
+ *
+ * The selection, zoom and copy state are remembered and reset when the source or the active
+ * search changes. The returned object is new on every recomposition, so do not use it as a
+ * `remember` or effect key.
  */
 @Composable
-internal fun rememberStillInspectionState(
+internal fun stillInspectionState(
     source: StillSource?,
     search: TextSearchResult,
     searchIdentity: String,
