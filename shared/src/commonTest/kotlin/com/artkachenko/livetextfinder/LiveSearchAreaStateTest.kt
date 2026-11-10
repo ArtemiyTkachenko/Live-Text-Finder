@@ -112,6 +112,32 @@ class LiveSearchAreaStateTest {
     }
 
     @Test
+    fun startEditing_onPreviewBeginsDraftFromCommittedOrDefaultArea() {
+        val state = LiveSearchAreaState()
+
+        state.startEditing(onPreview = true)
+
+        assertEquals(NormalizedSearchArea.CENTERED_DEFAULT, state.editorDraft?.area)
+        assertNull(state.dialogRequest)
+
+        state.applyEditor(assertNotNull(state.editorDraft).token) { true }
+        state.startEditing(onPreview = true)
+
+        assertEquals(state.area, state.editorDraft?.area)
+    }
+
+    @Test
+    fun startEditing_offPreviewOpensCommittedAreaDialog() {
+        val state = LiveSearchAreaState()
+
+        state.startEditing(onPreview = false)
+
+        val request = assertNotNull(state.dialogRequest)
+        assertFalse(request.usesDraft)
+        assertNull(state.editorDraft)
+    }
+
+    @Test
     fun precisionAction_staleContextDoesNotOpenDialog() {
         val state = LiveSearchAreaState()
         val token = state.beginEditor(first)

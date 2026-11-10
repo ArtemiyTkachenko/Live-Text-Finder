@@ -1,6 +1,5 @@
 package com.artkachenko.livetextfinder.ui
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -13,10 +12,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialogDefaults
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -26,10 +23,11 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import com.artkachenko.livetextfinder.search.SearchListTransferState
 import com.artkachenko.livetextfinder.search.SearchMatchMode
+import com.artkachenko.livetextfinder.search.SearchSessionState
 import com.artkachenko.livetextfinder.ui.icons.RightChevron
 import livetextfinder.shared.generated.resources.Res
 import livetextfinder.shared.generated.resources.finder_match_help
@@ -37,6 +35,7 @@ import livetextfinder.shared.generated.resources.finder_match_substring
 import livetextfinder.shared.generated.resources.finder_match_whole_words
 import livetextfinder.shared.generated.resources.finder_options_camera_group
 import livetextfinder.shared.generated.resources.finder_options_help
+import livetextfinder.shared.generated.resources.finder_options_highlight
 import livetextfinder.shared.generated.resources.finder_options_import
 import livetextfinder.shared.generated.resources.finder_options_search_group
 import livetextfinder.shared.generated.resources.finder_options_title
@@ -44,6 +43,7 @@ import livetextfinder.shared.generated.resources.finder_options_transfer_group
 import livetextfinder.shared.generated.resources.highlight_color_custom_description
 import livetextfinder.shared.generated.resources.search_list_export
 import livetextfinder.shared.generated.resources.search_list_import
+import livetextfinder.shared.generated.resources.search_list_transfer_help
 import org.jetbrains.compose.resources.stringResource
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -233,4 +233,59 @@ private fun FinderOptionsActionRow(
             RightChevron(Modifier.size(16.dp))
         }
     }
+}
+
+/**
+ * Options sheet for the current saved-search and list-transfer state. Every action closes the
+ * sheet through [onDismiss] before it runs.
+ */
+@Composable
+internal fun FinderOptionsSheet(
+    sessionState: SearchSessionState,
+    transferState: SearchListTransferState,
+    liveAreaLabel: String?,
+    showImport: Boolean,
+    onMatchMode: (SearchMatchMode) -> Unit,
+    onImportList: () -> Unit,
+    onExportList: () -> Unit,
+    onHighlight: () -> Unit,
+    onLiveArea: () -> Unit,
+    onImport: () -> Unit,
+    onHelp: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val savedSearchEditable = sessionState.loaded && !sessionState.recoveryRequired
+    val dismissThen: (() -> Unit) -> () -> Unit = { action ->
+        {
+            onDismiss()
+            action()
+        }
+    }
+    FinderOptionsSheet(
+        highlightLabel = stringResource(
+            Res.string.finder_options_highlight,
+            localizedHighlightColorName(sessionState.persisted.highlightColor),
+        ),
+        highlightEnabled = savedSearchEditable,
+        matchMode = sessionState.persisted.matchMode,
+        matchModeEnabled = savedSearchEditable,
+        onMatchMode = onMatchMode,
+        liveAreaLabel = liveAreaLabel,
+        showImport = showImport,
+        showListTransfer = transferState.supported,
+        listTransferHelp = if (transferState.supported) {
+            stringResource(Res.string.search_list_transfer_help)
+        } else {
+            null
+        },
+        importListEnabled = transferState.importEnabled,
+        exportListEnabled = transferState.exportEnabled,
+        onImportList = dismissThen(onImportList),
+        onExportList = dismissThen(onExportList),
+        onHighlight = dismissThen(onHighlight),
+        onLiveArea = dismissThen(onLiveArea),
+        onImport = dismissThen(onImport),
+        onHelp = dismissThen(onHelp),
+        onDismissRequest = onDismiss,
+    )
 }

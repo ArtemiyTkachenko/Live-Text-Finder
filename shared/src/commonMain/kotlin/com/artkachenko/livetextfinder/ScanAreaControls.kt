@@ -10,13 +10,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.dp
 import com.artkachenko.livetextfinder.camera.FreezeMode
 import com.artkachenko.livetextfinder.camera.FrozenFrameOwner
 import com.artkachenko.livetextfinder.camera.ImportedImageOwner
 import com.artkachenko.livetextfinder.camera.allowsLiveCamera
 import com.artkachenko.livetextfinder.camera.liveSearchAreaAvailable
+import com.artkachenko.livetextfinder.ui.FinderCameraOverlay
 import com.artkachenko.livetextfinder.ui.FinderPrimaryAction
 import com.artkachenko.livetextfinder.ui.FinderSecondaryAction
 import com.artkachenko.livetextfinder.ui.FinderSpacing
@@ -35,10 +34,13 @@ internal fun ScanAreaBadge(modifier: Modifier = Modifier) {
     Text(
         stringResource(Res.string.scan_area_badge),
         modifier = modifier
-            .padding(8.dp)
-            .background(Color.Black.copy(alpha = 0.7f))
-            .padding(horizontal = 6.dp, vertical = 3.dp),
-        color = Color.White,
+            .padding(FinderSpacing.small)
+            .background(FinderCameraOverlay.labelScrim)
+            .padding(
+                horizontal = FinderCameraOverlay.labelPaddingHorizontal,
+                vertical = FinderCameraOverlay.labelPaddingVertical,
+            ),
+        color = FinderCameraOverlay.onLabelScrim,
     )
 }
 

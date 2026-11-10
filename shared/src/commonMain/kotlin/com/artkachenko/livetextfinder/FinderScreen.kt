@@ -1,14 +1,10 @@
 package com.artkachenko.livetextfinder
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
@@ -20,23 +16,17 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.IntSize
-import androidx.compose.ui.unit.dp
-import com.artkachenko.livetextfinder.camera.CameraPreview
 import com.artkachenko.livetextfinder.camera.FreezeMode
 import com.artkachenko.livetextfinder.camera.ImageShareStatus
 import com.artkachenko.livetextfinder.camera.ImportedImagePhase
 import com.artkachenko.livetextfinder.camera.ImportedImagePicker
-import com.artkachenko.livetextfinder.camera.ImportedImagePreview
 import com.artkachenko.livetextfinder.camera.LiveCaptureControls
 import com.artkachenko.livetextfinder.camera.LiveSearchAreaLifecycle
 import com.artkachenko.livetextfinder.camera.allowsLiveCamera
@@ -47,7 +37,6 @@ import com.artkachenko.livetextfinder.camera.rememberImportedImageOwner
 import com.artkachenko.livetextfinder.ocr.OcrStatus
 import com.artkachenko.livetextfinder.ocr.OcrUiState
 import com.artkachenko.livetextfinder.ocr.isCameraRunning
-import com.artkachenko.livetextfinder.search.NormalizedSearchArea
 import com.artkachenko.livetextfinder.search.SearchPresentationOwner
 import com.artkachenko.livetextfinder.search.SearchSessionController
 import com.artkachenko.livetextfinder.search.normalizeRecognizedText
@@ -59,23 +48,16 @@ import com.artkachenko.livetextfinder.search.searchRecognizedContent
 import com.artkachenko.livetextfinder.search.searchRecognizedText
 import com.artkachenko.livetextfinder.search.searchTermSummaries
 import com.artkachenko.livetextfinder.ui.ConfirmDestructiveDialog
-import com.artkachenko.livetextfinder.ui.ContextMessage
 import com.artkachenko.livetextfinder.ui.FinderCaptureActions
 import com.artkachenko.livetextfinder.ui.FinderCaptureControls
 import com.artkachenko.livetextfinder.ui.FinderContentAssembly
-import com.artkachenko.livetextfinder.ui.FinderLiveAppBar
 import com.artkachenko.livetextfinder.ui.FinderLiveDock
 import com.artkachenko.livetextfinder.ui.FinderOptionsSheet
 import com.artkachenko.livetextfinder.ui.FinderSearchBar
-import com.artkachenko.livetextfinder.ui.FinderSearchControls
 import com.artkachenko.livetextfinder.ui.FinderSearchLists
-import com.artkachenko.livetextfinder.ui.FinderSpacing
 import com.artkachenko.livetextfinder.ui.HighlightColorDialog
-import com.artkachenko.livetextfinder.ui.LiveCaptureControlRow
 import com.artkachenko.livetextfinder.ui.RetainedInspectionActionDispatcher
 import com.artkachenko.livetextfinder.ui.SearchTermResultsDialog
-import com.artkachenko.livetextfinder.ui.StillInspectionViewport
-import com.artkachenko.livetextfinder.ui.localizedHighlightColorName
 import com.artkachenko.livetextfinder.utils.MonotonicClock
 import kotlinx.coroutines.delay
 import livetextfinder.shared.generated.resources.Res
@@ -84,7 +66,6 @@ import livetextfinder.shared.generated.resources.capture_cancel_import
 import livetextfinder.shared.generated.resources.capture_freeze
 import livetextfinder.shared.generated.resources.capture_resume
 import livetextfinder.shared.generated.resources.capture_return_to_camera
-import livetextfinder.shared.generated.resources.finder_options_highlight
 import livetextfinder.shared.generated.resources.inspection_lists
 import livetextfinder.shared.generated.resources.inspection_results
 import livetextfinder.shared.generated.resources.inspection_return_frozen
@@ -97,8 +78,6 @@ import livetextfinder.shared.generated.resources.search_list_delete
 import livetextfinder.shared.generated.resources.search_list_delete_fallback_name
 import livetextfinder.shared.generated.resources.search_list_delete_message
 import livetextfinder.shared.generated.resources.search_list_delete_title
-import livetextfinder.shared.generated.resources.search_list_transfer_cancel
-import livetextfinder.shared.generated.resources.search_list_transfer_help
 import livetextfinder.shared.generated.resources.search_lists_close
 import livetextfinder.shared.generated.resources.search_results_unavailable
 import org.jetbrains.compose.resources.stringResource
@@ -140,7 +119,6 @@ internal fun FinderScreen(session: SearchSessionController) {
     val liveArea = remember { LiveSearchAreaState() }
     val editorDraft = liveArea.editorDraft
     val areaEditorOpen = editorDraft != null
-    val areaEditorDraft = editorDraft?.area
     val areaEditorToken = editorDraft?.token ?: 0L
     var helpDialogOpen by remember { mutableStateOf(false) }
     var searchResultsDialogOpen by remember(activeSearch.identity) { mutableStateOf(false) }
@@ -495,49 +473,16 @@ internal fun FinderScreen(session: SearchSessionController) {
             .imePadding()
             .onSizeChanged { rootSize = it },
         topContent = {
-            if (layoutMode.usesDockChrome) {
-                FinderLiveAppBar(onOptions = { optionsOpen = true })
-            }
-            Column(
-                Modifier.fillMaxWidth().then(
-                    if (layoutMode.usesDockChrome) {
-                        Modifier
-                    } else {
-                        Modifier.padding(
-                            horizontal = FinderSpacing.large,
-                            vertical = FinderSpacing.extraSmall,
-                        )
-                    },
-                ),
-                verticalArrangement = Arrangement.spacedBy(FinderSpacing.extraSmall),
-            ) {
-                if (!layoutMode.usesDockChrome) {
-                    FinderSearchControls(
-                        showTitle = shouldShowViews,
-                        search = searchBar,
-                        resultsLabel = resultsSummary.takeIf { search.query.isNotEmpty() },
-                        onOptions = { optionsOpen = true },
-                    )
-                }
-                if (transferState.message != null) {
-                    ContextMessage(
-                        message = transferState.message,
-                        actionLabel = if (transferState.busy) {
-                            stringResource(Res.string.search_list_transfer_cancel)
-                        } else {
-                            null
-                        },
-                        onAction = if (transferState.busy) transferOwner::cancel else null,
-                        isError = transferState.isError,
-                    )
-                }
-                if (!liveScreen) {
-                    statusContent()
-                }
-            }
-            if (liveScreen && !editorCanRemainOpen) {
-                statusContent()
-            }
+            FinderTopRegion(
+                layoutMode = layoutMode,
+                shouldShowViews = shouldShowViews,
+                searchBar = searchBar,
+                inlineResultsLabel = resultsSummary.takeIf { search.query.isNotEmpty() },
+                transferState = transferState,
+                onCancelTransfer = transferOwner::cancel,
+                onOptions = { optionsOpen = true },
+                status = statusContent,
+            )
         },
         managerContent = {
             if (listManager.isOpen) {
@@ -559,77 +504,27 @@ internal fun FinderScreen(session: SearchSessionController) {
         },
         viewportContent = {
             if (shouldShowViews) {
-                StillInspectionViewport(
-                    sourceIdentity = inspection.inspectionIdentity,
-                    fit = inspection.fit,
-                    viewportSize = previewSize,
-                    transform = inspection.transform,
-                    onTransformChange = { inspection.transform = it },
-                    modifier = Modifier.weight(1f)
-                        .fillMaxWidth()
-                        .background(Color.Black)
-                        .testTag("finder-image-viewport")
-                        .onSizeChanged { previewSize = it },
-                ) {
-                    when (importedState.phase) {
-                        ImportedImagePhase.Imported -> ImportedImagePreview(
-                            importedOwner,
-                            Modifier.fillMaxSize(),
-                            isContentVisible,
-                        )
-                        ImportedImagePhase.Picking,
-                        ImportedImagePhase.Reading,
-                        ImportedImagePhase.Recognizing -> Unit
-                        else -> CameraPreview(
-                            Modifier.fillMaxSize(),
-                            frozenOwner,
-                            liveCaptureControls,
-                            isContentVisible,
-                        ) { state = it }
-                    }
-                    HighlightOverlay(
-                        suppressed = editorCanRemainOpen,
-                        search = search,
-                        activeSearch = activeSearch,
-                        presentation = presentation,
-                        ocrState = state,
-                        importedState = importedState,
-                        freezeState = freezeState,
-                        liveArea = liveArea,
-                        inspection = inspection,
-                        viewportState = previewSizeState,
-                        importedOwner = importedOwner,
-                        frozenOwner = frozenOwner,
-                        session = session,
-                        isContentVisible = isContentVisible,
-                        modifier = Modifier.matchParentSize(),
-                    )
-                    if (editorGestureEnabled) {
-                        LiveSearchAreaEditorOverlay(
-                            area = areaEditorDraft ?: NormalizedSearchArea(0f, 0f, 1f, 1f),
-                            viewportSize = previewSize,
-                            onAreaChange = { liveArea.updateEditor(areaEditorToken, it) },
-                            modifier = Modifier.matchParentSize(),
-                        )
-                    }
-                    if (!editorCanRemainOpen && liveArea.area != null &&
-                        liveArea.owner.revision == presentation.areaRevision &&
-                        liveArea.owner.area == liveArea.area &&
-                        importedState.phase != ImportedImagePhase.Imported &&
-                        importedOwner.state.value.phase != ImportedImagePhase.Imported &&
-                        frozenOwner.state.value.mode == FreezeMode.Live &&
-                        isContentVisible()
-                    ) {
-                        ScanAreaBadge(Modifier.align(Alignment.TopStart))
-                    }
-                    if (sourceIdentity == null) {
-                        LiveCaptureControlRow(
-                            controls = liveCaptureControls,
-                            contextEnabled = captureContextCurrent(),
-                            modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp),
-                        )
-                    }
-                }
+                FinderViewport(
+                    inspection = inspection,
+                    viewportState = previewSizeState,
+                    search = search,
+                    activeSearch = activeSearch,
+                    presentation = presentation,
+                    ocrState = state,
+                    onOcrState = { state = it },
+                    importedState = importedState,
+                    freezeState = freezeState,
+                    liveArea = liveArea,
+                    importedOwner = importedOwner,
+                    frozenOwner = frozenOwner,
+                    session = session,
+                    liveCaptureControls = liveCaptureControls,
+                    isContentVisible = isContentVisible,
+                    captureContextCurrent = captureContextCurrent,
+                    areaEditing = editorCanRemainOpen,
+                    areaGestureEnabled = editorGestureEnabled,
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                )
             }
         },
         footerContent = {
@@ -757,56 +652,27 @@ internal fun FinderScreen(session: SearchSessionController) {
     }
     if (optionsOpen) {
         FinderOptionsSheet(
-            highlightLabel = stringResource(
-                Res.string.finder_options_highlight,
-                localizedHighlightColorName(sessionState.persisted.highlightColor),
-            ),
-            highlightEnabled = sessionState.loaded && !sessionState.recoveryRequired,
-            matchMode = sessionState.persisted.matchMode,
-            matchModeEnabled = sessionState.loaded && !sessionState.recoveryRequired,
+            sessionState = sessionState,
+            transferState = transferState,
+            liveAreaLabel = liveAreaLabel,
+            showImport = importedState.phase.allowsLiveCamera,
             onMatchMode = { mode ->
                 listManager.markContextChanged()
                 session.setMatchMode(mode)
             },
-            liveAreaLabel = liveAreaLabel,
-            showImport = importedState.phase.allowsLiveCamera,
-            showListTransfer = transferState.supported,
-            listTransferHelp = if (transferState.supported) {
-                stringResource(Res.string.search_list_transfer_help)
-            } else {
-                null
-            },
-            importListEnabled = transferState.importEnabled,
-            exportListEnabled = transferState.exportEnabled,
-            onImportList = {
-                optionsOpen = false
-                transferOwner.importList()
-            },
-            onExportList = {
-                optionsOpen = false
-                transferOwner.exportSelectedList()
-            },
-            onHighlight = {
-                optionsOpen = false
-                colorDialogOpen = true
-            },
+            onImportList = transferOwner::importList,
+            onExportList = transferOwner::exportSelectedList,
+            onHighlight = { colorDialogOpen = true },
             onLiveArea = {
-                optionsOpen = false
                 val latestPhase = importedOwner.state.value.phase
-                val canDirectEdit = !liveCaptureControls.state.value.zoomPending &&
-                    frozenOwner.state.value.mode == FreezeMode.Live &&
-                    latestPhase.allowsLiveCamera &&
-                    liveSearchAreaAvailable() && isContentVisible()
-                if (canDirectEdit) {
-                    liveArea.beginEditor(
-                        liveArea.area ?: NormalizedSearchArea.CENTERED_DEFAULT,
-                    )
-                } else {
-                    liveArea.openDialog(usesDraft = false, editorToken = 0L)
-                }
+                liveArea.startEditing(
+                    onPreview = !liveCaptureControls.state.value.zoomPending &&
+                        frozenOwner.state.value.mode == FreezeMode.Live &&
+                        latestPhase.allowsLiveCamera &&
+                        liveSearchAreaAvailable() && isContentVisible(),
+                )
             },
             onImport = {
-                optionsOpen = false
                 liveArea.reset()
                 if (freezeState.mode == FreezeMode.Freezing) {
                     frozenOwner.cancel()
@@ -814,11 +680,8 @@ internal fun FinderScreen(session: SearchSessionController) {
                 frozenOwner.resume()
                 importedOwner.beginPicker()
             },
-            onHelp = {
-                optionsOpen = false
-                helpDialogOpen = true
-            },
-            onDismissRequest = { optionsOpen = false },
+            onHelp = { helpDialogOpen = true },
+            onDismiss = { optionsOpen = false },
         )
     }
 }

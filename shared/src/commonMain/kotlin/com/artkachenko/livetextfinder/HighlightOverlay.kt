@@ -6,12 +6,8 @@ import androidx.compose.runtime.State
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.unit.IntSize
-import androidx.compose.ui.unit.dp
 import com.artkachenko.livetextfinder.camera.FreezeMode
 import com.artkachenko.livetextfinder.camera.FreezePresentationState
 import com.artkachenko.livetextfinder.camera.FrozenFrameOwner
@@ -33,6 +29,8 @@ import com.artkachenko.livetextfinder.search.importedHighlightsForDraw
 import com.artkachenko.livetextfinder.search.isPresentationCurrentAreaRevision
 import com.artkachenko.livetextfinder.search.occurrenceBounds
 import com.artkachenko.livetextfinder.search.projectFrozenHighlights
+import com.artkachenko.livetextfinder.ui.FinderCameraOverlay
+import com.artkachenko.livetextfinder.ui.scanAreaGuideStroke
 import com.artkachenko.livetextfinder.utils.MonotonicClock
 
 /**
@@ -175,7 +173,7 @@ internal fun HighlightOverlay(
         if (liveAreaIsDisplayed) {
             val area = checkNotNull(liveArea.area)
             drawRect(
-                color = Color.White,
+                color = FinderCameraOverlay.guide,
                 topLeft = Offset(
                     area.left * size.width,
                     area.top * size.height,
@@ -184,12 +182,7 @@ internal fun HighlightOverlay(
                     (area.right - area.left) * size.width,
                     (area.bottom - area.top) * size.height,
                 ),
-                style = Stroke(
-                    width = 3.dp.toPx(),
-                    pathEffect = PathEffect.dashPathEffect(
-                        floatArrayOf(10.dp.toPx(), 6.dp.toPx()),
-                    ),
-                ),
+                style = scanAreaGuideStroke(),
             )
         }
     }

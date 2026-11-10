@@ -81,6 +81,18 @@ internal class LiveSearchAreaState {
             }
         }
 
+    /**
+     * Starts editing the committed area: directly on the preview when [onPreview] is true,
+     * otherwise in the precision dialog.
+     */
+    fun startEditing(onPreview: Boolean) {
+        if (onPreview) {
+            beginEditor(area ?: NormalizedSearchArea.CENTERED_DEFAULT)
+        } else {
+            openDialog(usesDraft = false, editorToken = 0L)
+        }
+    }
+
     /** Opens the precision dialog for the committed area or, with [usesDraft], the draft. */
     fun openDialog(usesDraft: Boolean, editorToken: Long) {
         val revisionAtOpen = owner.revision

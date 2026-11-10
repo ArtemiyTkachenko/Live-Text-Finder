@@ -16,8 +16,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.CustomAccessibilityAction
@@ -33,6 +31,8 @@ import com.artkachenko.livetextfinder.search.moveSearchArea
 import com.artkachenko.livetextfinder.search.resizeSearchArea
 import com.artkachenko.livetextfinder.search.resizeSearchAreaByStep
 import com.artkachenko.livetextfinder.search.searchAreaCornerAt
+import com.artkachenko.livetextfinder.ui.FinderCameraOverlay
+import com.artkachenko.livetextfinder.ui.scanAreaGuideStroke
 import kotlin.math.roundToInt
 
 @androidx.compose.runtime.Composable
@@ -78,29 +78,34 @@ internal fun LiveSearchAreaEditorOverlay(
             val top = area.top * size.height
             val right = area.right * size.width
             val bottom = area.bottom * size.height
-            val dash = PathEffect.dashPathEffect(
-                floatArrayOf(10.dp.toPx(), 6.dp.toPx()),
-            )
             drawRect(
-                color = Color.Black,
+                color = FinderCameraOverlay.guideUnderlay,
                 topLeft = Offset(left, top),
                 size = androidx.compose.ui.geometry.Size(right - left, bottom - top),
-                style = Stroke(5.dp.toPx(), pathEffect = dash),
+                style = scanAreaGuideStroke(FinderCameraOverlay.guideUnderlayStrokeWidth),
             )
             drawRect(
-                color = Color.White,
+                color = FinderCameraOverlay.guide,
                 topLeft = Offset(left, top),
                 size = androidx.compose.ui.geometry.Size(right - left, bottom - top),
-                style = Stroke(3.dp.toPx(), pathEffect = dash),
+                style = scanAreaGuideStroke(),
             )
             corners.forEach { (_, point) ->
-                val radius = 10.dp.toPx()
+                val radius = FinderCameraOverlay.handleRadius.toPx()
                 val visibleCenter = Offset(
                     point.x.coerceIn(radius, (size.width - radius).coerceAtLeast(radius)),
                     point.y.coerceIn(radius, (size.height - radius).coerceAtLeast(radius)),
                 )
-                drawCircle(Color.Black, radius = radius, center = visibleCenter)
-                drawCircle(Color.White, radius = 7.dp.toPx(), center = visibleCenter)
+                drawCircle(
+                    FinderCameraOverlay.guideUnderlay,
+                    radius = radius,
+                    center = visibleCenter,
+                )
+                drawCircle(
+                    FinderCameraOverlay.guide,
+                    radius = FinderCameraOverlay.handleCoreRadius.toPx(),
+                    center = visibleCenter,
+                )
             }
         }
         Box(
