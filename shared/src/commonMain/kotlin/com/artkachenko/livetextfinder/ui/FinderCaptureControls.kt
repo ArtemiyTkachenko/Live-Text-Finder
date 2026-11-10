@@ -53,3 +53,17 @@ internal fun FinderCaptureControls(
         }
     }
 }
+
+/** Capture controls for grouped [actions]. */
+@Composable
+internal fun FinderCaptureControls(actions: FinderCaptureActions) {
+    FinderCaptureControls(
+        captureLabel = actions.captureLabel,
+        captureEnabled = actions.captureEnabled,
+        onCapture = actions.onCapture,
+        pendingCaptureLabel = actions.pendingCaptureLabel,
+        onCancelCapture = actions.onCancelCapture,
+        secondaryActionLabel = actions.secondaryActionLabel,
+        onSecondaryAction = actions.onSecondaryAction,
+    )
+}

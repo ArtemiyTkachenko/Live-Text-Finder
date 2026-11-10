@@ -52,7 +52,6 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.MutableLiveData
-import com.artkachenko.livetextfinder.AppContentColumn
 import com.artkachenko.livetextfinder.FinderStatusRegion
 import com.artkachenko.livetextfinder.SearchFeedback
 import com.artkachenko.livetextfinder.SearchFeedbackKind

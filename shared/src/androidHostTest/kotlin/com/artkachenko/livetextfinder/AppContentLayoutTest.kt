@@ -29,6 +29,7 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewRootForTest
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import com.artkachenko.livetextfinder.ui.AppContentColumn
 import kotlin.math.roundToInt
 import kotlin.test.Test
 import kotlin.test.assertEquals

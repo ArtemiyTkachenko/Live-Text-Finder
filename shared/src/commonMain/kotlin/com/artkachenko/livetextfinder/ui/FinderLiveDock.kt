@@ -187,3 +187,50 @@ internal fun FinderLiveDock(
         }
     }
 }
+
+/**
+ * Bottom dock for a grouped [search] bar and [capture] actions. A non-null [returnLabel] puts
+ * the dock in retained-image mode, where the primary button returns to the camera.
+ */
+@Composable
+internal fun FinderLiveDock(
+    search: FinderSearchBar,
+    capture: FinderCaptureActions,
+    resultsLabel: String?,
+    onOccurrences: () -> Unit,
+    occurrencesEnabled: Boolean,
+    returnLabel: String?,
+    onReturn: () -> Unit,
+    onShare: () -> Unit,
+    onCancelShare: () -> Unit,
+    sharePreparing: Boolean,
+) {
+    FinderLiveDock(
+        query = search.query,
+        onQueryChange = search.onQueryChange,
+        activeListName = search.activeListName,
+        activeListTermCount = search.activeListTermCount,
+        matchMode = search.matchMode,
+        searchListsLabel = search.searchListsLabel,
+        onSearchLists = search.onSearchLists,
+        onTerms = search.onTerms,
+        onUseManual = search.onUseManual,
+        onResults = search.onResults,
+        onOccurrences = onOccurrences,
+        resultsLabel = resultsLabel,
+        occurrencesEnabled = occurrencesEnabled,
+        saving = search.saving,
+        captureLabel = capture.captureLabel,
+        captureEnabled = capture.captureEnabled,
+        onCapture = capture.onCapture,
+        pendingCaptureLabel = capture.pendingCaptureLabel,
+        onCancelCapture = capture.onCancelCapture,
+        secondaryActionLabel = capture.secondaryActionLabel,
+        onSecondaryAction = capture.onSecondaryAction,
+        returnLabel = returnLabel,
+        onReturn = onReturn,
+        onShare = onShare,
+        onCancelShare = onCancelShare,
+        sharePreparing = sharePreparing,
+    )
+}

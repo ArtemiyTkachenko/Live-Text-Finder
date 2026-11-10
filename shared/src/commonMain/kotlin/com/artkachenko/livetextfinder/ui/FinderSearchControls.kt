@@ -127,3 +127,29 @@ internal fun FinderSearchControls(
         }
     }
 }
+
+/** Inline search bar for a grouped [search] bar; shown while the list manager is open. */
+@Composable
+internal fun FinderSearchControls(
+    showTitle: Boolean,
+    search: FinderSearchBar,
+    resultsLabel: String?,
+    onOptions: () -> Unit,
+) {
+    FinderSearchControls(
+        showTitle = showTitle,
+        query = search.query,
+        onQueryChange = search.onQueryChange,
+        searchListsLabel = search.searchListsLabel,
+        onSearchLists = search.onSearchLists,
+        activeListName = search.activeListName,
+        activeListTermCount = search.activeListTermCount,
+        matchMode = search.matchMode,
+        onTerms = search.onTerms,
+        onUseManual = search.onUseManual,
+        onOptions = onOptions,
+        saving = search.saving,
+        resultsLabel = resultsLabel,
+        onResults = search.onResults,
+    )
+}
