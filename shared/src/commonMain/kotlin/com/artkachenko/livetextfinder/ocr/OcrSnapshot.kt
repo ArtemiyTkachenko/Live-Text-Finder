@@ -55,6 +55,10 @@ internal enum class OcrStatus {
     PermissionRequired, Starting, Scanning, TextRecognized, Paused, Unavailable, Error,
 }
 
+/** True while the camera is delivering frames, with or without recognized text. */
+internal val OcrStatus.isCameraRunning: Boolean
+    get() = this == OcrStatus.Scanning || this == OcrStatus.TextRecognized
+
 internal data class OcrUiState(
     val status: OcrStatus = OcrStatus.PermissionRequired,
     val message: String = "Allow camera access to scan printed Latin text.",

@@ -48,10 +48,8 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import com.artkachenko.livetextfinder.adjacentStillMatchRow
 import com.artkachenko.livetextfinder.camera.CameraPreview
 import com.artkachenko.livetextfinder.camera.FreezeMode
-import com.artkachenko.livetextfinder.camera.FrozenFrameFit
 import com.artkachenko.livetextfinder.camera.ImageShareStatus
 import com.artkachenko.livetextfinder.camera.ImportedImagePhase
 import com.artkachenko.livetextfinder.camera.ImportedImagePicker
@@ -59,6 +57,8 @@ import com.artkachenko.livetextfinder.camera.ImportedImagePreview
 import com.artkachenko.livetextfinder.camera.LiveCaptureControls
 import com.artkachenko.livetextfinder.camera.LiveSearchAreaLifecycle
 import com.artkachenko.livetextfinder.camera.StillViewTransform
+import com.artkachenko.livetextfinder.camera.allowsLiveCamera
+import com.artkachenko.livetextfinder.camera.isImportInProgress
 import com.artkachenko.livetextfinder.camera.liveSearchAreaAvailable
 import com.artkachenko.livetextfinder.camera.plainTextClipEntry
 import com.artkachenko.livetextfinder.camera.rememberFrozenFrameOwner
@@ -66,11 +66,9 @@ import com.artkachenko.livetextfinder.camera.rememberImageShareOwner
 import com.artkachenko.livetextfinder.camera.rememberImportedImageOwner
 import com.artkachenko.livetextfinder.camera.shareFrozen
 import com.artkachenko.livetextfinder.camera.shareImported
-import com.artkachenko.livetextfinder.effectiveStillMatchRows
 import com.artkachenko.livetextfinder.ocr.OcrStatus
 import com.artkachenko.livetextfinder.ocr.OcrUiState
-import com.artkachenko.livetextfinder.performStillMatchLocate
-import com.artkachenko.livetextfinder.rememberStillMatchNavigationCoordinator
+import com.artkachenko.livetextfinder.ocr.isCameraRunning
 import com.artkachenko.livetextfinder.search.Highlights
 import com.artkachenko.livetextfinder.search.LiveSearchAreaDialogSession
 import com.artkachenko.livetextfinder.search.LiveSearchAreaEditorSession
@@ -180,6 +178,10 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
             val transferContextRevisionState = remember { mutableLongStateOf(0L) }
             var transferContextRevision by transferContextRevisionState
             val transferOwner = rememberSearchListTransferOwner()
+            fun markSearchContextChanged() {
+                transferOwner.contextChanged()
+                transferContextRevision++
+            }
             val transferFallbackName = stringResource(Res.string.search_list_import_fallback_name)
             val transferCopy = SearchListTransferCopy(
                 fallbackName = transferFallbackName,
@@ -256,15 +258,18 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
             val frozenOwner = rememberFrozenFrameOwner()
             val shareOwner = rememberImageShareOwner()
             val freezeState = frozenOwner.state.value
-            fun resetLiveArea() {
-                areaOwner.reset()
+            fun cancelAreaEditing() {
                 areaEditorSession.cancelCurrent()
                 areaEditorVersion++
-                areaState = null
-                areaRevision = areaOwner.revision
                 areaDialogOpen = false
                 areaDialogSession.invalidate()
                 areaDialogToken = 0L
+            }
+            fun resetLiveArea() {
+                areaOwner.reset()
+                cancelAreaEditing()
+                areaState = null
+                areaRevision = areaOwner.revision
             }
             fun beginAreaEditor(area: NormalizedSearchArea): Long =
                 areaEditorSession.begin(area).token.also { areaEditorVersion++ }
@@ -295,14 +300,14 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
             val captureContextCurrent = {
                 val phase = importedOwner.state.value.phase
                 frozenOwner.state.value.mode == FreezeMode.Live &&
-                    (phase == ImportedImagePhase.Live || phase == ImportedImagePhase.Error) &&
+                    phase.allowsLiveCamera &&
                     areaEditorSession.draft == null && areaDialogSession.currentToken == null &&
                     isContentVisible()
             }
             val captureSourceCurrent = {
                 val phase = importedOwner.state.value.phase
                 frozenOwner.state.value.mode != FreezeMode.Frozen &&
-                    (phase == ImportedImagePhase.Live || phase == ImportedImagePhase.Error) &&
+                    phase.allowsLiveCamera &&
                     isContentVisible()
             }
             val latestCaptureContext by rememberUpdatedState(captureContextCurrent)
@@ -349,64 +354,25 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                 }
             }
             val search = importedSearch ?: cameraSearch
-            val sourceIdentity = when {
-                importedState.phase == ImportedImagePhase.Imported ->
-                    "import:${importedState.snapshot?.sourceIdentity}"
-                freezeState.mode == FreezeMode.Frozen ->
-                    "frozen:${freezeState.frame?.identity}"
-                else -> null
-            }
+            val stillSource = stillSourceOf(importedState, freezeState)
+            val sourceIdentity = stillSource?.identity
             val editorCanRemainOpen = areaEditorOpen && sourceIdentity == null &&
                 freezeState.mode == FreezeMode.Live &&
-                (importedState.phase == ImportedImagePhase.Live ||
-                    importedState.phase == ImportedImagePhase.Error) &&
+                importedState.phase.allowsLiveCamera &&
                 liveSearchAreaAvailable() && isContentVisible()
             val editorGestureEnabled = editorCanRemainOpen &&
                 previewSize.width > 0 && previewSize.height > 0 &&
-                (state.status == OcrStatus.Scanning || state.status == OcrStatus.TextRecognized)
+                state.status.isCameraRunning
             LaunchedEffect(areaEditorOpen, editorCanRemainOpen) {
                 if (areaEditorOpen && !editorCanRemainOpen) {
-                    areaEditorSession.cancelCurrent()
-                    areaEditorVersion++
-                    areaDialogOpen = false
-                    areaDialogSession.invalidate()
-                    areaDialogToken = 0L
+                    cancelAreaEditing()
                 }
             }
             LiveAreaBackHandler(areaEditorOpen) {
                 cancelAreaEditor(areaEditorToken)
             }
-            val inspectionIdentity = when {
-                importedState.phase == ImportedImagePhase.Imported -> sourceIdentity
-                freezeState.mode == FreezeMode.Frozen ->
-                    "${sourceIdentity}:${freezeState.frame?.requestId}"
-                else -> null
-            }
-            val stillSnapshot = when {
-                importedState.phase == ImportedImagePhase.Imported -> importedState.snapshot
-                freezeState.mode == FreezeMode.Frozen -> freezeState.frame?.snapshot
-                else -> null
-            }
-            val stillFit = stillSnapshot?.let { snapshot ->
-                if (snapshot is com.artkachenko.livetextfinder.ocr.ImportedTextSnapshot) {
-                    FrozenFrameFit(
-                        snapshot.width,
-                        snapshot.height,
-                        0,
-                        previewSize.width.toFloat(),
-                        previewSize.height.toFloat(),
-                    )
-                } else {
-                    val frame = (snapshot as com.artkachenko.livetextfinder.ocr.OcrSnapshot).frame
-                    FrozenFrameFit(
-                        frame.bufferWidth,
-                        frame.bufferHeight,
-                        frame.rotationDegrees,
-                        previewSize.width.toFloat(),
-                        previewSize.height.toFloat(),
-                    )
-                }
-            }
+            val inspectionIdentity = stillSource?.inspectionIdentity
+            val stillFit = stillSource?.fit(previewSize)
             var stillTransform by rememberStillViewTransform(inspectionIdentity, previewSize)
             val matchRows = remember(
                 search,
@@ -456,11 +422,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                 it.index == expectedSelectedIndex
             }
             val expectedViewport = previewSize
-            val expectedOwnerToken = when {
-                importedState.phase == ImportedImagePhase.Imported -> importedState.snapshot
-                freezeState.mode == FreezeMode.Frozen -> frozenFrame
-                else -> null
-            }
+            val expectedOwnerToken = stillSource?.ownerToken
             fun stillActionIsCurrent(
                 row: StillMatchRow,
                 expectedSelection: Int?,
@@ -485,25 +447,16 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                     selectedMatchState.value != index ||
                     session.state.value.activeSearch.identity != activeSearch.identity ||
                     stillMatchText(row, search) != row.matchedText
-                ) return false
-                val currentImport = importedOwner.state.value
-                if (currentImport.phase == ImportedImagePhase.Picking ||
-                    currentImport.phase == ImportedImagePhase.Reading ||
-                    currentImport.phase == ImportedImagePhase.Recognizing
-                ) return false
-                val currentToken = if (currentImport.phase == ImportedImagePhase.Imported) {
-                    currentImport.snapshot
-                } else if (frozenOwner.state.value.mode == FreezeMode.Frozen) {
-                    frozenOwner.state.value.frame
-                } else {
-                    null
+                ) {
+                    return false
                 }
-                return currentToken === token
+                val currentImport = importedOwner.state.value
+                if (currentImport.phase.isImportInProgress) return false
+                val currentSource = stillSourceOf(currentImport, frozenOwner.state.value)
+                return currentSource?.ownerToken === token
             }
-            fun projectedStillHighlights() = if (importedState.phase ==
-                ImportedImagePhase.Imported
-            ) {
-                importedState.snapshot?.let { snapshot ->
+            fun projectedStillHighlights() = when (stillSource) {
+                is StillSource.Imported -> stillSource.snapshot?.let { snapshot ->
                     projectImportedHighlights(
                         search,
                         snapshot,
@@ -511,16 +464,23 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                         previewSize.height.toFloat(),
                     )
                 }
-            } else if (freezeState.mode == FreezeMode.Frozen) {
-                projectFrozenHighlights(
-                    search, previewSize.width.toFloat(), previewSize.height.toFloat()
+                is StillSource.Frozen -> projectFrozenHighlights(
+                    search,
+                    previewSize.width.toFloat(),
+                    previewSize.height.toFloat(),
                 )
-            } else {
-                null
+                null -> null
             }
-            fun focusMatch(
-                row: StillMatchRow,
-            ): Boolean {
+            fun zoomStillBy(factor: Float) {
+                stillTransform = stillTransform.zoomBy(
+                    factor,
+                    PreviewPoint(previewSize.width / 2f, previewSize.height / 2f),
+                    previewSize.width.toFloat(),
+                    previewSize.height.toFloat(),
+                    checkNotNull(stillFit),
+                )
+            }
+            fun focusMatch(row: StillMatchRow): Boolean {
                 val bounds = occurrenceBounds(
                     row.occurrence,
                     projectedStillHighlights() ?: return false,
@@ -561,9 +521,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                 )
             }
             LaunchedEffect(sourceIdentity, activeSearch.identity, freezeState.mode) {
-                if (sourceIdentity == null || freezeState.mode != FreezeMode.Frozen &&
-                    importedState.phase != ImportedImagePhase.Imported
-                ) {
+                if (sourceIdentity == null) {
                     copySession.updateDialogOpen(false)
                     selectedMatch = null
                 }
@@ -686,8 +644,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                     }
                 }
             }
-            val hasLiveCaptureControls = importedState.phase == ImportedImagePhase.Live ||
-                importedState.phase == ImportedImagePhase.Error
+            val hasLiveCaptureControls = importedState.phase.allowsLiveCamera
             val captureLabel = if (!hasLiveCaptureControls) {
                 null
             } else {
@@ -712,6 +669,14 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
             } else {
                 null
             }
+            val captureEnabled = freezeState.mode != FreezeMode.Live ||
+                !liveCaptureState.zoomPending && state.status.isCameraRunning
+            val searchListsLabel = if (managerOpen) "Close lists" else "Lists"
+            val resultsSummary = if (resultsAvailable) {
+                stringResource(Res.string.inspection_results, search.occurrences.size)
+            } else {
+                stringResource(Res.string.search_results_unavailable)
+            }
             val directSecondaryActionLabel = when (importedState.phase) {
                 ImportedImagePhase.Imported -> "Return to camera"
                 ImportedImagePhase.Picking,
@@ -722,17 +687,13 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                 ImportedImagePhase.Error -> null
             }
             val onManualQueryChange: (String) -> Unit = { value ->
-                transferOwner.contextChanged()
-                transferContextRevision++
+                markSearchContextChanged()
                 session.setManualQuery(value)
             }
             val onSearchLists = {
                 RetainedInspectionActionDispatcher.toggleLists(
                     managerOpen,
-                    {
-                        transferOwner.contextChanged()
-                        transferContextRevision++
-                    },
+                    ::markSearchContextChanged,
                     { managerOpen = it },
                     {},
                     { editor = editor.close() },
@@ -745,10 +706,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                 )
             }
             val onUseManualSearch: () -> Unit = {
-                dispatchSearchListSelection(session, null) {
-                    transferOwner.contextChanged()
-                    transferContextRevision++
-                }
+                dispatchSearchListSelection(session, null, ::markSearchContextChanged)
             }
             val onCapture: () -> Unit = {
                 when (freezeState.mode) {
@@ -757,8 +715,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                         frozenOwner.freeze(
                             cameraReady = !liveCaptureControls.state.value.zoomPending &&
                                 captureContextCurrent() &&
-                                (state.status == OcrStatus.Scanning ||
-                                    state.status == OcrStatus.TextRecognized),
+                                state.status.isCameraRunning,
                         )
                     }
                     FreezeMode.Frozen -> {
@@ -782,9 +739,12 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                     ImportedImagePhase.Error -> Unit
                 }
             }
-            val useLiveDock = sourceIdentity == null && !managerOpen
-            val useSharedDock = sourceIdentity != null || useLiveDock
-            val liveScreen = shouldShowViews && useLiveDock
+            val layoutMode = finderLayoutMode(
+                hasStillSource = stillSource != null,
+                managerOpen = managerOpen,
+                areaEditing = editorCanRemainOpen,
+            )
+            val liveScreen = shouldShowViews && layoutMode.isLiveCamera
             val statusContent: @Composable () -> Unit = {
                 FinderStatusRegion(
                     state = state,
@@ -799,8 +759,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                     shouldShowViews = shouldShowViews,
                     liveStageBand = liveScreen,
                     onRetrySavedData = {
-                        transferOwner.contextChanged()
-                        transferContextRevision++
+                        markSearchContextChanged()
                         session.retry()
                     },
                     onRequestReset = { resetConfirm = true },
@@ -812,9 +771,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                         importedOwner,
                         search,
                         currentSourceIdentity = {
-                            importedOwner.state.value.snapshot?.let {
-                                "import:${it.sourceIdentity}"
-                            }
+                            importedOwner.state.value.snapshot?.let(::importedSourceIdentity)
                         },
                         currentSearchIdentity = {
                             session.state.value.activeSearch.identity
@@ -828,7 +785,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                         frozenOwner,
                         search,
                         currentSourceIdentity = {
-                            frozenOwner.state.value.frame?.let { "frozen:${it.identity}" }
+                            frozenOwner.state.value.frame?.let(::frozenSourceIdentity)
                         },
                         currentSearchIdentity = {
                             session.state.value.activeSearch.identity
@@ -847,12 +804,12 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                     .imePadding()
                     .onSizeChanged { rootSize = it },
                 topContent = {
-                    if (useSharedDock) {
+                    if (layoutMode.usesDockChrome) {
                         FinderLiveAppBar(onOptions = { optionsOpen = true })
                     }
                     Column(
                         Modifier.fillMaxWidth().then(
-                            if (useSharedDock) {
+                            if (layoutMode.usesDockChrome) {
                                 Modifier
                             } else {
                                 Modifier.padding(
@@ -863,16 +820,12 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                         ),
                         verticalArrangement = Arrangement.spacedBy(FinderSpacing.extraSmall),
                     ) {
-                        if (!useSharedDock) {
+                        if (!layoutMode.usesDockChrome) {
                             FinderSearchControls(
                                 showTitle = shouldShowViews,
                                 query = query,
                                 onQueryChange = onManualQueryChange,
-                                searchListsLabel = if (managerOpen) {
-                                    "Close lists"
-                                } else {
-                                    "Lists"
-                                },
+                                searchListsLabel = searchListsLabel,
                                 onSearchLists = onSearchLists,
                                 activeListName = selectedList?.name,
                                 activeListTermCount = selectedList?.terms?.size ?: 0,
@@ -881,18 +834,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                                 onUseManual = onUseManualSearch,
                                 onOptions = { optionsOpen = true },
                                 saving = sessionState.saving,
-                                resultsLabel = if (search.query.isNotEmpty()) {
-                                    if (resultsAvailable) {
-                                        stringResource(
-                                            Res.string.inspection_results,
-                                            search.occurrences.size,
-                                        )
-                                    } else {
-                                        stringResource(Res.string.search_results_unavailable)
-                                    }
-                                } else {
-                                    null
-                                },
+                                resultsLabel = resultsSummary.takeIf { search.query.isNotEmpty() },
                                 onResults = { searchResultsDialogOpen = true },
                             )
                         }
@@ -924,35 +866,31 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                             editor = editor,
                             canSave = sessionState.loaded && !sessionState.recoveryRequired,
                             onNew = {
-                                transferOwner.contextChanged()
-                                transferContextRevision++
+                                markSearchContextChanged()
                                 editor = editor.startNew()
                             },
                             onSelect = { id ->
-                                dispatchSearchListSelection(session, id) {
-                                    transferOwner.contextChanged()
-                                    transferContextRevision++
-                                }
+                                dispatchSearchListSelection(
+                                    session,
+                                    id,
+                                    ::markSearchContextChanged,
+                                )
                             },
                             onEdit = { list ->
-                                transferOwner.contextChanged()
-                                transferContextRevision++
+                                markSearchContextChanged()
                                 editor = editor.edit(list)
                             },
                             onDelete = { list -> deleteId = list.id },
                             onNameChange = {
-                                transferOwner.contextChanged()
-                                transferContextRevision++
+                                markSearchContextChanged()
                                 editor = editor.copy(name = it)
                             },
                             onTermsChange = {
-                                transferOwner.contextChanged()
-                                transferContextRevision++
+                                markSearchContextChanged()
                                 editor = editor.copy(terms = it)
                             },
                             onSave = {
-                                transferOwner.contextChanged()
-                                transferContextRevision++
+                                markSearchContextChanged()
                                 val error = session.saveList(
                                     editor.editingId,
                                     editor.name,
@@ -965,8 +903,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                                 }
                             },
                             onCancel = {
-                                transferOwner.contextChanged()
-                                transferContextRevision++
+                                markSearchContextChanged()
                                 editor = editor.close()
                             },
                         )
@@ -1016,14 +953,10 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                                     areaRevision == presentation.areaRevision
                                 val liveAreaIsDisplayed = areaIsCurrent && areaState != null &&
                                     importedState.phase != ImportedImagePhase.Imported &&
-                                    importedState.phase != ImportedImagePhase.Picking &&
-                                    importedState.phase != ImportedImagePhase.Reading &&
-                                    importedState.phase != ImportedImagePhase.Recognizing &&
+                                    !importedState.phase.isImportInProgress &&
                                     currentFreezeState.mode == FreezeMode.Live &&
                                     currentImportState.phase != ImportedImagePhase.Imported &&
-                                    currentImportState.phase != ImportedImagePhase.Picking &&
-                                    currentImportState.phase != ImportedImagePhase.Reading &&
-                                    currentImportState.phase != ImportedImagePhase.Recognizing &&
+                                    !currentImportState.phase.isImportInProgress &&
                                     areaOwner.area == areaState &&
                                     isContentVisible() &&
                                     size.width == previewSize.width.toFloat() &&
@@ -1047,11 +980,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                                     ).outlines
                                 } else if (!isContentVisible()) {
                                     emptyList()
-                                } else if (
-                                    importedState.phase == ImportedImagePhase.Picking ||
-                                    importedState.phase == ImportedImagePhase.Reading ||
-                                    importedState.phase == ImportedImagePhase.Recognizing
-                                ) {
+                                } else if (importedState.phase.isImportInProgress) {
                                     emptyList()
                                 } else if (freezeState.mode == FreezeMode.Frozen) {
                                     if (currentFreezeState.mode == FreezeMode.Frozen &&
@@ -1083,6 +1012,12 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                                         emptyList()
                                     }
                                 }
+                                val currentHighlightColor =
+                                    session.state.value.persisted.highlightColor
+                                val termColors = SearchHighlightPalette.colorsByTerm(
+                                    activeSearch,
+                                    currentHighlightColor,
+                                )
                                 if (liveAreaIsDisplayed) {
                                     val area = checkNotNull(areaState)
                                     clipRect(
@@ -1093,21 +1028,15 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                                     ) {
                                         drawHighlightOutlines(
                                             outlines,
-                                            session.state.value.persisted.highlightColor,
-                                            SearchHighlightPalette.colorsByTerm(
-                                                activeSearch,
-                                                session.state.value.persisted.highlightColor,
-                                            ),
+                                            currentHighlightColor,
+                                            termColors,
                                         )
                                     }
                                 } else {
                                     drawHighlightOutlines(
                                         outlines,
-                                        session.state.value.persisted.highlightColor,
-                                        SearchHighlightPalette.colorsByTerm(
-                                            activeSearch,
-                                            session.state.value.persisted.highlightColor,
-                                        ),
+                                        currentHighlightColor,
+                                        termColors,
                                     )
                                 }
                                 val selectedRow = matchRows.firstOrNull {
@@ -1178,8 +1107,8 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                     }
                 },
                 footerContent = {
-                    if (sourceIdentity == null) {
-                        if (editorCanRemainOpen) {
+                    when (layoutMode) {
+                        FinderLayoutMode.AreaEditing -> {
                             Column(
                                 Modifier.fillMaxWidth().padding(
                                     horizontal = FinderSpacing.large,
@@ -1213,8 +1142,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                                                         latestPhase &&
                                                     isContentVisible() &&
                                                     liveSearchAreaAvailable() &&
-                                                    (latestPhase == ImportedImagePhase.Live ||
-                                                        latestPhase == ImportedImagePhase.Error)
+                                                    latestPhase.allowsLiveCamera
                                             }
                                             if (applied) {
                                                 areaState = areaOwner.area
@@ -1235,8 +1163,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                                             isCurrent = {
                                                 val phase = importedOwner.state.value.phase
                                                 frozenOwner.state.value.mode == FreezeMode.Live &&
-                                                    (phase == ImportedImagePhase.Live ||
-                                                        phase == ImportedImagePhase.Error) &&
+                                                    phase.allowsLiveCamera &&
                                                     isContentVisible() &&
                                                     liveSearchAreaAvailable()
                                             },
@@ -1245,13 +1172,11 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                                     )
                                 }
                             }
-                        } else if (!useSharedDock) {
+                        }
+                        FinderLayoutMode.ListManager -> {
                             FinderCaptureControls(
                                 captureLabel = captureLabel,
-                                captureEnabled = freezeState.mode != FreezeMode.Live ||
-                                    !liveCaptureState.zoomPending &&
-                                    (state.status == OcrStatus.Scanning ||
-                                        state.status == OcrStatus.TextRecognized),
+                                captureEnabled = captureEnabled,
                                 onCapture = onCapture,
                                 pendingCaptureLabel = pendingCaptureLabel,
                                 onCancelCapture = frozenOwner::cancel,
@@ -1259,100 +1184,80 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                                 onSecondaryAction = onSecondaryAction,
                             )
                         }
-                    } else {
-                        Column(
-                            Modifier.fillMaxWidth().padding(
-                                horizontal = FinderSpacing.large,
-                                vertical = FinderSpacing.extraSmall,
-                            ),
-                            verticalArrangement = Arrangement.spacedBy(
-                                FinderSpacing.extraSmall,
-                            ),
-                        ) {
-                            shareOwner.state.value.message?.let { message ->
-                                ContextMessage(message = message)
-                            }
-                            val focusManager = LocalFocusManager.current
-                            val keyboardController = LocalSoftwareKeyboardController.current
-                            StillInspectionControls(
-                                matchCount = matchRows.size,
-                                showMatchesAction = false,
-                                zoom = stillTransform.zoom,
-                                canZoom = shouldShowViews && stillFit?.isValid == true,
-                                onZoomIn = {
-                                    stillTransform = stillTransform.zoomBy(
-                                        1.25f,
-                                        PreviewPoint(
-                                            previewSize.width / 2f,
-                                            previewSize.height / 2f,
-                                        ),
-                                        previewSize.width.toFloat(),
-                                        previewSize.height.toFloat(),
-                                        checkNotNull(stillFit),
-                                    )
-                                },
-                                onZoomOut = {
-                                    stillTransform = stillTransform.zoomBy(
-                                        0.8f,
-                                        PreviewPoint(
-                                            previewSize.width / 2f,
-                                            previewSize.height / 2f,
-                                        ),
-                                        previewSize.width.toFloat(),
-                                        previewSize.height.toFloat(),
-                                        checkNotNull(stillFit),
-                                    )
-                                },
-                                onReset = { stillTransform = StillViewTransform() },
-                                onMatches = {
-                                    focusManager.clearFocus()
-                                    keyboardController?.hide()
-                                    copySession.updateDialogOpen(true)
-                                },
-                            )
-                            val selectedRow = selectedNavigationRow
-                            if (selectedPosition > 0 && selectedRow != null) {
-                                val canLocate = shouldShowViews &&
-                                    resultsAvailable &&
-                                    stillActionIsCurrent(selectedRow, expectedSelectedIndex)
-                                if (!canLocate) {
-                                    ContextMessage(
-                                        message = stringResource(
-                                            Res.string.search_results_locate_hint,
-                                        ),
-                                    )
+                        FinderLayoutMode.StillInspection -> {
+                            Column(
+                                Modifier.fillMaxWidth().padding(
+                                    horizontal = FinderSpacing.large,
+                                    vertical = FinderSpacing.extraSmall,
+                                ),
+                                verticalArrangement = Arrangement.spacedBy(
+                                    FinderSpacing.extraSmall,
+                                ),
+                            ) {
+                                shareOwner.state.value.message?.let { message ->
+                                    ContextMessage(message = message)
                                 }
-                                StillMatchNavigationControls(
-                                    position = selectedPosition,
-                                    count = effectiveMatchRows.size,
-                                    matchedTerm = selectedRow.termLabel,
-                                    matchedText = selectedRow.matchedText,
-                                    canLocate = canLocate,
-                                    onPrevious = {
-                                        adjacentStillMatchRow(
-                                            effectiveMatchRows,
-                                            selectedPosition,
-                                            -1,
-                                        )?.let { locateMatch(it, expectedSelectedIndex) }
-                                    },
-                                    onNext = {
-                                        adjacentStillMatchRow(
-                                            effectiveMatchRows,
-                                            selectedPosition,
-                                            1,
-                                        )?.let { locateMatch(it, expectedSelectedIndex) }
-                                    },
-                                    onCopy = {
-                                        copySelectedMatch(StillMatchCopyPayload.MatchedText)
+                                val focusManager = LocalFocusManager.current
+                                val keyboardController = LocalSoftwareKeyboardController.current
+                                StillInspectionControls(
+                                    matchCount = matchRows.size,
+                                    showMatchesAction = false,
+                                    zoom = stillTransform.zoom,
+                                    canZoom = shouldShowViews && stillFit?.isValid == true,
+                                    onZoomIn = { zoomStillBy(1.25f) },
+                                    onZoomOut = { zoomStillBy(0.8f) },
+                                    onReset = { stillTransform = StillViewTransform() },
+                                    onMatches = {
+                                        focusManager.clearFocus()
+                                        keyboardController?.hide()
+                                        copySession.updateDialogOpen(true)
                                     },
                                 )
-                            }
-                            copySession.message?.let { message ->
-                                ContextMessage(message = message)
+                                val selectedRow = selectedNavigationRow
+                                if (selectedPosition > 0 && selectedRow != null) {
+                                    val canLocate = shouldShowViews &&
+                                        resultsAvailable &&
+                                        stillActionIsCurrent(selectedRow, expectedSelectedIndex)
+                                    if (!canLocate) {
+                                        ContextMessage(
+                                            message = stringResource(
+                                                Res.string.search_results_locate_hint,
+                                            ),
+                                        )
+                                    }
+                                    StillMatchNavigationControls(
+                                        position = selectedPosition,
+                                        count = effectiveMatchRows.size,
+                                        matchedTerm = selectedRow.termLabel,
+                                        matchedText = selectedRow.matchedText,
+                                        canLocate = canLocate,
+                                        onPrevious = {
+                                            adjacentStillMatchRow(
+                                                effectiveMatchRows,
+                                                selectedPosition,
+                                                -1,
+                                            )?.let { locateMatch(it, expectedSelectedIndex) }
+                                        },
+                                        onNext = {
+                                            adjacentStillMatchRow(
+                                                effectiveMatchRows,
+                                                selectedPosition,
+                                                1,
+                                            )?.let { locateMatch(it, expectedSelectedIndex) }
+                                        },
+                                        onCopy = {
+                                            copySelectedMatch(StillMatchCopyPayload.MatchedText)
+                                        },
+                                    )
+                                }
+                                copySession.message?.let { message ->
+                                    ContextMessage(message = message)
+                                }
                             }
                         }
+                        FinderLayoutMode.Live -> Unit
                     }
-                    if (useSharedDock && !editorCanRemainOpen) {
+                    if (layoutMode.showsDock) {
                         val dockFocusManager = LocalFocusManager.current
                         val dockKeyboardController = LocalSoftwareKeyboardController.current
                         FinderLiveDock(
@@ -1361,7 +1266,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                             activeListName = selectedList?.name,
                             activeListTermCount = selectedList?.terms?.size ?: 0,
                             matchMode = activeSearch.matchMode,
-                            searchListsLabel = if (managerOpen) "Close lists" else "Lists",
+                            searchListsLabel = searchListsLabel,
                             onSearchLists = onSearchLists,
                             onTerms = onShowTerms,
                             onUseManual = onUseManualSearch,
@@ -1374,38 +1279,23 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                                     { copySession.updateDialogOpen(it) },
                                 )
                             },
-                            resultsLabel = if (
+                            resultsLabel = resultsSummary.takeIf {
                                 selectedList != null || search.query.isNotEmpty()
-                            ) {
-                                if (resultsAvailable) {
-                                    stringResource(
-                                        Res.string.inspection_results,
-                                        search.occurrences.size,
-                                    )
-                                } else {
-                                    stringResource(Res.string.search_results_unavailable)
-                                }
-                            } else {
-                                null
                             },
                             occurrencesEnabled = resultsAvailable && matchRows.isNotEmpty(),
                             saving = sessionState.saving,
                             captureLabel = captureLabel,
-                            captureEnabled = freezeState.mode != FreezeMode.Live ||
-                                !liveCaptureState.zoomPending &&
-                                (state.status == OcrStatus.Scanning ||
-                                    state.status == OcrStatus.TextRecognized),
+                            captureEnabled = captureEnabled,
                             onCapture = onCapture,
                             pendingCaptureLabel = pendingCaptureLabel,
                             onCancelCapture = frozenOwner::cancel,
                             secondaryActionLabel = directSecondaryActionLabel,
                             onSecondaryAction = onSecondaryAction,
-                            returnLabel = if (sourceIdentity == null) null else if (
-                                importedState.phase == ImportedImagePhase.Imported
-                            ) {
-                                "Return to camera"
-                            } else {
-                                stringResource(Res.string.inspection_return_frozen)
+                            returnLabel = when (stillSource) {
+                                is StillSource.Imported -> "Return to camera"
+                                is StillSource.Frozen ->
+                                    stringResource(Res.string.inspection_return_frozen)
+                                null -> null
                             },
                             onReturn = {
                                 RetainedInspectionActionDispatcher.returnToSource(
@@ -1497,8 +1387,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                             enabled = true,
                             destructive = true,
                             onClick = {
-                                transferOwner.contextChanged()
-                                transferContextRevision++
+                                markSearchContextChanged()
                                 session.deleteList(id)
                                 if (editor.editingId == id) {
                                     editor = editor.close()
@@ -1529,8 +1418,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                             destructive = true,
                             onClick = {
                                 resetConfirm = false
-                                transferOwner.contextChanged()
-                                transferContextRevision++
+                                markSearchContextChanged()
                                 session.retry()
                             },
                         )
@@ -1588,8 +1476,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                     selectedColor = sessionState.persisted.highlightColor,
                     enabled = sessionState.loaded && !sessionState.recoveryRequired,
                     onSelectColor = { color ->
-                        transferOwner.contextChanged()
-                        transferContextRevision++
+                        markSearchContextChanged()
                         session.setHighlightColor(color)
                     },
                     onDismissRequest = { colorDialogOpen = false },
@@ -1608,13 +1495,11 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                     matchMode = sessionState.persisted.matchMode,
                     matchModeEnabled = sessionState.loaded && !sessionState.recoveryRequired,
                     onMatchMode = { mode ->
-                        transferOwner.contextChanged()
-                        transferContextRevision++
+                        markSearchContextChanged()
                         session.setMatchMode(mode)
                     },
                     liveAreaLabel = liveAreaLabel,
-                    showImport = importedState.phase == ImportedImagePhase.Live ||
-                        importedState.phase == ImportedImagePhase.Error,
+                    showImport = importedState.phase.allowsLiveCamera,
                     showListTransfer = transferState.supported,
                     listTransferHelp = if (transferState.supported) {
                         stringResource(Res.string.search_list_transfer_help)
@@ -1640,8 +1525,7 @@ fun App(session: SearchSessionController = remember { inMemorySearchSessionContr
                         val latestPhase = importedOwner.state.value.phase
                         val canDirectEdit = !liveCaptureControls.state.value.zoomPending &&
                             frozenOwner.state.value.mode == FreezeMode.Live &&
-                            (latestPhase == ImportedImagePhase.Live ||
-                                latestPhase == ImportedImagePhase.Error) &&
+                            latestPhase.allowsLiveCamera &&
                             liveSearchAreaAvailable() && isContentVisible()
                         if (canDirectEdit) {
                             beginAreaEditor(areaState ?: NormalizedSearchArea.CENTERED_DEFAULT)
