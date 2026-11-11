@@ -13,18 +13,11 @@ import androidx.compose.ui.unit.IntSize
 import com.artkachenko.livetextfinder.camera.CameraPreview
 import com.artkachenko.livetextfinder.camera.FreezeMode
 import com.artkachenko.livetextfinder.camera.FreezePresentationState
-import com.artkachenko.livetextfinder.camera.FrozenFrameOwner
-import com.artkachenko.livetextfinder.camera.ImportedImageOwner
 import com.artkachenko.livetextfinder.camera.ImportedImagePhase
 import com.artkachenko.livetextfinder.camera.ImportedImagePreview
 import com.artkachenko.livetextfinder.camera.ImportedImageState
-import com.artkachenko.livetextfinder.camera.LiveCaptureControls
 import com.artkachenko.livetextfinder.ocr.OcrUiState
-import com.artkachenko.livetextfinder.search.ActiveSearchSpec
 import com.artkachenko.livetextfinder.search.NormalizedSearchArea
-import com.artkachenko.livetextfinder.search.SearchPresentation
-import com.artkachenko.livetextfinder.search.SearchSessionController
-import com.artkachenko.livetextfinder.search.TextSearchResult
 import com.artkachenko.livetextfinder.ui.FinderCameraOverlay
 import com.artkachenko.livetextfinder.ui.FinderSpacing
 import com.artkachenko.livetextfinder.ui.LiveCaptureControlRow
@@ -42,20 +35,13 @@ import com.artkachenko.livetextfinder.ui.StillInspectionViewport
 internal fun FinderViewport(
     inspection: StillInspectionState,
     viewportState: MutableState<IntSize>,
-    search: TextSearchResult,
-    activeSearch: ActiveSearchSpec,
-    presentation: SearchPresentation,
+    searchState: FinderSearchState,
     ocrState: OcrUiState,
     onOcrState: (OcrUiState) -> Unit,
     importedState: ImportedImageState,
     freezeState: FreezePresentationState,
     liveArea: LiveSearchAreaState,
-    importedOwner: ImportedImageOwner,
-    frozenOwner: FrozenFrameOwner,
-    session: SearchSessionController,
-    liveCaptureControls: LiveCaptureControls,
-    isContentVisible: () -> Boolean,
-    captureContextCurrent: () -> Boolean,
+    context: FinderSourceContext,
     areaEditing: Boolean,
     areaGestureEnabled: Boolean,
     modifier: Modifier = Modifier,
@@ -75,36 +61,33 @@ internal fun FinderViewport(
     ) {
         when (importedState.phase) {
             ImportedImagePhase.Imported -> ImportedImagePreview(
-                importedOwner,
+                context.importedOwner,
                 Modifier.fillMaxSize(),
-                isContentVisible,
+                context.isContentVisible,
             )
             ImportedImagePhase.Picking,
             ImportedImagePhase.Reading,
             ImportedImagePhase.Recognizing -> Unit
             else -> CameraPreview(
                 Modifier.fillMaxSize(),
-                frozenOwner,
-                liveCaptureControls,
-                isContentVisible,
+                context.frozenOwner,
+                context.liveCaptureControls,
+                context.isContentVisible,
                 onOcrState,
             )
         }
         HighlightOverlay(
             suppressed = areaEditing,
-            search = search,
-            activeSearch = activeSearch,
-            presentation = presentation,
+            search = searchState.search,
+            activeSearch = searchState.activeSearch,
+            presentation = searchState.presentation,
             ocrState = ocrState,
             importedState = importedState,
             freezeState = freezeState,
             liveArea = liveArea,
             inspection = inspection,
             viewportState = viewportState,
-            importedOwner = importedOwner,
-            frozenOwner = frozenOwner,
-            session = session,
-            isContentVisible = isContentVisible,
+            context = context,
             modifier = Modifier.matchParentSize(),
         )
         if (areaGestureEnabled) {
@@ -116,19 +99,19 @@ internal fun FinderViewport(
             )
         }
         if (!areaEditing && liveArea.area != null &&
-            liveArea.owner.revision == presentation.areaRevision &&
+            liveArea.owner.revision == searchState.presentation.areaRevision &&
             liveArea.owner.area == liveArea.area &&
             importedState.phase != ImportedImagePhase.Imported &&
-            importedOwner.state.value.phase != ImportedImagePhase.Imported &&
-            frozenOwner.state.value.mode == FreezeMode.Live &&
-            isContentVisible()
+            context.importedOwner.state.value.phase != ImportedImagePhase.Imported &&
+            context.frozenOwner.state.value.mode == FreezeMode.Live &&
+            context.isContentVisible()
         ) {
             ScanAreaBadge(Modifier.align(Alignment.TopStart))
         }
         if (inspection.source == null) {
             LiveCaptureControlRow(
-                controls = liveCaptureControls,
-                contextEnabled = captureContextCurrent(),
+                controls = context.liveCaptureControls,
+                contextEnabled = context.isCaptureContextCurrent(),
                 modifier = Modifier.align(Alignment.BottomCenter)
                     .padding(FinderSpacing.small),
             )

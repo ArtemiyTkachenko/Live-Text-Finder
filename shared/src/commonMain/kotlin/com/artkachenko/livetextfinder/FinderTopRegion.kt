@@ -17,8 +17,8 @@ import livetextfinder.shared.generated.resources.search_list_transfer_cancel
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * Everything above the viewport: the app bar or inline search bar, the list-transfer message
- * and the status region.
+ * Everything above the viewport: the app bar or inline search bar, a running list transfer
+ * with its Cancel action, and the status region.
  *
  * On the live camera screen [status] is a full-width band below the other content and is hidden
  * while the scan area is edited; in every other mode it sits inside the padded column.
@@ -59,16 +59,11 @@ internal fun FinderTopRegion(
                 onOptions = onOptions,
             )
         }
-        if (transferState.message != null) {
+        if (transferState.busy && transferState.message != null) {
             ContextMessage(
                 message = transferState.message,
-                actionLabel = if (transferState.busy) {
-                    stringResource(Res.string.search_list_transfer_cancel)
-                } else {
-                    null
-                },
-                onAction = if (transferState.busy) onCancelTransfer else null,
-                isError = transferState.isError,
+                actionLabel = stringResource(Res.string.search_list_transfer_cancel),
+                onAction = onCancelTransfer,
             )
         }
         if (!liveScreen) {

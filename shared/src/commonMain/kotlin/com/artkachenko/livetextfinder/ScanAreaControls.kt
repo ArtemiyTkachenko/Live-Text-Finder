@@ -11,8 +11,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import com.artkachenko.livetextfinder.camera.FreezeMode
-import com.artkachenko.livetextfinder.camera.FrozenFrameOwner
-import com.artkachenko.livetextfinder.camera.ImportedImageOwner
 import com.artkachenko.livetextfinder.camera.allowsLiveCamera
 import com.artkachenko.livetextfinder.camera.liveSearchAreaAvailable
 import com.artkachenko.livetextfinder.ui.FinderCameraOverlay
@@ -54,9 +52,7 @@ internal fun ScanAreaBadge(modifier: Modifier = Modifier) {
 internal fun ScanAreaEditBar(
     liveArea: LiveSearchAreaState,
     editorToken: Long,
-    importedOwner: ImportedImageOwner,
-    frozenOwner: FrozenFrameOwner,
-    isContentVisible: () -> Boolean,
+    context: FinderSourceContext,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -84,13 +80,13 @@ internal fun ScanAreaEditBar(
                 label = stringResource(Res.string.scan_area_apply),
                 enabled = true,
                 onClick = {
-                    val latestPhase = importedOwner.state.value.phase
-                    val latestFreeze = frozenOwner.state.value
+                    val latestPhase = context.importedOwner.state.value.phase
+                    val latestFreeze = context.frozenOwner.state.value
                     liveArea.applyEditor(editorToken) {
                         latestFreeze.mode == FreezeMode.Live &&
-                            importedOwner.state.value.phase ==
+                            context.importedOwner.state.value.phase ==
                                 latestPhase &&
-                            isContentVisible() &&
+                            context.isContentVisible() &&
                             liveSearchAreaAvailable() &&
                             latestPhase.allowsLiveCamera
                     }
@@ -104,13 +100,7 @@ internal fun ScanAreaEditBar(
             })
             FinderSecondaryAction(
                 stringResource(Res.string.scan_area_precise),
-                liveArea.precisionAction(editorToken) {
-                    val phase = importedOwner.state.value.phase
-                    frozenOwner.state.value.mode == FreezeMode.Live &&
-                        phase.allowsLiveCamera &&
-                        isContentVisible() &&
-                        liveSearchAreaAvailable()
-                },
+                liveArea.precisionAction(editorToken, context::isLiveAreaContextCurrent),
             )
         }
     }

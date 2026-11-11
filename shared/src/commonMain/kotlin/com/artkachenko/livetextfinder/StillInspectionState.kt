@@ -306,10 +306,7 @@ internal fun stillInspectionState(
     searchIdentity: String,
     highlightColor: HighlightColor,
     viewportState: State<IntSize>,
-    importedOwner: ImportedImageOwner,
-    frozenOwner: FrozenFrameOwner,
-    session: SearchSessionController,
-    isContentVisible: () -> Boolean,
+    context: FinderSourceContext,
 ): StillInspectionState {
     val viewport = viewportState.value
     val inspectionIdentity = source?.inspectionIdentity
@@ -329,12 +326,12 @@ internal fun stillInspectionState(
         mutableStateOf<String?>(null)
     }
     val navigationCoordinator = rememberStillMatchNavigationCoordinator(
-        importedOwner,
-        frozenOwner,
-        session,
+        context.importedOwner,
+        context.frozenOwner,
+        context.session,
         selectedIndex = { selectedIndexState.value },
         viewport = { viewportState.value },
-        visible = isContentVisible,
+        visible = context.isContentVisible,
     )
     return StillInspectionState(
         source = source,
@@ -350,9 +347,9 @@ internal fun stillInspectionState(
         selectedTermIdState = selectedTermIdState,
         copySession = copySession,
         navigationCoordinator = navigationCoordinator,
-        importedOwner = importedOwner,
-        frozenOwner = frozenOwner,
-        session = session,
+        importedOwner = context.importedOwner,
+        frozenOwner = context.frozenOwner,
+        session = context.session,
         clipboard = LocalClipboard.current,
         coroutineScope = rememberCoroutineScope(),
         copiedMessage = stringResource(Res.string.still_match_copied),

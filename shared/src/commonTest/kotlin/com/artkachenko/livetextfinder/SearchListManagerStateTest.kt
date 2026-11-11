@@ -1,5 +1,8 @@
 package com.artkachenko.livetextfinder
 
+import androidx.compose.runtime.saveable.SaverScope
+import com.artkachenko.livetextfinder.search.HighlightColor
+import com.artkachenko.livetextfinder.search.SearchMatchMode
 import com.artkachenko.livetextfinder.search.inMemorySearchSessionController
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -114,6 +117,42 @@ class SearchListManagerStateTest {
         assertNull(state.pendingDeleteId)
         assertEquals(listOf(list), session.state.value.persisted.lists)
         assertEquals(list.id, state.editor.editingId)
+    }
+
+    @Test
+    fun savedSearchEdits_notifyTransferOwnerBeforeChangingSession() {
+        state.setManualQuery("apple")
+        state.setMatchMode(SearchMatchMode.WholeWord)
+        state.setHighlightColor(HighlightColor.Cyan)
+        state.retrySavedSearches()
+
+        assertEquals("apple", session.state.value.persisted.manualQuery)
+        assertEquals(SearchMatchMode.WholeWord, session.state.value.persisted.matchMode)
+        assertEquals(HighlightColor.Cyan, session.state.value.persisted.highlightColor)
+        assertEquals(4, transferNotifications)
+        assertEquals(4L, state.contextRevision)
+    }
+
+    @Test
+    fun saver_restoresOpenManagerDraftAndPendingDelete() {
+        val id = saveList("Fruit", "apple")
+        val list = session.state.value.persisted.lists.single()
+        state.toggle()
+        state.editList(list)
+        state.updateDraftTerms("apple\npear")
+        state.requestDelete(list)
+        val saver = SearchListManagerState.saver(session) { transferNotifications++ }
+        val notificationsBeforeRestore = transferNotifications
+
+        val saved = with(saver) { SaverScope { true }.save(state) }
+        val restored = assertNotNull(saver.restore(assertNotNull(saved)))
+
+        assertTrue(restored.isOpen)
+        assertEquals(state.editor, restored.editor)
+        assertEquals("apple\npear", restored.editor.terms)
+        assertEquals(id, restored.pendingDeleteId)
+        assertEquals(0L, restored.contextRevision)
+        assertEquals(notificationsBeforeRestore, transferNotifications)
     }
 
     private fun saveList(name: String, terms: String): String {

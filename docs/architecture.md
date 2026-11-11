@@ -75,13 +75,13 @@ schemas 1–4 without eagerly rewriting them. Colours stay separate from matchin
 retention. The compact picker offers swatches and an advanced RGB draft; Apply commits, while
 Cancel leaves the current value unchanged. iOS retains its in-memory store.
 
-App reads current colour inside the Canvas drawing callback. Share requests capture a colour value and separately validate current colour before handoff, preserving immutable rendering and rejecting stale publication. Existing source/search/lifecycle/cache ownership remains intact. No extra store, renderer mapping table or dependency is introduced.
+`HighlightOverlay` reads current colour inside its Canvas drawing callback. Share requests capture a colour value and separately validate current colour before handoff, preserving immutable rendering and rejecting stale publication. Existing source/search/lifecycle/cache ownership remains intact. No extra store, renderer mapping table or dependency is introduced.
 
 ## Live search area
 
 A small common owner holds an optional normalized preview rectangle and revision independently of persisted search identity. Common filtering reuses validated raw element projection, checks every occurrence participant and rejects partial phrases. Full frame bypasses filtering; Custom has explicit readiness when its actual preview mapping is unavailable. The live presentation captures area revision and filters before retaining/smoothing occurrences; draw-time current revision checks complement existing exact raw source guards.
 
-The common editor overlays the measured live preview with move/four-corner resize controls and a cancellable normalized draft. Revision and opening tokens guard commits and precision-dialog callbacks; labelled sliders remain the precision/fallback path. Background/source resets invalidate stale drafts before Apply and reset area independently of camera renderer visibility. Android lifecycle binding sits at App scope, while iOS keeps a no-op binding and unsupported controls. Explicit source handlers reset before Freeze/Import; full-source frozen/imported search and shared PNG requests do not carry region state. Area selection affects match eligibility, never OCR buffers, camera generations, transforms or persisted preferences.
+The common editor overlays the measured live preview with move/four-corner resize controls and a cancellable normalized draft. Revision and opening tokens guard commits and precision-dialog callbacks; labelled sliders remain the precision/fallback path. Background/source resets invalidate stale drafts before Apply and reset area independently of camera renderer visibility. Android lifecycle binding sits at screen scope in `FinderScreen`, while iOS keeps a no-op binding and unsupported controls. Explicit source handlers reset before Freeze/Import; full-source frozen/imported search and shared PNG requests do not carry region state. Area selection affects match eligibility, never OCR buffers, camera generations, transforms or persisted preferences.
 
 ## Material theme and primary controls
 
@@ -97,7 +97,7 @@ least 48dp. The root owns safe/IME insets once, and compact/manager modes scroll
 
 ## Search-list presentation
 
-The list manager is a shared stateless presentation component. It receives saved-list, selected-ID and editor snapshots plus callbacks; App retains controller calls, draft ownership and delete-confirmation state. Selection targets, Edit/Delete actions and the tonal editor are separate interaction regions. The existing AppContentColumn owns whole-page scrolling, so manager visibility continues to hide the preview without introducing nested section scrolling.
+The list manager is a shared stateless presentation component. It receives saved-list, selected-ID and editor snapshots plus callbacks; `SearchListManagerState` retains controller calls, draft ownership and delete-confirmation state. Selection targets, Edit/Delete actions and the tonal editor are separate interaction regions. The existing `AppContentColumn`, now beside `FinderContentAssembly` in `ui/`, owns whole-page scrolling, so manager visibility continues to hide the preview without introducing nested section scrolling.
 
 Scoped shared string resources provide list/editor labels, list-specific accessible action labels and term-count plurals. This presentation layer does not change validation, persistence, list activation, search semantics or source ownership.
 
@@ -107,9 +107,11 @@ Shared presentation derives feedback from the displayed source: an imported imag
 
 An explicit Details dialog holds source-specific recognition diagnostics and the bounded text sample. It reads the selected source rather than falling back to a previous live camera snapshot. Diagnostic disclosure is secondary and follows the existing hidden-preview policy. Operational messages retain their existing recovery/cancel/reset callbacks and conditions; Android continues to own camera permission/settings and retry actions. No new persistence, image/text logging or automatic transitions are introduced.
 
+Finished outcomes are temporary feedback and use one Material snackbar host owned by `FinderScreen`: copy succeeded or failed, share sheet opened or failed, and list import/export finished, cancelled or failed. Error outcomes use the long duration. `FinderFeedbackEffects` observes the copy session, share owner and transfer owner, shows only outcomes that occur while it is composed, and lets a newer outcome replace the one showing; a message already present when the screen is created or restored is not replayed. The copy session counts published outcomes so a repeated message is shown again. The host is an overlay above the footer while the preview is visible and at the screen bottom in the scrolling compact mode, so an outcome never changes the viewport size. States that need an action stay inline: a running list transfer with Cancel, saved-data recovery, the locate hint, and copy feedback inside the open matches dialog.
+
 ## Compact controls and list draft presentation
 
-App retains source-action and dialog ownership. Main controls expose search, list context and capture/cancellation, while a Material Options sheet routes secondary actions through existing callbacks. The sheet closes before another action is invoked; it does not own a camera session or saved preference. Existing compact/keyboard/list hiding and page scrolling remain unchanged.
+`FinderScreen` retains source-action and dialog ownership. Main controls expose search, list context and capture/cancellation, while a Material Options sheet routes secondary actions through existing callbacks. The sheet closes before another action is invoked; it does not own a camera session or saved preference. Existing compact/keyboard/list hiding and page scrolling remain unchanged.
 
 List draft presentation uses the existing recognized-text normalization to count and preview nonblank entries in order. It retains duplicates and reports blank lines; the controller continues validating every raw line before saving. Preview output is limited to five entries and a remaining count, with no second scroll viewport or new persisted draft.
 
@@ -185,3 +187,60 @@ bounds. The session rejects pending capture/results; optimistic ZoomState change
 the gate. Failure/cancellation also requires fresh post-request content. This preserves existing
 analyzer execution, proxy closure and recognizer lifetime ownership without rebinding analysis.
 Physical zoom/crop/rotation alignment still requires a camera-device check.
+
+## Screen composition and state holders
+
+`App` only applies the theme and background and calls `FinderScreen`. `FinderScreen` owns the
+screen's state holders, derives what is displayed and wires callbacks; region composables render
+it. `StillSource` models the retained image shown instead of the live camera (imported or
+frozen) with its identity, inspection key, owner token and viewport fit. `FinderLayoutMode`
+names the four mutually exclusive arrangements: Live, AreaEditing, ListManager and
+StillInspection; a retained source outranks the list manager, which outranks the area editor.
+
+Three plain state holders replace screen-local variables. They follow the existing owner
+pattern rather than a ViewModel, so no lifecycle or DI dependency is added.
+
+- `LiveSearchAreaState` wraps the area owner, the direct-edit draft session and the precision
+  dialog session. The owner stays authoritative; the holder also publishes the committed area
+  and revision as snapshot state, so draw-time checks can still compare published and current
+  values. One nullable dialog request carries the opening token and captured context.
+- `SearchListManagerState` holds manager visibility, the editor draft, the pending delete
+  confirmation and the transfer context revision. Every change that could make a pending list
+  transfer stale goes through one method that notifies the transfer owner. Its saver restores
+  visibility, draft and pending confirmation after Activity recreation without notifying the
+  transfer owner. The screen's transfer context predicate captures visibility, draft and
+  revision when the context is published and compares them with live values.
+- `StillInspectionState` is rebuilt on every recomposition by `stillInspectionState`, which
+  remembers selection, term filter, zoom transform, copy session and navigation coordinator
+  keyed by source and search. Constructor values are what that composition displayed; its
+  callbacks compare them with current owner state and do nothing when the source, search,
+  selection or viewport changed. The returned object must not be used as a remember or effect
+  key.
+
+`FinderScreen` itself only creates holders and passes them on. Four per-composition values
+carry what it derives, each rebuilt on every recomposition and never used as a remember or
+effect key: `FinderSourceContext` (the image owners, session, live capture controls and the
+visibility and capture-context predicates, from `finderSourceContext`), `FinderSearchState`
+(displayed result, live presentation and its expiry timer, projected highlights and result
+availability, from `finderSearchState`), `FinderLabels` (state-dependent control labels) and
+`FinderSourceActions` (freeze/resume, import, return, share and starting an area edit; every
+source change resets the scan area first). `FinderDialogsState` holds the screen's own dialog
+flags and `FinderDialogs` hosts them; `SearchListTransferContextEffect` publishes the transfer
+context after each composition.
+
+Region composables receive displayed values as parameters and owners or holders as objects
+where draw-time or tap-time code must read current state: `FinderTopRegion`, `FinderFooter`, `FinderViewport`
+(preview, `HighlightOverlay`, area editor, `ScanAreaBadge`, capture row), `ScanAreaEditBar`,
+`StillInspectionFooter`, `StillInspectionMatchesDialog`, `LiveSearchAreaDialogHost` and
+`ConfirmDestructiveDialog`. `FinderSearchBar` and `FinderCaptureActions` group the values shared
+by the dock, inline search bar and capture controls; the flat signatures remain for component
+tests. `FinderCameraOverlay` centralizes fixed colours and dimensions for content drawn over
+camera imagery, independent of theme personalisation. Screen copy lives in shared string
+resources.
+
+This restructuring preserved recognition, matching, projection, freshness and source ownership.
+Its intended behaviour changes are limited to the saved list draft, the transfer context
+predicate, one results-label rule for both search bars, and snackbar outcomes described above.
+Host tests cover the pure models and two holders; `StillInspectionState` relies on the existing
+navigation and copy coordinator tests. Device behaviour of the restructured screen and snackbar
+placement remains a device check.

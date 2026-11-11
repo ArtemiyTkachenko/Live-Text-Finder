@@ -18,11 +18,10 @@ import livetextfinder.shared.generated.resources.Res
 import livetextfinder.shared.generated.resources.search_results_locate_hint
 import org.jetbrains.compose.resources.stringResource
 
-/** Zoom, match navigation and copy feedback shown above the dock for a retained image. */
+/** Zoom and match navigation shown above the dock for a retained image. */
 @Composable
 internal fun StillInspectionFooter(
     inspection: StillInspectionState,
-    shareMessage: String?,
     shouldShowViews: Boolean,
     resultsAvailable: Boolean,
     modifier: Modifier = Modifier,
@@ -36,9 +35,6 @@ internal fun StillInspectionFooter(
             FinderSpacing.extraSmall,
         ),
     ) {
-        shareMessage?.let { message ->
-            ContextMessage(message = message)
-        }
         val focusManager = LocalFocusManager.current
         val keyboardController = LocalSoftwareKeyboardController.current
         StillInspectionControls(
@@ -81,9 +77,6 @@ internal fun StillInspectionFooter(
                     )
                 },
             )
-        }
-        inspection.copySession.message?.let { message ->
-            ContextMessage(message = message)
         }
     }
 }

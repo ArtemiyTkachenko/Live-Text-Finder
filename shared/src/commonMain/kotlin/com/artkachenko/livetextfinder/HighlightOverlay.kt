@@ -10,8 +10,6 @@ import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.unit.IntSize
 import com.artkachenko.livetextfinder.camera.FreezeMode
 import com.artkachenko.livetextfinder.camera.FreezePresentationState
-import com.artkachenko.livetextfinder.camera.FrozenFrameOwner
-import com.artkachenko.livetextfinder.camera.ImportedImageOwner
 import com.artkachenko.livetextfinder.camera.ImportedImagePhase
 import com.artkachenko.livetextfinder.camera.ImportedImageState
 import com.artkachenko.livetextfinder.camera.isImportInProgress
@@ -20,7 +18,6 @@ import com.artkachenko.livetextfinder.search.ActiveSearchSpec
 import com.artkachenko.livetextfinder.search.Highlights
 import com.artkachenko.livetextfinder.search.SearchHighlightPalette
 import com.artkachenko.livetextfinder.search.SearchPresentation
-import com.artkachenko.livetextfinder.search.SearchSessionController
 import com.artkachenko.livetextfinder.search.TextSearchResult
 import com.artkachenko.livetextfinder.search.drawHighlightOutlines
 import com.artkachenko.livetextfinder.search.drawSelectedOccurrenceMarker
@@ -53,18 +50,15 @@ internal fun HighlightOverlay(
     liveArea: LiveSearchAreaState,
     inspection: StillInspectionState,
     viewportState: State<IntSize>,
-    importedOwner: ImportedImageOwner,
-    frozenOwner: FrozenFrameOwner,
-    session: SearchSessionController,
-    isContentVisible: () -> Boolean,
+    context: FinderSourceContext,
     modifier: Modifier = Modifier,
 ) {
     Canvas(modifier) {
         if (suppressed) return@Canvas
-        val currentFreezeState = frozenOwner.state.value
+        val currentFreezeState = context.frozenOwner.state.value
         val currentSearchIdentity =
-            session.state.value.activeSearch.identity
-        val currentImportState = importedOwner.state.value
+            context.session.state.value.activeSearch.identity
+        val currentImportState = context.importedOwner.state.value
         val areaIsCurrent =
             isPresentationCurrentAreaRevision(
                 presentation,
@@ -78,7 +72,7 @@ internal fun HighlightOverlay(
             currentImportState.phase != ImportedImagePhase.Imported &&
             !currentImportState.phase.isImportInProgress &&
             liveArea.owner.area == liveArea.area &&
-            isContentVisible() &&
+            context.isContentVisible() &&
             size.width == viewportState.value.width.toFloat() &&
             size.height == viewportState.value.height.toFloat() &&
             size.width > 0f && size.height > 0f
@@ -96,9 +90,9 @@ internal fun HighlightOverlay(
                 currentSearchIdentity,
                 size.width,
                 size.height,
-                isContentVisible(),
+                context.isContentVisible(),
             ).outlines
-        } else if (!isContentVisible()) {
+        } else if (!context.isContentVisible()) {
             emptyList()
         } else if (importedState.phase.isImportInProgress) {
             emptyList()
@@ -120,7 +114,7 @@ internal fun HighlightOverlay(
                 currentFreezeState.mode == FreezeMode.Freezing
             ) {
                 drawableElementsForSession(
-                    session,
+                    context.session,
                     activeSearch,
                     presentation,
                     ocrState,
@@ -133,7 +127,7 @@ internal fun HighlightOverlay(
             }
         }
         val currentHighlightColor =
-            session.state.value.persisted.highlightColor
+            context.session.state.value.persisted.highlightColor
         val termColors = SearchHighlightPalette.colorsByTerm(
             activeSearch,
             currentHighlightColor,

@@ -3,6 +3,7 @@ package com.artkachenko.livetextfinder
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -13,6 +14,10 @@ internal class StillMatchCopySession {
     var dialogOpen by mutableStateOf(false)
         private set
     var message by mutableStateOf<String?>(null)
+        private set
+
+    /** Increments for every published copy outcome, including a repeated message. */
+    var feedbackCount by mutableIntStateOf(0)
         private set
     var openingToken by mutableStateOf<Any?>(null)
         private set
@@ -32,7 +37,7 @@ internal class StillMatchCopySession {
     fun fail(token: Any?, failureMessage: String) {
         if (acceptsOpening(token)) {
             requestToken = null
-            message = failureMessage
+            publish(failureMessage)
         }
     }
 
@@ -61,12 +66,17 @@ internal class StillMatchCopySession {
         when (outcome) {
             StillMatchCopyOutcome.Copied -> {
                 updateDialogOpen(false)
-                message = copiedMessage
+                publish(copiedMessage)
             }
             StillMatchCopyOutcome.Stale,
-            StillMatchCopyOutcome.Failed -> message = failureMessage
+            StillMatchCopyOutcome.Failed -> publish(failureMessage)
         }
         requestToken = null
+    }
+
+    private fun publish(outcome: String) {
+        message = outcome
+        feedbackCount++
     }
 
     fun invalidate() {
