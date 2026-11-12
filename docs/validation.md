@@ -831,3 +831,45 @@ No repository Kotlin formatter is configured; changed files were checked for the
 limit only. Not run: any device or emulator, TalkBack, lint, APK generation. Unverified on a
 device: snackbar position and timing, the saved list draft across rotation, and the freeze,
 import, scan-area editing, match navigation and copy flows after the restructuring.
+
+## Phase 1 element screenshot baselines — 2026-11-12
+
+Before changes, `./gradlew :shared:cleanTestAndroidHostTest :shared:testAndroidHostTest
+:shared:compileKotlinIosSimulatorArm64 :androidApp:compileDebugKotlin --no-build-cache
+--console=plain` passed. The suite ran 427 tests across 61 suites with zero failures, errors,
+or skips. Both compilation targets succeeded.
+
+A single Roborazzi 1.76.0 probe on Robolectric 4.17 and SDK 35 passed record and unchanged
+verification. Changing the probe from blue to red failed verification and produced actual and
+comparison PNGs. The element tests use the Roborazzi library directly from the host test task.
+
+Ten light-theme fixtures live in [the element baseline directory](../shared/src/androidHostTest/screenshots/element).
+Each is 360 × 112 pixels at mdpi with US English, font scale 1.0, and dynamic color off.
+The fixtures cover the enabled, disabled, and destructive primary action, the secondary action,
+the normal, error, and actionable context message, both status summary layouts, and the ready
+live capture control row.
+
+Record or update the element baselines explicitly.
+
+```sh
+./gradlew :shared:cleanTestAndroidHostTest :shared:testAndroidHostTest \
+  --tests '*ElementScreenshotTest' -PltfRecordScreenshots=true --no-build-cache
+```
+
+Verify the entire host suite and compare existing baselines.
+
+```sh
+./gradlew :shared:cleanTestAndroidHostTest :shared:testAndroidHostTest --no-build-cache
+```
+
+Removing `finder-primary-action__enabled__light.png` failed verification without recreating it.
+Changing the enabled action label from Find text to Cancel failed verification for that image
+and produced `_actual.png` and `_compare.png` files under
+`shared/build/reports/screenshot-tests/diffs`. The original fixture and label were restored.
+
+Three consecutive uncached clean host runs and a fourth after `./gradlew clean --no-build-cache`
+each passed 437 tests across 62 suites with zero failures, errors, skips, or differing images.
+The fourth run also passed `:shared:compileKotlinIosSimulatorArm64` and
+`:androidApp:compileDebugKotlin`. There is no configured Kotlin formatter. These host renders
+were verified on the development host. Device rendering, including the native camera preview,
+and pixel stability on other hosts remain unverified.

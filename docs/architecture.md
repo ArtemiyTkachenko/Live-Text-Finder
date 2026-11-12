@@ -263,3 +263,9 @@ predicate, one results-label rule for both search bars, and snackbar outcomes de
 Host tests cover the pure models and two holders; `StillInspectionState` relies on the existing
 navigation and copy coordinator tests. Device behaviour of the restructured screen and snackbar
 placement remains a device check.
+
+Android host screenshot tests render a fixed-size Compose view with a controlled frame clock,
+density, locale, font scale, and theme. Roborazzi compares its bitmap against a PNG fixture under
+`shared/src/androidHostTest/screenshots`. The host test task verifies fixtures by default and
+records them only when requested explicitly. Visual mismatches produce actual and comparison
+PNGs under `shared/build/reports/screenshot-tests/diffs`.

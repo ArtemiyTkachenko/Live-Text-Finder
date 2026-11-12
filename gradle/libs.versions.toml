@@ -13,8 +13,10 @@ camerax = "1.6.2"
 mlkit-text = "16.0.1"
 exifinterface = "1.4.2"
 robolectric = "4.17"
+roborazzi = "1.76.0"
 
 [libraries]
+roborazzi = { module = "io.github.takahirom.roborazzi:roborazzi", version.ref = "roborazzi" }
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
 camera-camera2 = { module = "androidx.camera:camera-camera2", version.ref = "camerax" }
 camera-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "camerax" }

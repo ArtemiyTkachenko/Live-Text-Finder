@@ -44,6 +44,7 @@ kotlin {
             implementation(libs.kotlin.testJunit)
             // Execute pinned SDK result constructors/Android matrices at the OCR adapter boundary.
             implementation(libs.robolectric)
+            implementation(libs.roborazzi)
         }
         androidMain.dependencies {
             implementation(libs.androidx.lifecycle.runtimeCompose)
@@ -65,6 +66,35 @@ kotlin {
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
+        }
+    }
+}
+
+val screenshotBaselines = layout.projectDirectory.dir("src/androidHostTest/screenshots")
+val screenshotReports = layout.buildDirectory.dir("reports/screenshot-tests")
+val recordScreenshots = providers.gradleProperty("ltfRecordScreenshots").map {
+    it.toBooleanStrict()
+}.orElse(false)
+
+tasks.withType<Test>().configureEach {
+    if (name == "testAndroidHostTest") {
+        val recording = recordScreenshots.get()
+        val reports = screenshotReports.get().asFile
+        inputs.property("recordScreenshots", recording)
+        if (!recording) {
+            inputs.files(screenshotBaselines.asFileTree)
+                .withPathSensitivity(PathSensitivity.RELATIVE)
+        }
+        outputs.dir(reports)
+        outputs.upToDateWhen { !recording }
+        outputs.doNotCacheIf("Recording writes source fixtures") { recording }
+
+        systemProperty("ltf.screenshot.record", recording)
+        systemProperty("ltf.screenshot.baselines", screenshotBaselines.asFile.absolutePath)
+        systemProperty("ltf.screenshot.diffs", reports.resolve("diffs").absolutePath)
+        systemProperty("roborazzi.result.dir", reports.resolve("results").absolutePath)
+        doFirst {
+            reports.deleteRecursively()
         }
     }
 }
