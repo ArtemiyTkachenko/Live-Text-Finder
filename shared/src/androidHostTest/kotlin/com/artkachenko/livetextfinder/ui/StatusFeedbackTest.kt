@@ -1,8 +1,6 @@
 package com.artkachenko.livetextfinder.ui
 
 import android.app.Activity
-import android.graphics.Bitmap
-import android.graphics.Canvas
 import android.os.Looper
 import android.os.SystemClock
 import android.view.MotionEvent
@@ -93,8 +91,8 @@ import com.artkachenko.livetextfinder.status.StatusSource
 import com.artkachenko.livetextfinder.status.UnavailableResultsGuidance
 import com.artkachenko.livetextfinder.status.recognitionDetails
 import com.artkachenko.livetextfinder.status.unavailableResultsExplanation
-import java.io.File
-import java.io.FileOutputStream
+import com.artkachenko.livetextfinder.visualOutputDirectory
+import com.artkachenko.livetextfinder.writeVisualScreenshot
 import kotlin.math.roundToInt
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -2448,8 +2446,8 @@ class StatusFeedbackTest {
             clickable = true,
         )
         val captureAction = nodeWithText(nodes, "Freeze frame", clickable = true)
-        System.getenv("LTF_VISUAL_OUTPUT_DIR")?.let { directory ->
-            File(directory, "scanner-measurements.txt").appendText(
+        visualOutputDirectory()?.let { directory ->
+            directory.resolve("scanner-measurements.txt").appendText(
                 "$screenshot safe=${safeAreaSize.value.height} " +
                     "preview=${previewSize.value.height} footer=${captureAction.boundsInRoot}\n",
             )
@@ -3533,30 +3531,12 @@ class StatusFeedbackTest {
 
     private fun assertRendered(fileName: String) {
         val view = checkNotNull(composeView)
-        val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
-        view.draw(Canvas(bitmap))
-        System.getenv("LTF_VISUAL_OUTPUT_DIR")?.let { directory ->
-            val output = File(directory, fileName)
-            output.parentFile?.mkdirs()
-            FileOutputStream(output).use { stream ->
-                assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream))
-            }
-        }
-        bitmap.recycle()
+        assertTrue(writeVisualScreenshot(view, fileName))
     }
 
     private fun assertDialogRendered(dialog: android.app.Dialog, fileName: String) {
         val view = checkNotNull(dialog.window?.decorView)
-        val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
-        view.draw(Canvas(bitmap))
-        System.getenv("LTF_VISUAL_OUTPUT_DIR")?.let { directory ->
-            val output = File(directory, fileName)
-            output.parentFile?.mkdirs()
-            FileOutputStream(output).use { stream ->
-                assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream))
-            }
-        }
-        bitmap.recycle()
+        assertTrue(writeVisualScreenshot(view, fileName))
     }
 
     private class ControlledSearchSessionStore : SearchSessionStore {

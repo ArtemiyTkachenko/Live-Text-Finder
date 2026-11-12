@@ -2,7 +2,6 @@ package com.artkachenko.livetextfinder
 
 import android.app.Activity
 import android.graphics.Bitmap
-import android.graphics.Canvas
 import android.os.Looper
 import android.view.View
 import android.widget.FrameLayout
@@ -343,7 +342,7 @@ class LiveTextFinderThemeTest {
     @Config(sdk = [35])
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     fun mainScannerHeaderAndFooterFixturesRenderAcrossSmallAndShortLayouts() {
-        val outputDirectory = System.getenv("LTF_VISUAL_OUTPUT_DIR")
+        val exportVisuals = visualOutputDirectory() != null
         val fixtures = listOf(
             SearchControlFixture(
                 fileName = "search-controls-light.png",
@@ -539,15 +538,15 @@ class LiveTextFinderThemeTest {
             } else {
                 assertEquals(IntSize.Zero, placeholderPreviewSize.value)
             }
-            val bitmap = captureRenderedBitmap()
+            val bitmap = captureScreenshotBitmap(checkNotNull(composeView))
             assertTrue(countDistinctColors(bitmap) > 16)
             val expectedBackground = if (fixture.dark) Color(0xFF0C1016) else Color(0xFFF5F8F7)
             assertEquals(expectedBackground.toArgb(), bitmap.getPixel(0, 0))
             val expectedPrimary = if (fixture.dark) Color(0xFF60E1C1) else Color(0xFF006B58)
             val primaryPixels = countPixels(bitmap, expectedPrimary.toArgb())
             assertTrue(primaryPixels > 100, "$fixture primaryPixels=$primaryPixels")
-            if (outputDirectory != null) {
-                saveRenderedFixture(outputDirectory, fixture.fileName, bitmap)
+            if (exportVisuals) {
+                assertTrue(writeVisualScreenshot(bitmap, fixture.fileName))
             }
             bitmap.recycle()
         }
@@ -812,18 +811,18 @@ class LiveTextFinderThemeTest {
         Snapshot.sendApplyNotifications()
         measureCurrentComposition()
 
-        val outputDirectory = System.getenv("LTF_VISUAL_OUTPUT_DIR")
-        if (outputDirectory != null) {
-            val bitmap = captureRenderedBitmap()
-            saveRenderedFixture(outputDirectory, "live-dock-manual-light.png", bitmap)
-            bitmap.recycle()
+        val exportVisuals = visualOutputDirectory() != null
+        if (exportVisuals) {
+            assertTrue(
+                writeVisualScreenshot(checkNotNull(composeView), "live-dock-manual-light.png"),
+            )
             darkTheme.value = true
             Snapshot.sendApplyNotifications()
             measureCurrentComposition()
             assertEquals(reservedViewportSize, viewportSize.value)
-            val darkBitmap = captureRenderedBitmap()
-            saveRenderedFixture(outputDirectory, "live-dock-manual-dark.png", darkBitmap)
-            darkBitmap.recycle()
+            assertTrue(
+                writeVisualScreenshot(checkNotNull(composeView), "live-dock-manual-dark.png"),
+            )
         }
     }
 
@@ -946,19 +945,19 @@ class LiveTextFinderThemeTest {
         assertTrue(checkNotNull(useManual.config.getOrNull(SemanticsActions.OnClick)?.action)())
         assertEquals(1, useManualClicks.intValue)
 
-        val outputDirectory = System.getenv("LTF_VISUAL_OUTPUT_DIR")
-        if (outputDirectory != null) {
-            val bitmap = captureRenderedBitmap()
-            saveRenderedFixture(outputDirectory, "live-dock-list-dark.png", bitmap)
-            bitmap.recycle()
+        val exportVisuals = visualOutputDirectory() != null
+        if (exportVisuals) {
+            assertTrue(
+                writeVisualScreenshot(checkNotNull(composeView), "live-dock-list-dark.png"),
+            )
             val darkViewport = viewportSize.value
             darkTheme.value = false
             Snapshot.sendApplyNotifications()
             measureCurrentComposition()
             assertEquals(darkViewport, viewportSize.value)
-            val lightBitmap = captureRenderedBitmap()
-            saveRenderedFixture(outputDirectory, "live-dock-list-light.png", lightBitmap)
-            lightBitmap.recycle()
+            assertTrue(
+                writeVisualScreenshot(checkNotNull(composeView), "live-dock-list-light.png"),
+            )
         }
     }
 
@@ -1159,17 +1158,6 @@ class LiveTextFinderThemeTest {
         )
     }
 
-    private fun captureRenderedBitmap(): Bitmap {
-        val composeView = checkNotNull(composeView)
-        val bitmap = Bitmap.createBitmap(
-            composeView.width,
-            composeView.height,
-            Bitmap.Config.ARGB_8888,
-        )
-        composeView.draw(Canvas(bitmap))
-        return bitmap
-    }
-
     private fun countPixels(bitmap: Bitmap, targetColor: Int): Int {
         var count = 0
         for (y in 0 until bitmap.height) {
@@ -1189,14 +1177,6 @@ class LiveTextFinderThemeTest {
             }
         }
         return colors.size
-    }
-
-    private fun saveRenderedFixture(outputDirectory: String, fileName: String, bitmap: Bitmap) {
-        val outputFile = java.io.File(outputDirectory, fileName)
-        outputFile.parentFile?.mkdirs()
-        java.io.FileOutputStream(outputFile).use { stream ->
-            assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream))
-        }
     }
 
     private fun ignoreAction() = Unit

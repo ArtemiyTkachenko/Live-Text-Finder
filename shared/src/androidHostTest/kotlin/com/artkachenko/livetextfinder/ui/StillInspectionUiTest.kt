@@ -1,7 +1,6 @@
 package com.artkachenko.livetextfinder.ui
 
 import android.graphics.Bitmap
-import android.graphics.Canvas as AndroidCanvas
 import android.os.Looper
 import android.view.View
 import android.view.WindowManager
@@ -60,6 +59,7 @@ import com.artkachenko.livetextfinder.camera.ImportedImageState
 import com.artkachenko.livetextfinder.camera.ProcessedImportedImage
 import com.artkachenko.livetextfinder.camera.StillViewTransform
 import com.artkachenko.livetextfinder.camera.plainTextClipEntry
+import com.artkachenko.livetextfinder.captureScreenshotBitmap
 import com.artkachenko.livetextfinder.drainMainLooper
 import com.artkachenko.livetextfinder.inspection.StillMatchCopyCoordinator
 import com.artkachenko.livetextfinder.inspection.StillMatchCopyOutcome
@@ -103,8 +103,8 @@ import com.artkachenko.livetextfinder.search.searchRecognizedContent
 import com.artkachenko.livetextfinder.search.searchRecognizedText
 import com.artkachenko.livetextfinder.search.stillMatchRows
 import com.artkachenko.livetextfinder.status.FinderStatusRegion
-import java.io.File
-import java.io.FileOutputStream
+import com.artkachenko.livetextfinder.visualOutputDirectory
+import com.artkachenko.livetextfinder.writeVisualScreenshot
 import kotlin.math.roundToInt
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -405,8 +405,8 @@ class StillInspectionUiTest {
                     )
                     val themeName = if (darkTheme) "dark" else "light"
                     saveRenderedFixture("retained-$themeName-$source-selected-$selected.png")
-                    System.getenv("LTF_VISUAL_OUTPUT_DIR")?.let { directory ->
-                        File(directory, "retained-measurements.txt").appendText(
+                    visualOutputDirectory()?.let { directory ->
+                        directory.resolve("retained-measurements.txt").appendText(
                             "$themeName $source selected=$selected " +
                                 "viewport=${retainedBounds.height}dp " +
                                 "query=${queryNode.boundsInRoot} " +
@@ -488,12 +488,7 @@ class StillInspectionUiTest {
         assertEquals("cancel", actions.last())
         assertTrue(nodes(composeRoot()).any { nodeText(it) == "Results (0)" })
         assertTrue(nodes(composeRoot()).any { nodeText(it) == "More" })
-        val rendered = renderRoot()
-        try {
-            saveVisual(rendered, "retained-actions-manager-preparing-light.png")
-        } finally {
-            rendered.recycle()
-        }
+        saveRenderedFixture("retained-actions-manager-preparing-light.png")
     }
 
     @Test
@@ -748,12 +743,7 @@ class StillInspectionUiTest {
                 "Zoom out",
                 "Reset view",
             ).forEach { label -> assertTrue(labels.any { it == label }, "fixture $index: $label") }
-            val rendered = renderRoot()
-            try {
-                saveVisual(rendered, "retained-hidden-$index-${size.first}x${size.second}.png")
-            } finally {
-                rendered.recycle()
-            }
+            saveRenderedFixture("retained-hidden-$index-${size.first}x${size.second}.png")
         }
     }
 
@@ -853,7 +843,7 @@ class StillInspectionUiTest {
         try {
             assertEquals(android.graphics.Color.WHITE, rendered.getPixel(25, 20))
             assertFalse(rendered.getPixel(30, 50) == android.graphics.Color.WHITE)
-            saveVisual(rendered, "still-marker-light.png")
+            assertTrue(writeVisualScreenshot(rendered, "still-marker-light.png"))
         } finally {
             rendered.recycle()
         }
@@ -908,12 +898,7 @@ class StillInspectionUiTest {
                     ?.any { description -> description.contains("Invoice 802") } == true
             },
         )
-        val rendered = renderRoot()
-        try {
-            saveVisual(rendered, "still-navigation-light-dark-compact-large-text.png")
-        } finally {
-            rendered.recycle()
-        }
+        saveRenderedFixture("still-navigation-light-dark-compact-large-text.png")
     }
 
     @Test
@@ -970,12 +955,7 @@ class StillInspectionUiTest {
         measureCurrentComposition()
         assertEquals(initialViewport, viewport.value)
         assertEquals(2f, transform.zoom)
-        val rendered = renderRoot()
-        try {
-            saveVisual(rendered, "still-navigation-stable-viewport-large-text.png")
-        } finally {
-            rendered.recycle()
-        }
+        saveRenderedFixture("still-navigation-stable-viewport-large-text.png")
     }
 
     @Test
@@ -1768,31 +1748,11 @@ class StillInspectionUiTest {
         measureCurrentComposition()
     }
 
-    private fun renderRoot(): Bitmap {
-        val view = checkNotNull(composeView)
-        val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
-        view.draw(AndroidCanvas(bitmap))
-        return bitmap
-    }
-
-    private fun saveVisual(bitmap: Bitmap, fileName: String) {
-        val directory = System.getenv("LTF_VISUAL_OUTPUT_DIR") ?: return
-        val output = File(directory, fileName)
-        output.parentFile?.mkdirs()
-        FileOutputStream(output).use { stream ->
-            assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream))
-        }
-    }
+    private fun renderRoot(): Bitmap = captureScreenshotBitmap(checkNotNull(composeView))
 
     private fun saveDialog(fileName: String) {
         val view = checkNotNull(ShadowDialog.getLatestDialog()?.window?.decorView)
-        val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
-        view.draw(AndroidCanvas(bitmap))
-        try {
-            saveVisual(bitmap, fileName)
-        } finally {
-            bitmap.recycle()
-        }
+        assertTrue(writeVisualScreenshot(view, fileName))
     }
 
     private fun dialogComposeRoot(): ViewRootForTest = findViewRoot(
@@ -1857,12 +1817,7 @@ class StillInspectionUiTest {
     }
 
     private fun saveRenderedFixture(fileName: String) {
-        val rendered = renderRoot()
-        try {
-            saveVisual(rendered, fileName)
-        } finally {
-            rendered.recycle()
-        }
+        assertTrue(writeVisualScreenshot(checkNotNull(composeView), fileName))
     }
 
     private fun findViewRoot(view: View): ViewRootForTest = when (view) {

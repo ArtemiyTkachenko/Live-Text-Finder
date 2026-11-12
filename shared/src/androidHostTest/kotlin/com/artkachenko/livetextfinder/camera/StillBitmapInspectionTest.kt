@@ -1,7 +1,6 @@
 package com.artkachenko.livetextfinder.camera
 
 import android.graphics.Bitmap
-import android.graphics.Canvas as AndroidCanvas
 import android.graphics.Color as AndroidColor
 import android.os.Looper
 import android.view.View
@@ -28,6 +27,7 @@ import androidx.compose.ui.platform.ViewRootForTest
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import com.artkachenko.livetextfinder.captureScreenshotBitmap
 import com.artkachenko.livetextfinder.ocr.CapturedCameraFrame
 import com.artkachenko.livetextfinder.ocr.FrameInfo
 import com.artkachenko.livetextfinder.ocr.ImportedTextSnapshot
@@ -49,8 +49,7 @@ import com.artkachenko.livetextfinder.search.projectFrozenHighlights
 import com.artkachenko.livetextfinder.search.searchRecognizedContent
 import com.artkachenko.livetextfinder.search.searchRecognizedText
 import com.artkachenko.livetextfinder.ui.StillInspectionViewport
-import java.io.File
-import java.io.FileOutputStream
+import com.artkachenko.livetextfinder.writeVisualScreenshot
 import kotlin.math.roundToInt
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -154,7 +153,7 @@ class StillBitmapInspectionTest {
                 transform,
             )
             assertEquals(AndroidColor.MAGENTA, rendered.getPixel(130, 85))
-            saveVisual(rendered, "frozen-rotation-$rotation.png")
+            writeVisualScreenshot(rendered, "frozen-rotation-$rotation.png")
             reference.recycle()
             missing.recycle()
             wrong.recycle()
@@ -330,7 +329,7 @@ class StillBitmapInspectionTest {
             transform,
         )
         assertEquals(AndroidColor.MAGENTA, rendered.getPixel(130, 85))
-        saveVisual(rendered, "imported-zoom-pan.png")
+        writeVisualScreenshot(rendered, "imported-zoom-pan.png")
         reference.recycle()
         missing.recycle()
         wrong.recycle()
@@ -363,11 +362,7 @@ class StillBitmapInspectionTest {
                 )
             }
         }
-        val view = checkNotNull(composeView)
-        return Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888).also {
-            bitmap ->
-            view.draw(AndroidCanvas(bitmap))
-        }
+        return captureScreenshotBitmap(checkNotNull(composeView))
     }
 
     private enum class OutlinePaint { Actual, Cyan, Missing, Wrong }
@@ -583,14 +578,6 @@ class StillBitmapInspectionTest {
                 }
             }
         }
-
-    private fun saveVisual(bitmap: Bitmap, fileName: String) {
-        val outputDirectory = System.getenv("LTF_VISUAL_OUTPUT_DIR") ?: return
-        File(outputDirectory).mkdirs()
-        FileOutputStream(File(outputDirectory, fileName)).use { output ->
-            bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)
-        }
-    }
 
     private fun mount(content: @Composable () -> Unit) {
         clearComposition()

@@ -1,7 +1,5 @@
 package com.artkachenko.livetextfinder.ui
 
-import android.graphics.Bitmap
-import android.graphics.Canvas
 import android.os.Looper
 import android.view.View
 import androidx.activity.ComponentActivity
@@ -26,8 +24,7 @@ import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.unit.Density
 import com.artkachenko.livetextfinder.camera.LiveCaptureActions
 import com.artkachenko.livetextfinder.camera.LiveCaptureControls
-import java.io.File
-import java.io.FileOutputStream
+import com.artkachenko.livetextfinder.writeVisualScreenshot
 import kotlin.math.roundToInt
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -234,17 +231,7 @@ class LiveCaptureControlRowTest {
     }
 
     private fun render(name: String) {
-        val compose = checkNotNull(view)
-        val bitmap = Bitmap.createBitmap(compose.width, compose.height, Bitmap.Config.ARGB_8888)
-        compose.draw(Canvas(bitmap))
-        System.getenv("LTF_VISUAL_OUTPUT_DIR")?.let { directory ->
-            val output = File(directory, name)
-            output.parentFile?.mkdirs()
-            FileOutputStream(output).use { stream ->
-                assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream))
-            }
-        }
-        bitmap.recycle()
+        assertTrue(writeVisualScreenshot(checkNotNull(view), name))
     }
 
     private class Actions : LiveCaptureActions {

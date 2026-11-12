@@ -11,7 +11,7 @@ import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import com.artkachenko.livetextfinder.camera.AndroidImageShareRenderer
-import java.io.File
+import com.artkachenko.livetextfinder.writeVisualScreenshot
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -121,7 +121,7 @@ class HighlightPaintOrderTest {
         val composeEdge = composeBitmap.getPixel(60, 20)
         assertTrue(AndroidColor.red(composeEdge) > AndroidColor.green(composeEdge))
         assertTrue(AndroidColor.blue(composeEdge) > AndroidColor.green(composeEdge))
-        writeVisualOutput("thin-outline-compose-density-2.png", composeBitmap)
+        writeVisualScreenshot(composeBitmap, "thin-outline-compose-density-2.png")
         composeBitmap.recycle()
 
         val source = Bitmap.createBitmap(120, 60, Bitmap.Config.ARGB_8888)
@@ -147,7 +147,7 @@ class HighlightPaintOrderTest {
         val exportedEdge = decoded.getPixel(60, 20)
         assertTrue(AndroidColor.red(exportedEdge) > AndroidColor.green(exportedEdge))
         assertTrue(AndroidColor.blue(exportedEdge) > AndroidColor.green(exportedEdge))
-        writeVisualOutput("thin-outline-export.png", decoded)
+        writeVisualScreenshot(decoded, "thin-outline-export.png")
         decoded.recycle()
         rendered.recycle()
         source.recycle()
@@ -205,7 +205,7 @@ class HighlightPaintOrderTest {
         val decoded = BitmapFactory.decodeByteArray(encoded.toByteArray(), 0, encoded.size())
         val pngEdge = decoded.getPixel(62, 50)
         assertEquals(first.argb.toInt(), pngEdge)
-        writeVisualOutput("thin-outline-png-overlap.png", decoded)
+        writeVisualScreenshot(decoded, "thin-outline-png-overlap.png")
         decoded.recycle()
         png.recycle()
         pngSource.recycle()
@@ -303,15 +303,6 @@ class HighlightPaintOrderTest {
                 matchesExpectedBlend(AndroidColor.rgb(0, 127, 127)),
                 "A wrong cyan foreground must fail",
             )
-        }
-    }
-
-    private fun writeVisualOutput(name: String, bitmap: Bitmap) {
-        val outputDirectory = System.getenv("LTF_VISUAL_OUTPUT_DIR") ?: return
-        val directory = File(outputDirectory)
-        directory.mkdirs()
-        File(directory, name).outputStream().use { output ->
-            bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)
         }
     }
 

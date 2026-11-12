@@ -1,7 +1,5 @@
 package com.artkachenko.livetextfinder.scanarea
 
-import android.graphics.Bitmap
-import android.graphics.Canvas
 import android.os.Looper
 import android.os.SystemClock
 import android.view.MotionEvent
@@ -30,8 +28,8 @@ import com.artkachenko.livetextfinder.scanarea.LiveSearchAreaEditorOverlay
 import com.artkachenko.livetextfinder.search.LiveSearchAreaOwner
 import com.artkachenko.livetextfinder.search.NormalizedSearchArea
 import com.artkachenko.livetextfinder.ui.LiveTextFinderTheme
-import java.io.File
-import java.io.FileOutputStream
+import com.artkachenko.livetextfinder.visualOutputDirectory
+import com.artkachenko.livetextfinder.writeVisualScreenshot
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -655,30 +653,20 @@ class LiveSearchAreaDialogTest {
     }
 
     private fun captureDialog(fileName: String) {
-        val outputDirectory = System.getenv("LTF_VISUAL_OUTPUT_DIR") ?: return
+        if (visualOutputDirectory() == null) {
+            return
+        }
         val decor = checkNotNull(
             checkNotNull(ShadowDialog.getLatestDialog()).window?.decorView,
         )
-        val bitmap = Bitmap.createBitmap(decor.width, decor.height, Bitmap.Config.ARGB_8888)
-        decor.draw(Canvas(bitmap))
-        val output = File(outputDirectory, fileName)
-        output.parentFile?.mkdirs()
-        FileOutputStream(output).use { stream ->
-            bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
-        }
-        bitmap.recycle()
+        writeVisualScreenshot(decor, fileName)
     }
 
     private fun captureView(view: View, fileName: String) {
-        val outputDirectory = System.getenv("LTF_VISUAL_OUTPUT_DIR") ?: return
-        if (view.width <= 0 || view.height <= 0) return
-        val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
-        view.draw(Canvas(bitmap))
-        val output = File(outputDirectory, fileName)
-        output.parentFile?.mkdirs()
-        FileOutputStream(output).use { stream ->
-            bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
+        if (visualOutputDirectory() == null) {
+            return
         }
-        bitmap.recycle()
+        if (view.width <= 0 || view.height <= 0) return
+        writeVisualScreenshot(view, fileName)
     }
 }

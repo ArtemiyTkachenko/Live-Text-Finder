@@ -1,3 +1,4 @@
+import java.net.URI
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -95,6 +96,71 @@ tasks.withType<Test>().configureEach {
         systemProperty("roborazzi.result.dir", reports.resolve("results").absolutePath)
         doFirst {
             reports.deleteRecursively()
+        }
+    }
+}
+
+val screenshotIndex = layout.buildDirectory.file("reports/screenshot-index/index.html")
+
+tasks.register("generateScreenshotIndex") {
+    group = "verification"
+    description = "Generates an HTML index of the screenshot baselines by tier."
+    val fixtures = screenshotBaselines.asFile
+    val index = screenshotIndex.get().asFile
+    inputs.dir(fixtures).withPathSensitivity(PathSensitivity.RELATIVE)
+    outputs.file(index)
+
+    doLast {
+        val reportDirectory = checkNotNull(index.parentFile)
+        reportDirectory.mkdirs()
+        index.bufferedWriter().use { html ->
+            html.appendLine(
+                """
+                <!doctype html>
+                <html lang="en">
+                <meta charset="utf-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1">
+                <title>Live Text Finder screenshot baselines</title>
+                <style>
+                  body { font: 1rem system-ui; margin: 2rem; }
+                  section { margin-block: 2rem; }
+                  .images {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fill, minmax(min(100%, 18rem), 1fr));
+                    gap: 1rem;
+                  }
+                  figure { margin: 0; padding: .75rem; border: 1px solid #888; }
+                  img { display: block; max-width: 100%; height: auto; margin-inline: auto; }
+                  figcaption { margin-top: .75rem; overflow-wrap: anywhere; }
+                </style>
+                <h1>Live Text Finder screenshot baselines</h1>
+                <nav><a href="#element">Element</a> · <a href="#region">Region</a> ·
+                  <a href="#screen">Screen</a></nav>
+                """.trimIndent(),
+            )
+            for (tier in listOf("element", "region", "screen")) {
+                val pngs = fixtures.resolve(tier).listFiles().orEmpty()
+                    .filter { it.isFile && it.extension == "png" }
+                    .sortedBy { it.name }
+                val heading = tier.replaceFirstChar { it.uppercase() }
+                html.appendLine("""<section id="$tier"><h2>$heading (${pngs.size})</h2>""")
+                html.appendLine("""<div class="images">""")
+                for (png in pngs) {
+                    val relative = reportDirectory.toPath().relativize(png.toPath())
+                        .joinToString("/")
+                    val href = URI(null, null, relative, null).toASCIIString().replace("&", "&amp;")
+                    val name = png.name
+                        .replace("&", "&amp;")
+                        .replace("<", "&lt;")
+                        .replace(">", "&gt;")
+                        .replace("\"", "&quot;")
+                    html.appendLine("""<figure><a href="$href">""")
+                    html.appendLine("""<img src="$href" alt="$name" loading="lazy"></a>""")
+                    html.appendLine("<figcaption><code>$name</code></figcaption></figure>")
+                }
+                html.appendLine("</div></section>")
+            }
+            html.appendLine("</html>")
         }
     }
 }

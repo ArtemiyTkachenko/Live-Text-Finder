@@ -216,22 +216,17 @@ private fun captureScreenshot(
             }
             if (steps.isNotEmpty() && clock.hasAwaiters) return@repeat
             if (recomposer.currentState.value == Recomposer.State.Idle) {
-                val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
-                var keepBitmap = false
-                try {
-                    val canvas = Canvas(bitmap)
-                    view.draw(canvas)
+                val bitmap = captureScreenshotBitmap(view) { canvas ->
                     if (window != null) {
                         if (fullScreen) canvas.drawWindowDim(window)
                         window.decorView.draw(canvas)
                     }
-                    if (fullScreen) {
-                        keepBitmap = true
-                        return bitmap
-                    }
+                }
+                if (fullScreen) return bitmap
+                try {
                     return bitmap.cropToContent(backgroundColor)
                 } finally {
-                    if (!keepBitmap) bitmap.recycle()
+                    bitmap.recycle()
                 }
             }
         }
@@ -246,6 +241,37 @@ private fun captureScreenshot(
         controller.pause().stop().destroy()
         RuntimeEnvironment.setQualifiers(previousQualifiers)
         RuntimeEnvironment.setFontScale(previousFontScale)
+    }
+}
+
+internal fun captureScreenshotBitmap(view: View, drawOverlay: (Canvas) -> Unit = {}): Bitmap {
+    val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+    try {
+        val canvas = Canvas(bitmap)
+        view.draw(canvas)
+        drawOverlay(canvas)
+        return bitmap
+    } catch (failure: Throwable) {
+        bitmap.recycle()
+        throw failure
+    }
+}
+
+internal fun visualOutputDirectory(): File? = System.getenv("LTF_VISUAL_OUTPUT_DIR")?.let(::File)
+
+internal fun writeVisualScreenshot(bitmap: Bitmap, fileName: String): Boolean {
+    val directory = visualOutputDirectory() ?: return true
+    val output = directory.resolve(fileName)
+    output.parentFile?.mkdirs()
+    return output.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+}
+
+internal fun writeVisualScreenshot(view: View, fileName: String): Boolean {
+    val bitmap = captureScreenshotBitmap(view)
+    try {
+        return writeVisualScreenshot(bitmap, fileName)
+    } finally {
+        bitmap.recycle()
     }
 }
 

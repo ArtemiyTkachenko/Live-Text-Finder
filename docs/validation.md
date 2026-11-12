@@ -964,3 +964,53 @@ errors, skips, or differing images across all 67 baselines. The third run also p
 `:shared:compileKotlinIosSimulatorArm64` and `:androidApp:compileDebugKotlin`. The project has no
 configured Kotlin formatter. Device rendering, native camera content, OCR results, and
 cross-host pixel stability remain unverified by these screenshot tests.
+
+## Phase 4 screenshot consolidation — 2026-11-12
+
+The clean checkout at `795bd5e` passed 471 host tests across 66 suites with all 67
+baselines matching. Android debug Kotlin and shared iOS simulator Kotlin compilation succeeded.
+
+Eight legacy host test classes use the shared bitmap capture or PNG export functions.
+`LTF_VISUAL_OUTPUT_DIR` still enables their original filenames and measurement files.
+These exports are optional inspection artifacts. Baselines live under
+`shared/src/androidHostTest/screenshots/{element,region,screen}`.
+
+Verify all host tests and baselines.
+
+```sh
+./gradlew :shared:cleanTestAndroidHostTest :shared:testAndroidHostTest --no-build-cache
+```
+
+Explicitly refresh the baseline PNGs.
+
+```sh
+./gradlew :shared:cleanTestAndroidHostTest :shared:testAndroidHostTest \
+  --tests '*ScreenshotTest' -PltfRecordScreenshots=true --no-build-cache
+```
+
+Set `LTF_VISUAL_OUTPUT_DIR` to a writable directory before running the clean verify command
+to also export the legacy PNGs and measurements. For example, after creating the output
+directory, run the verify command prefixed with `LTF_VISUAL_OUTPUT_DIR=/absolute/path`.
+
+Generate the baseline index.
+
+```sh
+./gradlew :shared:generateScreenshotIndex
+```
+
+Open `shared/build/reports/screenshot-index/index.html`. Its thumbnails link to the
+original PNGs, grouped into 10 element, 48 region, and 9 screen fixtures. All 67 links
+resolved. The HTML index is a Git-ignored build output.
+
+Removing `app__list-manager-open__light.png` failed verification and left the reference
+absent. Temporarily adding the query `invoice` failed for that same reference and
+produced actual and comparison PNGs in `shared/build/reports/screenshot-tests/diffs`.
+The reference and test setup were restored.
+
+Three consecutive uncached clean host runs each passed 471 tests across 66 suites with
+zero failures, errors, skips, or differing images across all 67 baselines. The final run
+also passed `:shared:compileKotlinIosSimulatorArm64` and `:androidApp:compileDebugKotlin`.
+One clean run exported the 117 legacy PNGs and two measurement files, all byte-identical
+to the pre-change exports. No Kotlin formatter is configured. The checks cover host
+rendering on the development host. Cross-host pixel stability and physical-device camera,
+OCR, and rendering behavior remain unverified.

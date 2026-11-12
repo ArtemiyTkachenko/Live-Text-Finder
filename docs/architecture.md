@@ -271,4 +271,6 @@ Screen captures retain the full viewport and composite any active dialog window 
 Roborazzi compares the result against a PNG fixture under
 `shared/src/androidHostTest/screenshots`. The host test task verifies fixtures by default and
 records them only when requested explicitly. Visual mismatches produce actual and comparison
-PNGs under `shared/build/reports/screenshot-tests/diffs`.
+PNGs under `shared/build/reports/screenshot-tests/diffs`. Legacy visual exports use the same
+bitmap capture and remain available through `LTF_VISUAL_OUTPUT_DIR`. The
+`:shared:generateScreenshotIndex` task builds a browsable index of the reference PNGs.
