@@ -873,3 +873,51 @@ The fourth run also passed `:shared:compileKotlinIosSimulatorArm64` and
 `:androidApp:compileDebugKotlin`. There is no configured Kotlin formatter. These host renders
 were verified on the development host. Device rendering, including the native camera preview,
 and pixel stability on other hosts remain unverified.
+
+## Phase 2 region and dialog screenshot baselines — 2026-11-12
+
+The clean checkout at `6018ed3` passed 437 host tests across 62 suites before changes.
+Android debug Kotlin and shared iOS simulator Kotlin compilation both succeeded.
+
+Phase 2 adds 48 PNGs in [the region baseline directory](../shared/src/androidHostTest/screenshots/region).
+They cover six dock states, all four top region layouts, list-manager search and capture
+controls, three saved-list states, still inspection and match navigation, eight dialog states,
+and the Options sheet. All states have a light fixture. The dock, top region, and recognition
+details dialog also have dark and 130% font-scale fixtures.
+
+The region tier renders at 360 × 560 pixels at mdpi. Element and region PNGs trim unused
+background equally on opposite sides and retain a four-pixel gutter where the viewport allows.
+Both recording and verification apply the same crop, preserving the content position relative
+to the viewport center. Dialog and sheet fixtures capture the actual Robolectric window after advancing the
+Compose clock. The Options sheet is expanded. The list
+editor is scrolled to show the validation error and actions. Help and scan-area fixtures capture
+the initial viewport of their scrollable content.
+
+The crop changed the PNG dimensions for both tiers. To refresh all screenshot fixtures after a
+shared rendering change, use the same command with `--tests '*ScreenshotTest'` as the filter.
+
+Record or update only the Phase 2 baselines.
+
+```sh
+./gradlew :shared:cleanTestAndroidHostTest :shared:testAndroidHostTest \
+  --tests '*RegionScreenshotTest' --tests '*DialogScreenshotTest' \
+  -PltfRecordScreenshots=true --no-build-cache
+```
+
+Verify all host tests and existing baselines.
+
+```sh
+./gradlew :shared:cleanTestAndroidHostTest :shared:testAndroidHostTest --no-build-cache
+```
+
+Removing `confirm-destructive-dialog__delete-list__light.png` failed verification and left the
+file absent. Temporarily shifting the enabled primary action down 8 dp failed verification for
+`finder-primary-action__enabled__light.png` and produced actual and comparison PNGs under
+`shared/build/reports/screenshot-tests/diffs`. The fixture and original button position were
+restored.
+
+Three consecutive uncached clean runs each passed 463 tests across 64 suites with zero failures,
+errors, skips, or differing images across all 58 baselines. The third run also passed
+`:shared:compileKotlinIosSimulatorArm64` and `:androidApp:compileDebugKotlin`. There is no
+configured Kotlin formatter. Physical-device rendering, including native camera content, and
+pixel stability across hosts remain unverified.

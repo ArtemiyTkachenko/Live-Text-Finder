@@ -3,21 +3,26 @@ package com.artkachenko.livetextfinder
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.view.View
+import android.view.ViewGroup
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.BroadcastFrameClock
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Recomposer
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.ViewRootForTest
+import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import com.artkachenko.livetextfinder.ui.LiveTextFinderTheme
@@ -34,9 +39,15 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import org.robolectric.Robolectric
 import org.robolectric.RuntimeEnvironment
+import org.robolectric.shadows.ShadowDialog
 
-internal enum class ScreenshotTier(val directory: String, val heightDp: Int) {
-    ELEMENT("element", 112),
+internal enum class ScreenshotTier(
+    val directory: String,
+    val heightDp: Int,
+    val horizontalPaddingDp: Int,
+) {
+    ELEMENT("element", 112, 12),
+    REGION("region", 560, 0),
 }
 
 internal enum class ScreenshotVariant(val suffix: String, val dark: Boolean, val fontScale: Float) {
@@ -52,8 +63,29 @@ internal fun assertScreenshot(
     variant: ScreenshotVariant,
     content: @Composable () -> Unit,
 ) {
+    assertScreenshot(tier, subject, state, variant, null, content)
+}
+
+internal fun assertDialogScreenshot(
+    subject: String,
+    state: String,
+    variant: ScreenshotVariant,
+    onDialogReady: (SemanticsNode) -> Unit = {},
+    content: @Composable () -> Unit,
+) {
+    assertScreenshot(ScreenshotTier.REGION, subject, state, variant, onDialogReady, content)
+}
+
+private fun assertScreenshot(
+    tier: ScreenshotTier,
+    subject: String,
+    state: String,
+    variant: ScreenshotVariant,
+    onDialogReady: ((SemanticsNode) -> Unit)?,
+    content: @Composable () -> Unit,
+) {
     val filename = "${subject}__${state}__${variant.suffix}.png"
-    val bitmap = captureScreenshot(tier, variant, content)
+    val bitmap = captureScreenshot(tier, variant, onDialogReady, content)
     try {
         compareScreenshot(bitmap, "${tier.directory}/$filename")
     } finally {
@@ -88,6 +120,7 @@ private fun compareScreenshot(bitmap: Bitmap, relativePath: String) {
 private fun captureScreenshot(
     tier: ScreenshotTier,
     variant: ScreenshotVariant,
+    onDialogReady: ((SemanticsNode) -> Unit)?,
     content: @Composable () -> Unit,
 ): Bitmap {
     val previousQualifiers = RuntimeEnvironment.getQualifiers()
@@ -100,6 +133,7 @@ private fun captureScreenshot(
     val clock = BroadcastFrameClock()
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined + clock)
     val recomposer = Recomposer(scope.coroutineContext)
+    var backgroundColor = 0
     try {
         scope.launch { recomposer.runRecomposeAndApplyChanges() }
         view.setLayerType(View.LAYER_TYPE_SOFTWARE, null)
@@ -107,9 +141,11 @@ private fun captureScreenshot(
         view.setContent {
             CompositionLocalProvider(LocalDensity provides Density(1f, variant.fontScale)) {
                 LiveTextFinderTheme(darkThemeOverride = variant.dark, dynamicColor = false) {
+                    val surfaceColor = MaterialTheme.colorScheme.surface.toArgb()
+                    SideEffect { backgroundColor = surfaceColor }
                     Surface(modifier = Modifier.fillMaxSize()) {
                         Box(
-                            modifier = Modifier.padding(horizontal = 12.dp),
+                            modifier = Modifier.padding(horizontal = tier.horizontalPaddingDp.dp),
                             contentAlignment = Alignment.Center,
                         ) {
                             content()
@@ -121,22 +157,51 @@ private fun captureScreenshot(
         activity.setContentView(view)
         Snapshot.sendApplyNotifications()
         val root = view.getChildAt(0) as ViewRootForTest
-        repeat(32) { frame ->
+        var dialogDecor: View? = null
+        var dialogReadyFrame: Int? = null
+        repeat(96) { frame ->
             clock.sendFrame(1_000_000_000L + frame * 16_000_000L)
             drainMainLooper()
-            view.measure(
-                View.MeasureSpec.makeMeasureSpec(360, View.MeasureSpec.EXACTLY),
-                View.MeasureSpec.makeMeasureSpec(tier.heightDp, View.MeasureSpec.EXACTLY),
-            )
-            view.layout(0, 0, view.measuredWidth, view.measuredHeight)
+            layoutScreenshotView(view, tier.heightDp)
             root.measureAndLayoutForTest()
+            if (onDialogReady != null) {
+                val window = ShadowDialog.getLatestDialog()?.takeIf { it.isShowing }?.window
+                    ?: return@repeat
+                if (dialogDecor != window.decorView) {
+                    dialogDecor = window.decorView
+                    window.setLayout(360, tier.heightDp)
+                }
+                val decor = window.decorView
+                layoutScreenshotView(decor, tier.heightDp)
+                val dialogRoot = findComposeRoot(decor) ?: return@repeat
+                dialogRoot.measureAndLayoutForTest()
+                // Advance the sheet entrance and any dialog state change on the test clock.
+                if (dialogReadyFrame == null && frame >= 32) {
+                    onDialogReady(dialogRoot.semanticsOwner.rootSemanticsNode)
+                    Snapshot.sendApplyNotifications()
+                    dialogReadyFrame = frame
+                    return@repeat
+                }
+                val readyFrame = dialogReadyFrame ?: return@repeat
+                if (frame - readyFrame < 32 || clock.hasAwaiters) return@repeat
+            }
             if (recomposer.currentState.value == Recomposer.State.Idle) {
-                return Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
-                    .also { view.draw(Canvas(it)) }
+                val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+                try {
+                    val canvas = Canvas(bitmap)
+                    view.draw(canvas)
+                    dialogDecor?.draw(canvas)
+                    return bitmap.cropToContent(backgroundColor)
+                } finally {
+                    bitmap.recycle()
+                }
             }
         }
         error("Screenshot composition did not settle")
     } finally {
+        if (onDialogReady != null) {
+            ShadowDialog.getLatestDialog()?.takeIf { it.isShowing }?.dismiss()
+        }
         view.disposeComposition()
         recomposer.cancel()
         scope.cancel()
@@ -144,4 +209,52 @@ private fun captureScreenshot(
         RuntimeEnvironment.setQualifiers(previousQualifiers)
         RuntimeEnvironment.setFontScale(previousFontScale)
     }
+}
+
+private fun layoutScreenshotView(view: View, heightDp: Int) {
+    view.measure(
+        View.MeasureSpec.makeMeasureSpec(360, View.MeasureSpec.EXACTLY),
+        View.MeasureSpec.makeMeasureSpec(heightDp, View.MeasureSpec.EXACTLY),
+    )
+    view.layout(0, 0, view.measuredWidth, view.measuredHeight)
+}
+
+private fun findComposeRoot(view: View): ViewRootForTest? = when (view) {
+    is ViewRootForTest -> view
+    is ViewGroup -> (0 until view.childCount).firstNotNullOfOrNull { index ->
+        findComposeRoot(view.getChildAt(index))
+    }
+    else -> null
+}
+
+private const val SCREENSHOT_GUTTER_PX = 4
+
+private fun Bitmap.cropToContent(backgroundColor: Int): Bitmap {
+    val pixels = IntArray(width * height)
+    getPixels(pixels, 0, width, 0, 0, width, height)
+    var left = width
+    var top = height
+    var right = -1
+    var bottom = -1
+    for (y in 0 until height) {
+        for (x in 0 until width) {
+            if (pixels[y * width + x] != backgroundColor) {
+                left = minOf(left, x)
+                top = minOf(top, y)
+                right = maxOf(right, x)
+                bottom = maxOf(bottom, y)
+            }
+        }
+    }
+    check(right >= left && bottom >= top) { "Screenshot contains only its background" }
+
+    // Remove equal margins so a shifted component still differs from its baseline.
+    val trimX = (minOf(left, width - 1 - right) - SCREENSHOT_GUTTER_PX).coerceAtLeast(0)
+    val trimY = (minOf(top, height - 1 - bottom) - SCREENSHOT_GUTTER_PX).coerceAtLeast(0)
+    val cropWidth = width - 2 * trimX
+    val cropHeight = height - 2 * trimY
+    if (cropWidth == width && cropHeight == height) {
+        return checkNotNull(copy(Bitmap.Config.ARGB_8888, false))
+    }
+    return Bitmap.createBitmap(this, trimX, trimY, cropWidth, cropHeight)
 }

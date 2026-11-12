@@ -264,8 +264,10 @@ Host tests cover the pure models and two holders; `StillInspectionState` relies 
 navigation and copy coordinator tests. Device behaviour of the restructured screen and snackbar
 placement remains a device check.
 
-Android host screenshot tests render a fixed-size Compose view with a controlled frame clock,
-density, locale, font scale, and theme. Roborazzi compares its bitmap against a PNG fixture under
+Android host screenshot tests render a fixed-size Compose view or dialog window with a controlled
+frame clock, density, locale, font scale, and theme. The capture trims unused background equally
+on opposite sides so the PNG is smaller while preserving its position relative to the viewport
+center. Roborazzi compares the result against a PNG fixture under
 `shared/src/androidHostTest/screenshots`. The host test task verifies fixtures by default and
 records them only when requested explicitly. Visual mismatches produce actual and comparison
 PNGs under `shared/build/reports/screenshot-tests/diffs`.
