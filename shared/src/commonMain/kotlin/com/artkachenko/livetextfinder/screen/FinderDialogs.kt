@@ -8,13 +8,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import com.artkachenko.livetextfinder.inspection.StillInspectionMatchesDialog
 import com.artkachenko.livetextfinder.inspection.StillInspectionState
-import com.artkachenko.livetextfinder.lists.SearchListManagerState
+import com.artkachenko.livetextfinder.lists.SavedSearchEditingState
 import com.artkachenko.livetextfinder.scanarea.LiveSearchAreaDialogHost
 import com.artkachenko.livetextfinder.scanarea.LiveSearchAreaState
 import com.artkachenko.livetextfinder.search.SearchListTransferState
 import com.artkachenko.livetextfinder.search.SearchSessionState
 import com.artkachenko.livetextfinder.ui.ConfirmDestructiveDialog
-import com.artkachenko.livetextfinder.ui.FinderOptionsSheet
+import com.artkachenko.livetextfinder.ui.FinderOptionsSheetHost
 import com.artkachenko.livetextfinder.ui.HighlightColorDialog
 import com.artkachenko.livetextfinder.ui.SearchTermResultsDialog
 import com.artkachenko.livetextfinder.ui.UsageHelpDialog
@@ -64,7 +64,7 @@ internal fun FinderDialogs(
     sessionState: SearchSessionState,
     searchState: FinderSearchState,
     inspection: StillInspectionState,
-    listManager: SearchListManagerState,
+    searchEditing: SavedSearchEditingState,
     liveArea: LiveSearchAreaState,
     transferState: SearchListTransferState,
     actions: FinderSourceActions,
@@ -96,15 +96,15 @@ internal fun FinderDialogs(
             onDismiss = { dialogs.termResultsOpen = false },
         )
     }
-    listManager.pendingDeleteId?.let { id ->
+    searchEditing.pendingDeleteId?.let { id ->
         val name = sessionState.persisted.lists.firstOrNull { list -> list.id == id }
             ?.name ?: stringResource(Res.string.search_list_delete_fallback_name)
         ConfirmDestructiveDialog(
             title = stringResource(Res.string.search_list_delete_title),
             message = stringResource(Res.string.search_list_delete_message, name),
             confirmLabel = stringResource(Res.string.search_list_delete),
-            onConfirm = { listManager.confirmDelete(id) },
-            onDismiss = listManager::dismissDelete,
+            onConfirm = { searchEditing.confirmDelete(id) },
+            onDismiss = searchEditing::dismissDelete,
         )
     }
     if (dialogs.resetConfirmOpen) {
@@ -114,7 +114,7 @@ internal fun FinderDialogs(
             confirmLabel = stringResource(Res.string.saved_search_reset_confirm),
             onConfirm = {
                 dialogs.resetConfirmOpen = false
-                listManager.retrySavedSearches()
+                searchEditing.retrySavedSearches()
             },
             onDismiss = { dialogs.resetConfirmOpen = false },
         )
@@ -124,7 +124,7 @@ internal fun FinderDialogs(
         HighlightColorDialog(
             selectedColor = sessionState.persisted.highlightColor,
             enabled = savedSearchEditable,
-            onSelectColor = listManager::setHighlightColor,
+            onSelectColor = searchEditing::setHighlightColor,
             onDismissRequest = { dialogs.highlightColorOpen = false },
         )
     }
@@ -132,12 +132,12 @@ internal fun FinderDialogs(
         UsageHelpDialog(onDismissRequest = { dialogs.helpOpen = false })
     }
     if (dialogs.optionsOpen) {
-        FinderOptionsSheet(
+        FinderOptionsSheetHost(
             sessionState = sessionState,
             transferState = transferState,
             liveAreaLabel = liveAreaLabel,
             showImport = showImport,
-            onMatchMode = listManager::setMatchMode,
+            onMatchMode = searchEditing::setMatchMode,
             onImportList = onImportList,
             onExportList = onExportList,
             onHighlight = { dialogs.highlightColorOpen = true },

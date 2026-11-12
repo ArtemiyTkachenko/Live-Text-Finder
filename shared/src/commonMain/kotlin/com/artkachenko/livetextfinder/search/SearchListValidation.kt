@@ -26,95 +26,83 @@ internal fun previewSearchListTerms(input: String): SearchListTermsPreview {
 internal fun validateSearchListTerms(input: String): Result<List<String>> {
     val rawLines = input.lines()
     if (rawLines.size > MAX_TERMS_PER_LIST) {
-        return Result.failure(
-            IllegalArgumentException("Lists can contain at most $MAX_TERMS_PER_LIST terms."),
-        )
+        return Result.failure(SearchSessionException(SearchSessionError.TooManyTerms))
     }
     val terms = rawLines.map(::normalizeRecognizedText)
     if (terms.any { it.isEmpty() }) {
-        return Result.failure(
-            IllegalArgumentException(
-                "Remove blank term lines. Each line must contain a term or phrase.",
-            ),
-        )
+        return Result.failure(SearchSessionException(SearchSessionError.BlankTermLine))
     }
     if (terms.any { it.length > MAX_TERM_LENGTH }) {
-        return Result.failure(
-            IllegalArgumentException("Each term can contain at most $MAX_TERM_LENGTH characters."),
-        )
+        return Result.failure(SearchSessionException(SearchSessionError.TermTooLong))
     }
     if (terms.indices.any { index ->
             terms.take(index).any { it.equals(terms[index], ignoreCase = true) }
         }
     ) {
-        return Result.failure(IllegalArgumentException("Terms must be unique, ignoring case."))
+        return Result.failure(SearchSessionException(SearchSessionError.DuplicateTerms))
     }
     if (terms.sumOf { it.length } > MAX_TOTAL_TERM_CHARS) {
-        return Result.failure(
-            IllegalArgumentException(
-                "A list can contain at most $MAX_TOTAL_TERM_CHARS total term characters.",
-            ),
-        )
+        return Result.failure(SearchSessionException(SearchSessionError.TooManyTermCharacters))
     }
     return Result.success(terms)
 }
 
 /** Validates the exact canonical shape accepted by the Android JSON store. */
-internal fun validatePersistedSearchState(value: PersistedSearchState): String? {
+internal fun validatePersistedSearchState(value: PersistedSearchState): SearchSessionError? {
     if (value.manualQuery.length > MAX_MANUAL_QUERY_LENGTH) {
-        return "Manual queries can contain at most $MAX_MANUAL_QUERY_LENGTH characters."
+        return SearchSessionError.ManualQueryTooLong
     }
     if (value.lists.size > MAX_LISTS) {
-        return "Saved search data contains too many lists."
+        return SearchSessionError.SavedTooManyLists
     }
 
     val seenIds = mutableSetOf<String>()
     val seenNames = mutableListOf<String>()
     for (list in value.lists) {
         if (list.id.length !in 1..100 || !seenIds.add(list.id)) {
-            return "Saved search data contains an invalid or duplicate list ID."
+            return SearchSessionError.SavedInvalidListId
         }
         if (list.name.isBlank() || list.name != list.name.trim() ||
             list.name.length > MAX_NAME_LENGTH
         ) {
-            return "Saved search data contains an invalid list name."
+            return SearchSessionError.SavedInvalidListName
         }
         if (seenNames.any { it.equals(list.name, ignoreCase = true) }) {
-            return "Saved search data contains duplicate list names."
+            return SearchSessionError.SavedDuplicateListNames
         }
         seenNames.add(list.name)
         if (list.terms.size !in 1..MAX_TERMS_PER_LIST) {
-            return "Saved search data contains an invalid term count."
+            return SearchSessionError.SavedInvalidTermCount
         }
         if (list.paletteSlots.size != list.terms.size ||
             list.paletteSlots.any { it !in SearchHighlightPalette.colors.indices } ||
             list.paletteSlots.toSet().size != list.paletteSlots.size
         ) {
-            return "Saved search data contains invalid term colors."
+            return SearchSessionError.SavedInvalidTermColors
         }
 
         var totalTermChars = 0
         val seenTerms = mutableListOf<String>()
         for (term in list.terms) {
             if (term.isBlank() || term != normalizeRecognizedText(term)) {
-                return "Saved search data contains a blank or noncanonical term."
+                return SearchSessionError.SavedNoncanonicalTerm
             }
             if (term.length > MAX_TERM_LENGTH) {
-                return "Saved search data contains a term that is too long."
+                return SearchSessionError.SavedTermTooLong
             }
             if (seenTerms.any { it.equals(term, ignoreCase = true) }) {
-                return "Saved search data contains duplicate terms."
+                return SearchSessionError.SavedDuplicateTerms
             }
             seenTerms.add(term)
             totalTermChars += term.length
         }
         if (totalTermChars > MAX_TOTAL_TERM_CHARS) {
-            return "Saved search data contains too many term characters."
+            return SearchSessionError.SavedTooManyTermCharacters
         }
     }
 
     if (value.activeListId != null && seenIds.none { it == value.activeListId }) {
-        return "The selected saved search list is missing."
+        return SearchSessionError.SavedSelectedListMissing
     }
     return null
 }

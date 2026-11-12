@@ -11,10 +11,10 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-class SearchListManagerStateTest {
+class SavedSearchEditingStateTest {
     private val session = inMemorySearchSessionController()
     private var transferNotifications = 0
-    private val state = SearchListManagerState(session) { transferNotifications++ }
+    private val state = SavedSearchEditingState(session) { transferNotifications++ }
 
     @Test
     fun toggle_opensAndClosesManagerAndDiscardsDraft() {
@@ -141,7 +141,7 @@ class SearchListManagerStateTest {
         state.editList(list)
         state.updateDraftTerms("apple\npear")
         state.requestDelete(list)
-        val saver = SearchListManagerState.saver(session) { transferNotifications++ }
+        val saver = SavedSearchEditingState.saver(session) { transferNotifications++ }
         val notificationsBeforeRestore = transferNotifications
 
         val saved = with(saver) { SaverScope { true }.save(state) }

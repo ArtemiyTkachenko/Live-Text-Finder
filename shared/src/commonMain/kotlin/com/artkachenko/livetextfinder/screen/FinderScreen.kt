@@ -33,7 +33,7 @@ import com.artkachenko.livetextfinder.camera.liveSearchAreaAvailable
 import com.artkachenko.livetextfinder.camera.rememberImageShareOwner
 import com.artkachenko.livetextfinder.inspection.stillInspectionState
 import com.artkachenko.livetextfinder.inspection.stillSourceOf
-import com.artkachenko.livetextfinder.lists.SearchListManagerState
+import com.artkachenko.livetextfinder.lists.SavedSearchEditingState
 import com.artkachenko.livetextfinder.lists.SearchListTransferContextEffect
 import com.artkachenko.livetextfinder.ocr.OcrUiState
 import com.artkachenko.livetextfinder.ocr.isCameraRunning
@@ -65,21 +65,21 @@ internal fun FinderScreen(session: SearchSessionController) {
     val highlightColor = sessionState.persisted.highlightColor
 
     val transferOwner = rememberSearchListTransferOwner()
-    val listManager = rememberSaveable(
+    val searchEditing = rememberSaveable(
         session,
         transferOwner,
-        saver = SearchListManagerState.saver(session, transferOwner::contextChanged),
+        saver = SavedSearchEditingState.saver(session, transferOwner::contextChanged),
     ) {
-        SearchListManagerState(session, transferOwner::contextChanged)
+        SavedSearchEditingState(session, transferOwner::contextChanged)
     }
-    SearchListTransferContextEffect(transferOwner, session, sessionState, listManager)
+    SearchListTransferContextEffect(transferOwner, session, sessionState, searchEditing)
     val transferState = transferOwner.state.value
 
     val liveArea = remember { LiveSearchAreaState() }
     LiveSearchAreaLifecycle(liveArea::reset)
     val viewportState = remember { mutableStateOf(IntSize.Zero) }
     val rootSizeState = remember { mutableStateOf(IntSize.Zero) }
-    val context = finderSourceContext(session, listManager, liveArea, rootSizeState)
+    val context = finderSourceContext(session, searchEditing, liveArea, rootSizeState)
     val shareOwner = rememberImageShareOwner()
     val importedState = context.importedOwner.state.value
     val freezeState = context.frozenOwner.state.value
@@ -139,7 +139,7 @@ internal fun FinderScreen(session: SearchSessionController) {
         freezeMode = freezeState.mode,
         stillSource = stillSource,
         areaSelected = liveArea.area != null,
-        managerOpen = listManager.isOpen,
+        managerOpen = searchEditing.isOpen,
         hasSearch = selectedList != null || search.query.isNotEmpty(),
         resultsAvailable = searchState.resultsAvailable,
         occurrenceCount = search.occurrences.size,
@@ -155,20 +155,20 @@ internal fun FinderScreen(session: SearchSessionController) {
     )
     val searchBar = FinderSearchBar(
         query = sessionState.persisted.manualQuery,
-        onQueryChange = listManager::setManualQuery,
+        onQueryChange = searchEditing::setManualQuery,
         activeListName = selectedList?.name,
         activeListTermCount = selectedList?.terms?.size ?: 0,
         matchMode = activeSearch.matchMode,
         saving = sessionState.saving,
         searchListsLabel = labels.searchLists,
-        onSearchLists = listManager::toggle,
+        onSearchLists = searchEditing::toggle,
         onTerms = {
             RetainedInspectionActionDispatcher.showTerms(
                 setTermsOpen = { dialogs.termResultsOpen = it },
                 setOccurrencesOpen = { inspection.copySession.updateDialogOpen(it) },
             )
         },
-        onUseManual = { listManager.selectList(null) },
+        onUseManual = { searchEditing.selectList(null) },
         onResults = { dialogs.termResultsOpen = true },
     )
     val captureActions = FinderCaptureActions(
@@ -182,7 +182,7 @@ internal fun FinderScreen(session: SearchSessionController) {
     )
     val layoutMode = finderLayoutMode(
         hasStillSource = stillSource != null,
-        managerOpen = listManager.isOpen,
+        managerOpen = searchEditing.isOpen,
         areaEditing = areaEditing,
     )
 
@@ -227,27 +227,27 @@ internal fun FinderScreen(session: SearchSessionController) {
                             areaSelected = liveArea.area != null,
                             shouldShowViews = shouldShowViews,
                             liveStageBand = shouldShowViews && layoutMode.isLiveCamera,
-                            onRetrySavedData = listManager::retrySavedSearches,
+                            onRetrySavedData = searchEditing::retrySavedSearches,
                             onRequestReset = { dialogs.resetConfirmOpen = true },
                         )
                     },
                 )
             },
             managerContent = {
-                if (listManager.isOpen) {
+                if (searchEditing.isOpen) {
                     FinderSearchLists(
                         lists = sessionState.persisted.lists,
                         activeListId = sessionState.persisted.activeListId,
-                        editor = listManager.editor,
+                        editor = searchEditing.editor,
                         canSave = sessionState.loaded && !sessionState.recoveryRequired,
-                        onNew = listManager::startNewList,
-                        onSelect = listManager::selectList,
-                        onEdit = listManager::editList,
-                        onDelete = listManager::requestDelete,
-                        onNameChange = listManager::updateDraftName,
-                        onTermsChange = listManager::updateDraftTerms,
-                        onSave = listManager::saveDraft,
-                        onCancel = listManager::cancelDraft,
+                        onNew = searchEditing::startNewList,
+                        onSelect = searchEditing::selectList,
+                        onEdit = searchEditing::editList,
+                        onDelete = searchEditing::requestDelete,
+                        onNameChange = searchEditing::updateDraftName,
+                        onTermsChange = searchEditing::updateDraftTerms,
+                        onSave = searchEditing::saveDraft,
+                        onCancel = searchEditing::cancelDraft,
                     )
                 }
             },
@@ -306,7 +306,7 @@ internal fun FinderScreen(session: SearchSessionController) {
         sessionState = sessionState,
         searchState = searchState,
         inspection = inspection,
-        listManager = listManager,
+        searchEditing = searchEditing,
         liveArea = liveArea,
         transferState = transferState,
         actions = actions,

@@ -322,30 +322,34 @@ class StillInspectionUiTest {
                                             }
                                         }
                                         FinderLiveDock(
-                                            query = "invoice",
-                                            onQueryChange = {},
-                                            activeListName = null,
-                                            activeListTermCount = 0,
-                                            matchMode = search.spec.matchMode,
-                                            searchListsLabel = "Lists",
-                                            onSearchLists = {},
-                                            onTerms = {},
-                                            onUseManual = {},
-                                            onResults = {},
-                                            onOccurrences = {},
+                                            search = FinderSearchBar(
+                                                query = "invoice",
+                                                onQueryChange = {},
+                                                activeListName = null,
+                                                activeListTermCount = 0,
+                                                matchMode = search.spec.matchMode,
+                                                saving = saving.value,
+                                                searchListsLabel = "Lists",
+                                                onSearchLists = {},
+                                                onTerms = {},
+                                                onUseManual = {},
+                                                onResults = {},
+                                            ),
+                                            capture = FinderCaptureActions(
+                                                captureLabel = if (source == "live") {
+                                                    "Freeze frame"
+                                                } else {
+                                                    null
+                                                },
+                                                captureEnabled = true,
+                                                onCapture = {},
+                                                pendingCaptureLabel = null,
+                                                onCancelCapture = {},
+                                                secondaryActionLabel = null,
+                                                onSecondaryAction = {},
+                                            ),
                                             resultsLabel = "Results (${rows.size})",
-                                            saving = saving.value,
-                                            captureLabel = if (source == "live") {
-                                                "Freeze frame"
-                                            } else {
-                                                null
-                                            },
-                                            captureEnabled = true,
-                                            onCapture = {},
-                                            pendingCaptureLabel = null,
-                                            onCancelCapture = {},
-                                            secondaryActionLabel = null,
-                                            onSecondaryAction = {},
+                                            onOccurrences = {},
                                             returnLabel = when (source) {
                                                 "frozen" -> "Resume scanning"
                                                 "imported" -> "Return to camera"
@@ -429,31 +433,35 @@ class StillInspectionUiTest {
             LiveTextFinderTheme(darkThemeOverride = false, dynamicColor = false) {
                 Surface(Modifier.fillMaxSize()) {
                     FinderLiveDock(
-                        query = "invoice",
-                        onQueryChange = {},
-                        activeListName = null,
-                        activeListTermCount = 0,
-                        matchMode = SearchMatchMode.Substring,
-                        searchListsLabel = "Lists",
-                        onSearchLists = { actions += "lists" },
-                        onTerms = { actions += "terms" },
-                        onUseManual = {},
-                        onResults = { actions += "results" },
-                        onOccurrences = { actions += "occurrences" },
+                        search = FinderSearchBar(
+                            query = "invoice",
+                            onQueryChange = {},
+                            activeListName = null,
+                            activeListTermCount = 0,
+                            matchMode = SearchMatchMode.Substring,
+                            saving = false,
+                            searchListsLabel = "Lists",
+                            onSearchLists = { actions += "lists" },
+                            onTerms = { actions += "terms" },
+                            onUseManual = {},
+                            onResults = { actions += "results" },
+                        ),
+                        capture = FinderCaptureActions(
+                            captureLabel = null,
+                            captureEnabled = false,
+                            onCapture = {},
+                            pendingCaptureLabel = null,
+                            onCancelCapture = {},
+                            secondaryActionLabel = null,
+                            onSecondaryAction = {},
+                        ),
                         resultsLabel = "Results (0)",
-                        saving = false,
-                        captureLabel = null,
-                        captureEnabled = false,
-                        onCapture = {},
-                        pendingCaptureLabel = null,
-                        onCancelCapture = {},
-                        secondaryActionLabel = null,
-                        onSecondaryAction = {},
+                        onOccurrences = { actions += "occurrences" },
                         returnLabel = "Resume scanning",
-                        sharePreparing = preparing.value,
                         onReturn = { actions += "return" },
                         onShare = { actions += "share" },
                         onCancelShare = { actions += "cancel" },
+                        sharePreparing = preparing.value,
                     )
                 }
             }
@@ -507,29 +515,46 @@ class StillInspectionUiTest {
                     Column {
                         FinderLiveAppBar(onOptions = { actions += "options" })
                         FinderLiveDock(
-                            query = "invoice",
-                            onQueryChange = {},
-                            activeListName = null,
-                            activeListTermCount = 0,
-                            matchMode = SearchMatchMode.Substring,
-                            searchListsLabel = if (managerOpen.value) "Close lists" else "Lists",
-                            onSearchLists = {
-                                RetainedInspectionActionDispatcher.toggleLists(
-                                    managerOpen.value,
-                                    { transferRevision++ },
-                                    { managerOpen.value = it },
-                                    {},
-                                    { editor.value = editor.value.close() },
-                                )
-                            },
-                            onTerms = {
-                                RetainedInspectionActionDispatcher.showTerms(
-                                    { termsOpen.value = it },
-                                    { occurrencesOpen.value = it },
-                                )
-                            },
-                            onUseManual = {},
-                            onResults = {},
+                            search = FinderSearchBar(
+                                query = "invoice",
+                                onQueryChange = {},
+                                activeListName = null,
+                                activeListTermCount = 0,
+                                matchMode = SearchMatchMode.Substring,
+                                saving = false,
+                                searchListsLabel = if (managerOpen.value) {
+                                    "Close lists"
+                                } else {
+                                    "Lists"
+                                },
+                                onSearchLists = {
+                                    RetainedInspectionActionDispatcher.toggleLists(
+                                        managerOpen.value,
+                                        { transferRevision++ },
+                                        { managerOpen.value = it },
+                                        {},
+                                        { editor.value = editor.value.close() },
+                                    )
+                                },
+                                onTerms = {
+                                    RetainedInspectionActionDispatcher.showTerms(
+                                        { termsOpen.value = it },
+                                        { occurrencesOpen.value = it },
+                                    )
+                                },
+                                onUseManual = {},
+                                onResults = {},
+                            ),
+                            capture = FinderCaptureActions(
+                                captureLabel = null,
+                                captureEnabled = false,
+                                onCapture = {},
+                                pendingCaptureLabel = null,
+                                onCancelCapture = {},
+                                secondaryActionLabel = null,
+                                onSecondaryAction = {},
+                            ),
+                            resultsLabel = "Results (0)",
                             onOccurrences = {
                                 RetainedInspectionActionDispatcher.showOccurrences(
                                     { clearFocusCalls++ },
@@ -538,15 +563,6 @@ class StillInspectionUiTest {
                                     { occurrencesOpen.value = it },
                                 )
                             },
-                            resultsLabel = "Results (0)",
-                            saving = false,
-                            captureLabel = null,
-                            captureEnabled = false,
-                            onCapture = {},
-                            pendingCaptureLabel = null,
-                            onCancelCapture = {},
-                            secondaryActionLabel = null,
-                            onSecondaryAction = {},
                             returnLabel = if (importedSource.value) {
                                 "Return to camera"
                             } else {
@@ -690,25 +706,29 @@ class StillInspectionUiTest {
                                     )
                                 }
                                 FinderLiveDock(
-                                    query = "invoice",
-                                    onQueryChange = {},
-                                    activeListName = "Monthly invoice archive",
-                                    activeListTermCount = 12,
-                                    matchMode = SearchMatchMode.Substring,
-                                    searchListsLabel = "Lists",
-                                    onSearchLists = {},
-                                    onTerms = {},
-                                    onUseManual = {},
-                                    onResults = {},
+                                    search = FinderSearchBar(
+                                        query = "invoice",
+                                        onQueryChange = {},
+                                        activeListName = "Monthly invoice archive",
+                                        activeListTermCount = 12,
+                                        matchMode = SearchMatchMode.Substring,
+                                        saving = false,
+                                        searchListsLabel = "Lists",
+                                        onSearchLists = {},
+                                        onTerms = {},
+                                        onUseManual = {},
+                                        onResults = {},
+                                    ),
+                                    capture = FinderCaptureActions(
+                                        captureLabel = null,
+                                        captureEnabled = false,
+                                        onCapture = {},
+                                        pendingCaptureLabel = null,
+                                        onCancelCapture = {},
+                                        secondaryActionLabel = null,
+                                        onSecondaryAction = {},
+                                    ),
                                     resultsLabel = "Results (0)",
-                                    saving = false,
-                                    captureLabel = null,
-                                    captureEnabled = false,
-                                    onCapture = {},
-                                    pendingCaptureLabel = null,
-                                    onCancelCapture = {},
-                                    secondaryActionLabel = null,
-                                    onSecondaryAction = {},
                                     returnLabel = "Resume scanning",
                                     onCancelShare = {},
                                 )

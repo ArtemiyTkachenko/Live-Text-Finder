@@ -22,7 +22,7 @@ data class SearchSessionState(
     val persisted: PersistedSearchState = PersistedSearchState("", emptyList(), null),
     val loaded: Boolean = false,
     val saving: Boolean = false,
-    val error: String? = null,
+    val error: SearchSessionError? = null,
     val recoveryRequired: Boolean = false,
 ) {
     val activeList: SavedSearchList?

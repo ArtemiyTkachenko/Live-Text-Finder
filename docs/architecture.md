@@ -97,7 +97,7 @@ least 48dp. The root owns safe/IME insets once, and compact/manager modes scroll
 
 ## Search-list presentation
 
-The list manager is a shared stateless presentation component. It receives saved-list, selected-ID and editor snapshots plus callbacks; `SearchListManagerState` retains controller calls, draft ownership and delete-confirmation state. Selection targets, Edit/Delete actions and the tonal editor are separate interaction regions. The existing `AppContentColumn`, now beside `FinderContentAssembly` in `ui/`, owns whole-page scrolling, so manager visibility continues to hide the preview without introducing nested section scrolling.
+The list manager is a shared stateless presentation component. It receives saved-list, selected-ID and editor snapshots plus callbacks; `SavedSearchEditingState` retains controller calls, draft ownership and delete-confirmation state. Selection targets, Edit/Delete actions and the tonal editor are separate interaction regions. The existing `AppContentColumn`, now beside `FinderContentAssembly` in `ui/`, owns whole-page scrolling, so manager visibility continues to hide the preview without introducing nested section scrolling.
 
 Scoped shared string resources provide list/editor labels, list-specific accessible action labels and term-count plurals. This presentation layer does not change validation, persistence, list activation, search semantics or source ownership.
 
@@ -219,7 +219,7 @@ pattern rather than a ViewModel, so no lifecycle or DI dependency is added.
   dialog session. The owner stays authoritative; the holder also publishes the committed area
   and revision as snapshot state, so draw-time checks can still compare published and current
   values. One nullable dialog request carries the opening token and captured context.
-- `SearchListManagerState` holds manager visibility, the editor draft, the pending delete
+- `SavedSearchEditingState` holds manager visibility, the editor draft, the pending delete
   confirmation and the transfer context revision. Every change that could make a pending list
   transfer stale goes through one method that notifies the transfer owner. Its saver restores
   visibility, draft and pending confirmation after Activity recreation without notifying the
@@ -248,10 +248,14 @@ where draw-time or tap-time code must read current state: `FinderTopRegion`, `Fi
 (preview, `HighlightOverlay`, area editor, `ScanAreaBadge`, capture row), `ScanAreaEditBar`,
 `StillInspectionFooter`, `StillInspectionMatchesDialog`, `LiveSearchAreaDialogHost` and
 `ConfirmDestructiveDialog`. `FinderSearchBar` and `FinderCaptureActions` group the values shared
-by the dock, inline search bar and capture controls; the flat signatures remain for component
-tests. `FinderCameraOverlay` centralizes fixed colours and dimensions for content drawn over
+by the dock, inline search bar and capture controls, and are the only signatures of those
+composables. `FinderOptionsSheet` stays a stateless sheet; `FinderOptionsSheetHost` maps saved
+search and transfer state onto it and closes the sheet before each action. `FinderCameraOverlay` centralizes fixed colours and dimensions for content drawn over
 camera imagery, independent of theme personalisation. Screen copy lives in shared string
-resources.
+resources. Saved-search problems are typed: validation, the controller and the stores report a
+`SearchSessionError`, carried through failed results by `SearchSessionException`, and
+`searchSessionErrorMessage` resolves the localized text. A store failure that is not typed is
+shown as a generic read, save or reset failure, never as a raw exception message.
 
 This restructuring preserved recognition, matching, projection, freshness and source ownership.
 Its intended behaviour changes are limited to the saved list draft, the transfer context

@@ -341,7 +341,10 @@ class SearchListTransferOwnerTest {
         configureOwner(owner, selected.copy(recoveryRequired = true)) { _, _ -> error("No import") }
         assertFalse(owner.state.value.importEnabled)
         assertFalse(owner.state.value.exportEnabled)
-        configureOwner(owner, selected.copy(error = "Storage error")) { _, _ -> error("No import") }
+        configureOwner(
+            owner,
+            selected.copy(error = SearchSessionError.StorageSaveFailed),
+        ) { _, _ -> error("No import") }
         assertFalse(owner.state.value.importEnabled)
         assertFalse(owner.state.value.exportEnabled)
 

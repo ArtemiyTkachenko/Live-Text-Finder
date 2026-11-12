@@ -787,3 +787,47 @@ Contains text language. These are host fixtures and production workflow checks, 
 physical-device render. Physical clipboard behavior, TalkBack, camera/OCR accuracy, capture-control
 hardware behavior and real crop/rotation/zoom alignment remain pending. No APK, device query,
 installation, network OCR, alerts, persistence or engine changes were performed.
+
+## Scanner screen restructuring — 2026-11-12
+
+Scope: `App.kt` split into the `screen`, `inspection`, `scanarea`, `status` and `lists` packages
+with state holders and region composables; large shared files split by declaration; four
+intended behaviour changes (saved list draft kept across Activity recreation, list-transfer
+context predicate compares captured values, one results-label rule, snackbars for copy, share
+and list-transfer outcomes); typed saved-search errors; remaining screen copy moved to string
+resources. See [architecture](architecture.md) for the resulting structure.
+
+What ran on the development host: `:shared:testAndroidHostTest` from a clean test state,
+`:shared:compileKotlinIosSimulatorArm64` and `:androidApp:compileDebugKotlin`. The final host
+run completed **427 tests with 0 failures**.
+
+Two tests had failed since 2026-11-09, when `padding(bottom = 16.dp)` was added to the shared
+`FinderPrimaryAction`: `LiveTextFinderThemeTest.productionLiveManualDockPreservesViewportAndRoutesActions`
+and `StatusFeedbackTest.mainScannerProductionAssemblyMeasuresPreviewAndKeepsActionsReachable`.
+The padding is kept by decision, and the expectations follow it: the live viewport floor in a
+744dp safe height is 384dp instead of 400dp, and the main-scanner preview must be at least 49%
+of the safe height instead of half (it measures 368dp of 744dp). The first test then showed that
+the dock was 16dp taller with a primary action than with Cancel freeze, so the viewport changed
+size on freeze. The dock now reserves the same bottom space for every action alternative, and
+the unchanged size assertions pass.
+
+File moves were compared with the previous commit and differ only in `package` and `import`
+lines. The declaration splits were compared line by line; three functions changed from
+`private` to `internal` because their callers moved to another file.
+
+Thirteen host test classes left Compose's process-wide UI dispatcher marked as scheduled with
+nothing queued, which stopped recomposition for later tests in the same Robolectric sandbox.
+Each now ends with `drainMainLooper()`. A temporary probe test placed after every host test
+class, in that class's sandbox, reported the thirteen before the fix and none after; the probes
+are not in the repository.
+
+Test changes: call sites of the dock, search bar and capture controls were regrouped into
+`FinderSearchBar` and `FinderCaptureActions`; assertions on saved-search error text became
+assertions on `SearchSessionError`; two expected status texts changed because unreadable or
+unsaved data now shows a generic message instead of the raw exception text. No assertion was
+removed.
+
+No repository Kotlin formatter is configured; changed files were checked for the 100-column
+limit only. Not run: any device or emulator, TalkBack, lint, APK generation. Unverified on a
+device: snackbar position and timing, the saved list draft across rotation, and the freeze,
+import, scan-area editing, match navigation and copy flows after the restructuring.

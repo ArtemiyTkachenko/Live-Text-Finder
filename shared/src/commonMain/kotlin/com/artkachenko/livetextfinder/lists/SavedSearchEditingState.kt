@@ -11,16 +11,18 @@ import com.artkachenko.livetextfinder.search.SavedSearchList
 import com.artkachenko.livetextfinder.search.SearchListEditorState
 import com.artkachenko.livetextfinder.search.SearchMatchMode
 import com.artkachenko.livetextfinder.search.SearchSessionController
+import com.artkachenko.livetextfinder.search.SearchSessionError
 import com.artkachenko.livetextfinder.search.dispatchSearchListSelection
 import com.artkachenko.livetextfinder.ui.RetainedInspectionActionDispatcher
 
 /**
- * Holds the saved-list manager's visibility, editor draft and pending delete confirmation.
+ * The screen's editing state for saved searches: the list manager's visibility, the editor
+ * draft, the pending delete confirmation, and every edit to the saved search session.
  *
  * Every change that could make a pending list import or export stale goes through
  * [markContextChanged], which notifies the transfer owner and advances [contextRevision].
  */
-internal class SearchListManagerState(
+internal class SavedSearchEditingState(
     private val session: SearchSessionController,
     private val onTransferContextChanged: () -> Unit,
 ) {
@@ -142,7 +144,7 @@ internal class SearchListManagerState(
         fun saver(
             session: SearchSessionController,
             onTransferContextChanged: () -> Unit,
-        ): Saver<SearchListManagerState, Any> = listSaver(
+        ): Saver<SavedSearchEditingState, Any> = listSaver(
             save = { state ->
                 listOf(
                     state.isOpen,
@@ -151,11 +153,11 @@ internal class SearchListManagerState(
                     state.editor.editingId,
                     state.editor.name,
                     state.editor.terms,
-                    state.editor.error,
+                    state.editor.error?.name,
                 )
             },
             restore = { saved ->
-                SearchListManagerState(session, onTransferContextChanged).apply {
+                SavedSearchEditingState(session, onTransferContextChanged).apply {
                     isOpen = saved[0] as Boolean
                     pendingDeleteId = saved[1] as String?
                     editor = SearchListEditorState(
@@ -163,7 +165,7 @@ internal class SearchListManagerState(
                         editingId = saved[3] as String?,
                         name = saved[4] as String,
                         terms = saved[5] as String,
-                        error = saved[6] as String?,
+                        error = (saved[6] as String?)?.let(SearchSessionError::valueOf),
                     )
                 }
             },

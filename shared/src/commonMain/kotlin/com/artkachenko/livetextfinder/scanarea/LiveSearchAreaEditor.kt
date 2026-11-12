@@ -34,6 +34,20 @@ import com.artkachenko.livetextfinder.search.searchAreaCornerAt
 import com.artkachenko.livetextfinder.ui.FinderCameraOverlay
 import com.artkachenko.livetextfinder.ui.scanAreaGuideStroke
 import kotlin.math.roundToInt
+import livetextfinder.shared.generated.resources.Res
+import livetextfinder.shared.generated.resources.scan_area_bounds
+import livetextfinder.shared.generated.resources.scan_area_direction_down
+import livetextfinder.shared.generated.resources.scan_area_direction_left
+import livetextfinder.shared.generated.resources.scan_area_direction_right
+import livetextfinder.shared.generated.resources.scan_area_direction_up
+import livetextfinder.shared.generated.resources.scan_area_movable
+import livetextfinder.shared.generated.resources.scan_area_move_down
+import livetextfinder.shared.generated.resources.scan_area_move_left
+import livetextfinder.shared.generated.resources.scan_area_move_right
+import livetextfinder.shared.generated.resources.scan_area_move_up
+import livetextfinder.shared.generated.resources.scan_area_resize_action
+import livetextfinder.shared.generated.resources.scan_area_resize_handle
+import org.jetbrains.compose.resources.stringResource
 
 @androidx.compose.runtime.Composable
 internal expect fun LiveAreaBackHandler(enabled: Boolean, onBack: () -> Unit)
@@ -166,9 +180,34 @@ internal fun LiveSearchAreaEditorOverlay(
                 corner == SearchAreaCorner.BottomLeft
             val isTop = corner == SearchAreaCorner.TopLeft ||
                 corner == SearchAreaCorner.TopRight
-            fun resizeAction(direction: String, dx: Int, dy: Int) = CustomAccessibilityAction(
-                "Resize $corner $direction by 5%",
-            ) {
+            val resizeLabels = listOf(
+                Res.string.scan_area_direction_left,
+                Res.string.scan_area_direction_right,
+                Res.string.scan_area_direction_up,
+                Res.string.scan_area_direction_down,
+            ).map { direction ->
+                stringResource(
+                    Res.string.scan_area_resize_action,
+                    corner.name,
+                    stringResource(direction),
+                )
+            }
+            val movableLabel = stringResource(Res.string.scan_area_movable)
+            val moveLabels = listOf(
+                stringResource(Res.string.scan_area_move_left),
+                stringResource(Res.string.scan_area_move_right),
+                stringResource(Res.string.scan_area_move_up),
+                stringResource(Res.string.scan_area_move_down),
+            )
+            val handleLabel = stringResource(Res.string.scan_area_resize_handle, corner.name)
+            val boundsLabel = stringResource(
+                Res.string.scan_area_bounds,
+                percent(area.left),
+                percent(area.top),
+                percent(area.right),
+                percent(area.bottom),
+            )
+            fun resizeAction(label: String, dx: Int, dy: Int) = CustomAccessibilityAction(label) {
                 val next = resizeSearchAreaByStep(
                     area, corner, dx, dy,
                     viewportSize.width.toFloat(), viewportSize.height.toFloat(),
@@ -191,13 +230,13 @@ internal fun LiveSearchAreaEditorOverlay(
                         .size(regionWidth, regionHeight)
                         .focusable()
                         .semantics {
-                            contentDescription = "Movable scan area"
-                            stateDescription = boundsDescription(area)
+                            contentDescription = movableLabel
+                            stateDescription = boundsLabel
                             customActions = listOf(
-                                CustomAccessibilityAction("Move left by 5%") { moveBy(-1, 0) },
-                                CustomAccessibilityAction("Move right by 5%") { moveBy(1, 0) },
-                                CustomAccessibilityAction("Move up by 5%") { moveBy(0, -1) },
-                                CustomAccessibilityAction("Move down by 5%") { moveBy(0, 1) },
+                                CustomAccessibilityAction(moveLabels[0]) { moveBy(-1, 0) },
+                                CustomAccessibilityAction(moveLabels[1]) { moveBy(1, 0) },
+                                CustomAccessibilityAction(moveLabels[2]) { moveBy(0, -1) },
+                                CustomAccessibilityAction(moveLabels[3]) { moveBy(0, 1) },
                             )
                         },
                 )
@@ -206,13 +245,13 @@ internal fun LiveSearchAreaEditorOverlay(
                 Modifier.align(Alignment.TopStart)
                     .offset(x = with(density) { x.toDp() }, y = with(density) { y.toDp() })
                     .size(48.dp).background(Color.Transparent).focusable().semantics {
-                        contentDescription = "Resize scan area $corner handle"
-                        stateDescription = boundsDescription(area)
+                        contentDescription = handleLabel
+                        stateDescription = boundsLabel
                         customActions = listOf(
-                            resizeAction("left", -1, 0),
-                            resizeAction("right", 1, 0),
-                            resizeAction("up", 0, -1),
-                            resizeAction("down", 0, 1),
+                            resizeAction(resizeLabels[0], -1, 0),
+                            resizeAction(resizeLabels[1], 1, 0),
+                            resizeAction(resizeLabels[2], 0, -1),
+                            resizeAction(resizeLabels[3], 0, 1),
                         )
                     },
             )
@@ -221,8 +260,4 @@ internal fun LiveSearchAreaEditorOverlay(
 }
 
 private fun percent(value: Float) = (value * 100).roundToInt()
-
-private fun boundsDescription(area: NormalizedSearchArea) =
-    "Bounds ${percent(area.left)}%, ${percent(area.top)}%, " +
-        "${percent(area.right)}%, ${percent(area.bottom)}%"
 

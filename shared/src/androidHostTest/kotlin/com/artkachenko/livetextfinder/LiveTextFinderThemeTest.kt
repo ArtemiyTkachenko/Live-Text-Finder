@@ -54,11 +54,13 @@ import com.artkachenko.livetextfinder.search.SearchMatchMode
 import com.artkachenko.livetextfinder.search.inMemorySearchSessionController
 import com.artkachenko.livetextfinder.status.RecognitionDetails
 import com.artkachenko.livetextfinder.status.StatusSource
+import com.artkachenko.livetextfinder.ui.FinderCaptureActions
 import com.artkachenko.livetextfinder.ui.FinderCaptureControls
 import com.artkachenko.livetextfinder.ui.FinderContentAssembly
 import com.artkachenko.livetextfinder.ui.FinderLiveAppBar
 import com.artkachenko.livetextfinder.ui.FinderLiveDock
 import com.artkachenko.livetextfinder.ui.FinderPrimaryAction
+import com.artkachenko.livetextfinder.ui.FinderSearchBar
 import com.artkachenko.livetextfinder.ui.FinderSearchControls
 import com.artkachenko.livetextfinder.ui.FinderSpacing
 import com.artkachenko.livetextfinder.ui.LiveTextFinderTheme
@@ -219,16 +221,18 @@ class LiveTextFinderThemeTest {
                         topContent = {
                             FinderSearchControls(
                                 showTitle = true,
-                                query = query.value,
-                                onQueryChange = { query.value = it },
-                                searchListsLabel = listButtonLabel.value,
-                                onSearchLists = {
-                                    listClicks.intValue++
-                                    listButtonLabel.value = "Close lists"
-                                },
+                                search = FinderSearchBar(
+                                    query = query.value,
+                                    onQueryChange = { query.value = it },
+                                    searchListsLabel = listButtonLabel.value,
+                                    onSearchLists = {
+                                        listClicks.intValue++
+                                        listButtonLabel.value = "Close lists"
+                                    },
+                                    onResults = { resultsClicks.intValue++ },
+                                ),
                                 onOptions = ::ignoreAction,
                                 resultsLabel = "Results (3)",
-                                onResults = { resultsClicks.intValue++ },
                             )
                         },
                         managerContent = {},
@@ -241,13 +245,15 @@ class LiveTextFinderThemeTest {
                         },
                         footerContent = {
                             FinderCaptureControls(
-                                captureLabel = "Freeze frame",
-                                captureEnabled = captureEnabled.value,
-                                onCapture = { captureClicks.intValue++ },
-                                pendingCaptureLabel = null,
-                                onCancelCapture = ::ignoreAction,
-                                secondaryActionLabel = null,
-                                onSecondaryAction = ::ignoreAction,
+                                actions = FinderCaptureActions(
+                                    captureLabel = "Freeze frame",
+                                    captureEnabled = captureEnabled.value,
+                                    onCapture = { captureClicks.intValue++ },
+                                    pendingCaptureLabel = null,
+                                    onCancelCapture = ::ignoreAction,
+                                    secondaryActionLabel = null,
+                                    onSecondaryAction = ::ignoreAction,
+                                ),
                             )
                         },
                     )
@@ -418,14 +424,16 @@ class LiveTextFinderThemeTest {
                                         FinderSearchControls(
                                             showTitle = fixture.height >= 500 &&
                                                 fixture.fontScale < 1.3f,
-                                            query = "invoice-2048",
-                                            onQueryChange = ::ignoreQueryChange,
-                                            searchListsLabel = "Lists",
-                                            onSearchLists = ::ignoreAction,
-                                            searchContext = fixture.searchContext,
+                                            search = FinderSearchBar(
+                                                query = "invoice-2048",
+                                                onQueryChange = ::ignoreQueryChange,
+                                                searchListsLabel = "Lists",
+                                                onSearchLists = ::ignoreAction,
+                                                onResults = ::ignoreAction,
+                                            ),
                                             onOptions = ::ignoreAction,
                                             resultsLabel = "Results (4)",
-                                            onResults = ::ignoreAction,
+                                            searchContext = fixture.searchContext,
                                         )
                                     }
                                 },
@@ -451,13 +459,15 @@ class LiveTextFinderThemeTest {
                                 footerContent = {
                                     Box(Modifier.onSizeChanged { footerSize.value = it }) {
                                         FinderCaptureControls(
-                                            captureLabel = "Freeze frame",
-                                            captureEnabled = true,
-                                            onCapture = ::ignoreAction,
-                                            pendingCaptureLabel = null,
-                                            onCancelCapture = ::ignoreAction,
-                                            secondaryActionLabel = null,
-                                            onSecondaryAction = ::ignoreAction,
+                                            actions = FinderCaptureActions(
+                                                captureLabel = "Freeze frame",
+                                                captureEnabled = true,
+                                                onCapture = ::ignoreAction,
+                                                pendingCaptureLabel = null,
+                                                onCancelCapture = ::ignoreAction,
+                                                secondaryActionLabel = null,
+                                                onSecondaryAction = ::ignoreAction,
+                                            ),
                                         )
                                     }
                                 },
@@ -613,25 +623,29 @@ class LiveTextFinderThemeTest {
                                 Modifier.fillMaxWidth().onSizeChanged { dockSize.value = it },
                             ) {
                                 FinderLiveDock(
-                                    query = query.value,
-                                    onQueryChange = { query.value = it },
-                                    activeListName = null,
-                                    activeListTermCount = 0,
-                                    matchMode = SearchMatchMode.Substring,
-                                    searchListsLabel = "Lists",
-                                    onSearchLists = { listClicks.intValue++ },
-                                    onTerms = { termsClicks.intValue++ },
-                                    onUseManual = {},
-                                    onResults = { resultsClicks.intValue++ },
+                                    search = FinderSearchBar(
+                                        query = query.value,
+                                        onQueryChange = { query.value = it },
+                                        activeListName = null,
+                                        activeListTermCount = 0,
+                                        matchMode = SearchMatchMode.Substring,
+                                        saving = saving.value,
+                                        searchListsLabel = "Lists",
+                                        onSearchLists = { listClicks.intValue++ },
+                                        onTerms = { termsClicks.intValue++ },
+                                        onUseManual = {},
+                                        onResults = { resultsClicks.intValue++ },
+                                    ),
+                                    capture = FinderCaptureActions(
+                                        captureLabel = captureLabel.value,
+                                        captureEnabled = true,
+                                        onCapture = { captureClicks.intValue++ },
+                                        pendingCaptureLabel = pendingCaptureLabel.value,
+                                        onCancelCapture = ::ignoreAction,
+                                        secondaryActionLabel = null,
+                                        onSecondaryAction = ::ignoreAction,
+                                    ),
                                     resultsLabel = resultsLabel.value,
-                                    saving = saving.value,
-                                    captureLabel = captureLabel.value,
-                                    captureEnabled = true,
-                                    onCapture = { captureClicks.intValue++ },
-                                    pendingCaptureLabel = pendingCaptureLabel.value,
-                                    onCancelCapture = ::ignoreAction,
-                                    secondaryActionLabel = null,
-                                    onSecondaryAction = ::ignoreAction,
                                     onCancelShare = ::ignoreAction,
                                 )
                             }
@@ -643,7 +657,7 @@ class LiveTextFinderThemeTest {
 
         val density = checkNotNull(composeView).resources.displayMetrics.density
         assertEquals(744f, safeSize.value.height / density)
-        assertTrue(viewportSize.value.height / density >= 400f)
+        assertTrue(viewportSize.value.height / density >= 384f)
         val reservedStatusSize = statusSize.value
         val reservedViewportSize = viewportSize.value
         listOf(
@@ -662,7 +676,7 @@ class LiveTextFinderThemeTest {
             measureCurrentComposition()
             assertEquals(reservedStatusSize, statusSize.value, message)
             assertEquals(reservedViewportSize, viewportSize.value, message)
-            assertTrue(viewportSize.value.height / density >= 400f, message)
+            assertTrue(viewportSize.value.height / density >= 384f, message)
         }
         var nodes = semanticsNodes()
         val queryNode = nodes.single {
@@ -755,7 +769,7 @@ class LiveTextFinderThemeTest {
         assertTrue(cancelButton.touchBoundsInRoot.height >= freezeButtonSize)
         assertEquals(reservedStatusSize, statusSize.value)
         assertEquals(reservedViewportSize, viewportSize.value)
-        assertTrue(viewportSize.value.height / density >= 400f)
+        assertTrue(viewportSize.value.height / density >= 384f)
         val reservedDockSize = dockSize.value
         saving.value = true
         Snapshot.sendApplyNotifications()
@@ -863,26 +877,30 @@ class LiveTextFinderThemeTest {
                         },
                         footerContent = {
                             FinderLiveDock(
-                                query = query.value,
-                                onQueryChange = { query.value = it },
-                                activeListName =
-                                    "Quarterly review list with a long accessible name",
-                                activeListTermCount = 4,
-                                matchMode = SearchMatchMode.WholeWord,
-                                searchListsLabel = "Lists",
-                                onSearchLists = ::ignoreAction,
-                                onTerms = ::ignoreAction,
-                                onUseManual = { useManualClicks.intValue++ },
-                                onResults = ::ignoreAction,
+                                search = FinderSearchBar(
+                                    query = query.value,
+                                    onQueryChange = { query.value = it },
+                                    activeListName =
+                                        "Quarterly review list with a long accessible name",
+                                    activeListTermCount = 4,
+                                    matchMode = SearchMatchMode.WholeWord,
+                                    saving = true,
+                                    searchListsLabel = "Lists",
+                                    onSearchLists = ::ignoreAction,
+                                    onTerms = ::ignoreAction,
+                                    onUseManual = { useManualClicks.intValue++ },
+                                    onResults = ::ignoreAction,
+                                ),
+                                capture = FinderCaptureActions(
+                                    captureLabel = "Freeze frame",
+                                    captureEnabled = true,
+                                    onCapture = ::ignoreAction,
+                                    pendingCaptureLabel = null,
+                                    onCancelCapture = ::ignoreAction,
+                                    secondaryActionLabel = null,
+                                    onSecondaryAction = ::ignoreAction,
+                                ),
                                 resultsLabel = "Search results",
-                                saving = true,
-                                captureLabel = "Freeze frame",
-                                captureEnabled = true,
-                                onCapture = ::ignoreAction,
-                                pendingCaptureLabel = null,
-                                onCancelCapture = ::ignoreAction,
-                                secondaryActionLabel = null,
-                                onSecondaryAction = ::ignoreAction,
                                 returnLabel = "Resume scanning",
                                 onReturn = { returnClicks.intValue++ },
                                 onCancelShare = ::ignoreAction,

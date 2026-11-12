@@ -138,7 +138,7 @@ internal fun SearchListEditor(
                 )
             }
             editor.error?.let { error ->
-                Text(error, color = MaterialTheme.colorScheme.error)
+                Text(searchSessionErrorMessage(error), color = MaterialTheme.colorScheme.error)
             }
             FlowRow(
                 modifier = Modifier.fillMaxWidth(),

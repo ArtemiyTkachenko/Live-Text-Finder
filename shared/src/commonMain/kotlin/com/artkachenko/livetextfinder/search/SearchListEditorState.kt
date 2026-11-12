@@ -6,7 +6,7 @@ internal data class SearchListEditorState(
     val editingId: String? = null,
     val name: String = "",
     val terms: String = "",
-    val error: String? = null,
+    val error: SearchSessionError? = null,
 ) {
     fun startNew(): SearchListEditorState = SearchListEditorState(isOpen = true)
 

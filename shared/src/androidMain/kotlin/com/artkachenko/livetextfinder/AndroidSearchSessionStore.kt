@@ -10,6 +10,7 @@ import com.artkachenko.livetextfinder.search.MAX_TERMS_PER_LIST
 import com.artkachenko.livetextfinder.search.PersistedSearchState
 import com.artkachenko.livetextfinder.search.SavedSearchList
 import com.artkachenko.livetextfinder.search.SearchMatchMode
+import com.artkachenko.livetextfinder.search.SearchSessionException
 import com.artkachenko.livetextfinder.search.SearchSessionStore
 import com.artkachenko.livetextfinder.search.legacyPaletteSlots
 import com.artkachenko.livetextfinder.search.validatePersistedSearchState
@@ -41,9 +42,8 @@ private class AndroidSearchSessionStore(context: Context) : SearchSessionStore {
     override fun save(value: PersistedSearchState, callback: (Result<Unit>) -> Unit) {
         executor.execute {
             val result = runCatching {
-                val validationError = validatePersistedSearchState(value)
-                require(validationError == null) {
-                    validationError ?: "Saved search data is invalid."
+                validatePersistedSearchState(value)?.let { error ->
+                    throw SearchSessionException(error)
                 }
                 val bytes = encode(value).toByteArray(Charsets.UTF_8)
                 require(bytes.size <= MAX_FILE_BYTES) {
@@ -206,9 +206,8 @@ private class AndroidSearchSessionStore(context: Context) : SearchSessionStore {
             highlightColor,
             matchMode,
         )
-        val validationError = validatePersistedSearchState(value)
-        require(validationError == null) {
-            validationError ?: "Saved search data is invalid."
+        validatePersistedSearchState(value)?.let { error ->
+            throw SearchSessionException(error)
         }
         return value
     }

@@ -236,11 +236,11 @@ private fun FinderOptionsActionRow(
 }
 
 /**
- * Options sheet for the current saved-search and list-transfer state. Every action closes the
- * sheet through [onDismiss] before it runs.
+ * Shows [FinderOptionsSheet] for the current saved-search and list-transfer state. Every action
+ * closes the sheet through [onDismiss] before it runs.
  */
 @Composable
-internal fun FinderOptionsSheet(
+internal fun FinderOptionsSheetHost(
     sessionState: SearchSessionState,
     transferState: SearchListTransferState,
     liveAreaLabel: String?,

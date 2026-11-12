@@ -246,7 +246,10 @@ class AndroidSearchSessionStoreTest {
             assertTrue(await { store.load(it) }.isFailure)
             assertTrue(controller.state.value.loaded)
             assertTrue(controller.state.value.recoveryRequired)
-            assertTrue(controller.saveList(null, "New list", "new term")!!.contains("unavailable"))
+            assertEquals(
+                SearchSessionError.ListsUnavailable,
+                controller.saveList(null, "New list", "new term"),
+            )
             controller.setManualQuery("ignored until reset")
             controller.setHighlightColor(HighlightColor.Magenta)
             assertTrue(await { store.load(it) }.isFailure)

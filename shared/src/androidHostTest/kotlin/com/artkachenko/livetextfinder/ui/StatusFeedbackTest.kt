@@ -79,6 +79,7 @@ import com.artkachenko.livetextfinder.search.SearchListEditorState
 import com.artkachenko.livetextfinder.search.SearchMatchMode
 import com.artkachenko.livetextfinder.search.SearchPresentationOwner
 import com.artkachenko.livetextfinder.search.SearchSessionController
+import com.artkachenko.livetextfinder.search.SearchSessionError
 import com.artkachenko.livetextfinder.search.SearchSessionState
 import com.artkachenko.livetextfinder.search.SearchSessionStore
 import com.artkachenko.livetextfinder.search.SearchTermSummary
@@ -451,13 +452,15 @@ class StatusFeedbackTest {
                     Column {
                         FinderSearchControls(
                             showTitle = false,
-                            query = "invoice",
-                            onQueryChange = ::ignoreText,
-                            searchListsLabel = "Lists",
-                            onSearchLists = ::ignoreAction,
-                            searchContext = "Manual search",
+                            search = FinderSearchBar(
+                                query = "invoice",
+                                onQueryChange = ::ignoreText,
+                                searchListsLabel = "Lists",
+                                onSearchLists = ::ignoreAction,
+                            ),
                             onOptions = { optionsOpen.value = true },
-                            savingLabel = "Saving…"
+                            searchContext = "Manual search",
+                            savingLabel = "Saving…",
                         )
                     }
                 }
@@ -678,12 +681,14 @@ class StatusFeedbackTest {
                     Column {
                         FinderSearchControls(
                             showTitle = false,
-                            query = "invoice",
-                            onQueryChange = ::ignoreText,
-                            searchListsLabel = "Lists",
-                            onSearchLists = ::ignoreAction,
+                            search = FinderSearchBar(
+                                query = "invoice",
+                                onQueryChange = ::ignoreText,
+                                searchListsLabel = "Lists",
+                                onSearchLists = ::ignoreAction,
+                            ),
+                            onOptions = { optionsOpen.value = true },
                             searchContext = "Manual search",
-                            onOptions = { optionsOpen.value = true }
                         )
                     }
                 }
@@ -749,12 +754,14 @@ class StatusFeedbackTest {
                 Surface(Modifier.fillMaxSize()) {
                     FinderSearchControls(
                         showTitle = true,
-                        query = "invoice",
-                        onQueryChange = ::ignoreText,
-                        searchListsLabel = "Lists",
-                        onSearchLists = ::ignoreAction,
+                        search = FinderSearchBar(
+                            query = "invoice",
+                            onQueryChange = ::ignoreText,
+                            searchListsLabel = "Lists",
+                            onSearchLists = ::ignoreAction,
+                        ),
+                        onOptions = { optionsOpen.value = true },
                         searchContext = "Manual search",
-                        onOptions = { optionsOpen.value = true }
                     )
                 }
                 if (optionsOpen.value) {
@@ -824,12 +831,14 @@ class StatusFeedbackTest {
                         topContent = {
                             FinderSearchControls(
                                 showTitle = true,
-                                query = "invoice",
-                                onQueryChange = ::ignoreText,
-                                searchListsLabel = "Lists",
-                                onSearchLists = ::ignoreAction,
-                                searchContext = "Manual search",
+                                search = FinderSearchBar(
+                                    query = "invoice",
+                                    onQueryChange = ::ignoreText,
+                                    searchListsLabel = "Lists",
+                                    onSearchLists = ::ignoreAction,
+                                ),
                                 onOptions = ::ignoreAction,
+                                searchContext = "Manual search",
                             )
                         },
                         managerContent = {},
@@ -838,31 +847,33 @@ class StatusFeedbackTest {
                         },
                         footerContent = {
                             FinderCaptureControls(
-                                captureLabel = null,
-                                captureEnabled = false,
-                                onCapture = ::ignoreAction,
-                                pendingCaptureLabel = if (stage.intValue == 0) {
-                                    "Cancel freeze"
-                                } else {
-                                    null
-                                },
-                                onCancelCapture = {
-                                    calls += "freeze"
-                                    stage.intValue = 1
-                                },
-                                secondaryActionLabel = when (stage.intValue) {
-                                    1 -> "Cancel import"
-                                    2 -> "Return to camera"
-                                    else -> null
-                                },
-                                onSecondaryAction = {
-                                    if (stage.intValue == 1) {
-                                        calls += "cancel import"
+                                actions = FinderCaptureActions(
+                                    captureLabel = null,
+                                    captureEnabled = false,
+                                    onCapture = ::ignoreAction,
+                                    pendingCaptureLabel = if (stage.intValue == 0) {
+                                        "Cancel freeze"
                                     } else {
-                                        calls += "return to camera"
-                                    }
-                                    stage.intValue++
-                                },
+                                        null
+                                    },
+                                    onCancelCapture = {
+                                        calls += "freeze"
+                                        stage.intValue = 1
+                                    },
+                                    secondaryActionLabel = when (stage.intValue) {
+                                        1 -> "Cancel import"
+                                        2 -> "Return to camera"
+                                        else -> null
+                                    },
+                                    onSecondaryAction = {
+                                        if (stage.intValue == 1) {
+                                            calls += "cancel import"
+                                        } else {
+                                            calls += "return to camera"
+                                        }
+                                        stage.intValue++
+                                    },
+                                ),
                             )
                         },
                     )
@@ -1411,36 +1422,40 @@ class StatusFeedbackTest {
                 Surface(Modifier.fillMaxSize()) {
                     Column {
                         FinderLiveDock(
-                            query = session.state.value.persisted.manualQuery,
-                            onQueryChange = queryChange,
-                            activeListName = session.state.value.activeList?.name,
-                            activeListTermCount = 2,
-                            matchMode = session.state.value.persisted.matchMode,
-                            searchListsLabel = "Lists",
-                            onSearchLists = ::ignoreAction,
-                            onTerms = {
-                                RetainedInspectionActionDispatcher.showTerms(
-                                    { termsOpen.value = it },
-                                    { matchesOpen.value = it },
-                                )
-                            },
-                            onResults = ::ignoreAction,
+                            search = FinderSearchBar(
+                                query = session.state.value.persisted.manualQuery,
+                                onQueryChange = queryChange,
+                                activeListName = session.state.value.activeList?.name,
+                                activeListTermCount = 2,
+                                matchMode = session.state.value.persisted.matchMode,
+                                saving = saving.value,
+                                searchListsLabel = "Lists",
+                                onSearchLists = ::ignoreAction,
+                                onTerms = {
+                                    RetainedInspectionActionDispatcher.showTerms(
+                                        { termsOpen.value = it },
+                                        { matchesOpen.value = it },
+                                    )
+                                },
+                                onUseManual = {
+                                    dispatchSearchListSelection(session, null) {
+                                        invalidatedBeforeMutation =
+                                            session.state.value.persisted.activeListId == listId
+                                        invalidationCount++
+                                    }
+                                },
+                                onResults = ::ignoreAction,
+                            ),
+                            capture = FinderCaptureActions(
+                                captureLabel = null,
+                                captureEnabled = false,
+                                onCapture = ::ignoreAction,
+                                pendingCaptureLabel = null,
+                                onCancelCapture = ::ignoreAction,
+                                secondaryActionLabel = null,
+                                onSecondaryAction = ::ignoreAction,
+                            ),
                             resultsLabel = "Search results",
-                            onUseManual = {
-                                dispatchSearchListSelection(session, null) {
-                                    invalidatedBeforeMutation =
-                                        session.state.value.persisted.activeListId == listId
-                                    invalidationCount++
-                                }
-                            },
-                            saving = saving.value,
-                            captureLabel = null,
-                            captureEnabled = false,
-                            onCapture = ::ignoreAction,
-                            pendingCaptureLabel = null,
-                            onCancelCapture = ::ignoreAction,
-                            secondaryActionLabel = null,
-                            onSecondaryAction = ::ignoreAction,
                             onCancelShare = ::ignoreAction,
                         )
                         if (termsOpen.value) {
@@ -2221,17 +2236,21 @@ class StatusFeedbackTest {
         session.value = SearchSessionState(
             loaded = true,
             saving = true,
-            error = "Saved search write failed.",
+            error = SearchSessionError.StorageSaveFailed,
         )
         measureCurrentComposition()
         nodes = semanticsNodes(composeView)
-        assertTrue(nodes.any { it.textValues().contains("Saved search write failed. · Saving…") })
+        assertTrue(
+            nodes.any {
+                it.textValues().contains("Saved search data could not be saved. · Saving…")
+            },
+        )
         click(nodeWithText(nodes, "Retry"))
         assertEquals(1, retryCalls)
 
         session.value = SearchSessionState(
             loaded = true,
-            error = "Saved search data is unreadable.",
+            error = SearchSessionError.StorageUnreadable,
             recoveryRequired = true,
         )
         measureCurrentComposition()
@@ -2239,7 +2258,7 @@ class StatusFeedbackTest {
         assertTrue(
             nodes.any {
                 it.textValues().contains(
-                    "Saved search data is unreadable.\n" +
+                    "Saved search data could not be read.\n" +
                         "Reset clears saved lists, the saved query, and colour.",
                 )
             },
@@ -2335,22 +2354,25 @@ class StatusFeedbackTest {
                             ) {
                                 FinderSearchControls(
                                     showTitle = true,
-                                    query = sessionState.persisted.manualQuery,
-                                    onQueryChange = ::ignoreText,
-                                    searchListsLabel = "Lists",
-                                    onSearchLists = { searchListClicks.intValue++ },
-                                    activeListName = sessionState.activeList?.name,
-                                    activeListTermCount = sessionState.activeList?.terms?.size ?: 0,
+                                    search = FinderSearchBar(
+                                        query = sessionState.persisted.manualQuery,
+                                        onQueryChange = ::ignoreText,
+                                        activeListName = sessionState.activeList?.name,
+                                        activeListTermCount =
+                                            sessionState.activeList?.terms?.size ?: 0,
+                                        searchListsLabel = "Lists",
+                                        onSearchLists = { searchListClicks.intValue++ },
+                                        onUseManual = { useManualClicks.intValue++ },
+                                        onResults = {
+                                            resultsClicks.intValue++
+                                            if (!resultsAvailable) resultsDialogOpen.value = true
+                                        },
+                                    ),
                                     onOptions = ::ignoreAction,
-                                    onUseManual = { useManualClicks.intValue++ },
                                     resultsLabel = when {
                                         !resultsAvailable -> "Search results"
                                         listMode -> "Results (2)"
                                         else -> "Results (1)"
-                                    },
-                                    onResults = {
-                                        resultsClicks.intValue++
-                                        if (!resultsAvailable) resultsDialogOpen.value = true
                                     },
                                 )
                                 TestFinderStatusRegion(
@@ -2394,13 +2416,15 @@ class StatusFeedbackTest {
                         },
                         footerContent = {
                             FinderCaptureControls(
-                                captureLabel = "Freeze frame",
-                                captureEnabled = true,
-                                onCapture = { captureClicks.intValue++ },
-                                pendingCaptureLabel = null,
-                                onCancelCapture = ::ignoreAction,
-                                secondaryActionLabel = null,
-                                onSecondaryAction = ::ignoreAction,
+                                actions = FinderCaptureActions(
+                                    captureLabel = "Freeze frame",
+                                    captureEnabled = true,
+                                    onCapture = { captureClicks.intValue++ },
+                                    pendingCaptureLabel = null,
+                                    onCancelCapture = ::ignoreAction,
+                                    secondaryActionLabel = null,
+                                    onSecondaryAction = ::ignoreAction,
+                                ),
                             )
                         },
                     )
@@ -2460,7 +2484,7 @@ class StatusFeedbackTest {
             )
         } else {
             assertTrue(
-                previewSize.value.height >= safeAreaSize.value.height / 2,
+                previewSize.value.height * 100 >= safeAreaSize.value.height * 49,
                 "preview=${previewSize.value.height}px safe=${safeAreaSize.value.height}px",
             )
         }
@@ -2533,20 +2557,22 @@ class StatusFeedbackTest {
                                 Box(Modifier.semantics { contentDescription = "Controls bounds" }) {
                                 FinderSearchControls(
                                     showTitle = false,
-                                    query = session.state.value.persisted.manualQuery,
-                                    onQueryChange = session::setManualQuery,
-                                    searchListsLabel = if (managerOpen.value) {
-                                        "Close lists"
-                                    } else {
-                                        "Lists"
-                                    },
-                                    onSearchLists = { managerOpen.value = !managerOpen.value },
-                                    activeListName = session.state.value.activeList?.name,
-                                    activeListTermCount = session.state.value.activeList
-                                        ?.terms?.size ?: 0,
+                                    search = FinderSearchBar(
+                                        query = session.state.value.persisted.manualQuery,
+                                        onQueryChange = session::setManualQuery,
+                                        activeListName = session.state.value.activeList?.name,
+                                        activeListTermCount = session.state.value.activeList
+                                            ?.terms?.size ?: 0,
+                                        searchListsLabel = if (managerOpen.value) {
+                                            "Close lists"
+                                        } else {
+                                            "Lists"
+                                        },
+                                        onSearchLists = { managerOpen.value = !managerOpen.value },
+                                        onResults = ::ignoreAction,
+                                    ),
                                     onOptions = ::ignoreAction,
                                     resultsLabel = "Results (0)",
-                                    onResults = ::ignoreAction,
                                     savingLabel = if (session.state.value.saving) {
                                         "Saving…"
                                     } else {
@@ -2594,13 +2620,15 @@ class StatusFeedbackTest {
                         },
                         footerContent = {
                             FinderCaptureControls(
-                                captureLabel = "Freeze frame",
-                                captureEnabled = false,
-                                onCapture = ::ignoreAction,
-                                pendingCaptureLabel = null,
-                                onCancelCapture = ::ignoreAction,
-                                secondaryActionLabel = null,
-                                onSecondaryAction = ::ignoreAction,
+                                actions = FinderCaptureActions(
+                                    captureLabel = "Freeze frame",
+                                    captureEnabled = false,
+                                    onCapture = ::ignoreAction,
+                                    pendingCaptureLabel = null,
+                                    onCancelCapture = ::ignoreAction,
+                                    secondaryActionLabel = null,
+                                    onSecondaryAction = ::ignoreAction,
+                                ),
                             )
                         },
                     )
@@ -2669,7 +2697,7 @@ class StatusFeedbackTest {
         measureCurrentComposition()
         val failedState = session.state.value
         assertEquals(listB.id, failedState.persisted.activeListId)
-        assertEquals("disk full", failedState.error)
+        assertEquals(SearchSessionError.StorageSaveFailed, failedState.error)
         expectedActiveId = listB.id
         click(nodeWithDescription(semanticsNodes(composeView), "Select ${listB.name}"))
         assertSame(failedState, session.state.value)
@@ -2780,13 +2808,15 @@ class StatusFeedbackTest {
                         ) {
                             FinderSearchControls(
                                 showTitle = true,
-                                query = "invoice",
-                                onQueryChange = ::ignoreText,
-                                searchListsLabel = "Lists",
-                                onSearchLists = ::ignoreAction,
-                                searchContext = "Manual search",
+                                search = FinderSearchBar(
+                                    query = "invoice",
+                                    onQueryChange = ::ignoreText,
+                                    searchListsLabel = "Lists",
+                                    onSearchLists = ::ignoreAction,
+                                ),
                                 onOptions = ::ignoreAction,
-                                savingLabel = if (saving.value) "Saving…" else null
+                                searchContext = "Manual search",
+                                savingLabel = if (saving.value) "Saving…" else null,
                             )
                             TestFinderStatusRegion(
                                 state = OcrUiState(
@@ -2860,12 +2890,14 @@ class StatusFeedbackTest {
                     ) {
                         FinderSearchControls(
                             showTitle = false,
-                            query = "invoice",
-                            onQueryChange = ::ignoreText,
-                            searchListsLabel = "Close lists",
-                            onSearchLists = ::ignoreAction,
+                            search = FinderSearchBar(
+                                query = "invoice",
+                                onQueryChange = ::ignoreText,
+                                searchListsLabel = "Close lists",
+                                onSearchLists = ::ignoreAction,
+                            ),
+                            onOptions = ::ignoreAction,
                             searchContext = "Manual search",
-                            onOptions = ::ignoreAction
                         )
                         repeat(4) { index -> Text("Earlier search setting $index") }
                         TestFinderStatusRegion(

@@ -11,16 +11,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
 @Composable
-internal fun FinderCaptureControls(
-    captureLabel: String?,
-    captureEnabled: Boolean,
-    onCapture: () -> Unit,
-    pendingCaptureLabel: String?,
-    onCancelCapture: () -> Unit,
-    secondaryActionLabel: String?,
-    onSecondaryAction: () -> Unit,
-) {
-    if (captureLabel == null && pendingCaptureLabel == null && secondaryActionLabel == null) {
+internal fun FinderCaptureControls(actions: FinderCaptureActions) {
+    if (actions.captureLabel == null && actions.pendingCaptureLabel == null &&
+        actions.secondaryActionLabel == null
+    ) {
         return
     }
     Column(
@@ -30,40 +24,26 @@ internal fun FinderCaptureControls(
         ),
         verticalArrangement = Arrangement.spacedBy(FinderSpacing.extraSmall),
     ) {
-        captureLabel?.let { label ->
+        actions.captureLabel?.let { label ->
             FinderPrimaryAction(
                 label = label,
-                enabled = captureEnabled,
+                enabled = actions.captureEnabled,
                 modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
-                onClick = onCapture,
+                onClick = actions.onCapture,
             )
         }
-        if (pendingCaptureLabel != null || secondaryActionLabel != null) {
+        if (actions.pendingCaptureLabel != null || actions.secondaryActionLabel != null) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(FinderSpacing.extraSmall),
             ) {
-                pendingCaptureLabel?.let { label ->
-                    FinderSecondaryAction(label = label, onClick = onCancelCapture)
+                actions.pendingCaptureLabel?.let { label ->
+                    FinderSecondaryAction(label = label, onClick = actions.onCancelCapture)
                 }
-                secondaryActionLabel?.let { label ->
-                    FinderSecondaryAction(label = label, onClick = onSecondaryAction)
+                actions.secondaryActionLabel?.let { label ->
+                    FinderSecondaryAction(label = label, onClick = actions.onSecondaryAction)
                 }
             }
         }
     }
-}
-
-/** Capture controls for grouped [actions]. */
-@Composable
-internal fun FinderCaptureControls(actions: FinderCaptureActions) {
-    FinderCaptureControls(
-        captureLabel = actions.captureLabel,
-        captureEnabled = actions.captureEnabled,
-        onCapture = actions.onCapture,
-        pendingCaptureLabel = actions.pendingCaptureLabel,
-        onCancelCapture = actions.onCancelCapture,
-        secondaryActionLabel = actions.secondaryActionLabel,
-        onSecondaryAction = actions.onSecondaryAction,
-    )
 }

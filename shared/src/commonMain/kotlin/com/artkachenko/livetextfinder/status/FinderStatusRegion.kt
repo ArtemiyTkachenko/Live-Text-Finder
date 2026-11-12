@@ -19,6 +19,7 @@ import com.artkachenko.livetextfinder.search.TextSearchResult
 import com.artkachenko.livetextfinder.ui.ContextMessage
 import com.artkachenko.livetextfinder.ui.StatusDetailsDialog
 import com.artkachenko.livetextfinder.ui.StatusSummary
+import com.artkachenko.livetextfinder.ui.searchSessionErrorMessage
 import com.artkachenko.livetextfinder.ui.sourceStatusMessage
 import livetextfinder.shared.generated.resources.Res
 import livetextfinder.shared.generated.resources.status_camera_error_recovery
@@ -149,7 +150,8 @@ internal fun FinderStatusRegion(
     when {
         sessionState.recoveryRequired -> ContextMessage(
             message = listOfNotNull(
-                sessionState.error ?: stringResource(Res.string.status_recovery),
+                sessionState.error?.let { error -> searchSessionErrorMessage(error) }
+                    ?: stringResource(Res.string.status_recovery),
                 stringResource(Res.string.status_reset_explanation),
             ).joinToString("\n"),
             actionLabel = stringResource(Res.string.status_reset_saved_data),
@@ -157,7 +159,7 @@ internal fun FinderStatusRegion(
             isError = true,
         )
         sessionState.error != null -> ContextMessage(
-            message = sessionState.error + if (sessionState.saving) {
+            message = searchSessionErrorMessage(sessionState.error) + if (sessionState.saving) {
                 " · ${stringResource(Res.string.status_saving)}"
             } else {
                 ""

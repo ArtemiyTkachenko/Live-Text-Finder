@@ -18,7 +18,7 @@ import com.artkachenko.livetextfinder.camera.allowsLiveCamera
 import com.artkachenko.livetextfinder.camera.liveSearchAreaAvailable
 import com.artkachenko.livetextfinder.camera.rememberFrozenFrameOwner
 import com.artkachenko.livetextfinder.camera.rememberImportedImageOwner
-import com.artkachenko.livetextfinder.lists.SearchListManagerState
+import com.artkachenko.livetextfinder.lists.SavedSearchEditingState
 import com.artkachenko.livetextfinder.scanarea.LiveSearchAreaState
 import com.artkachenko.livetextfinder.search.SearchSessionController
 
@@ -59,7 +59,7 @@ internal class FinderSourceContext(
 @Composable
 internal fun finderSourceContext(
     session: SearchSessionController,
-    listManager: SearchListManagerState,
+    searchEditing: SavedSearchEditingState,
     liveArea: LiveSearchAreaState,
     rootSizeState: State<IntSize>,
 ): FinderSourceContext {
@@ -74,7 +74,7 @@ internal fun finderSourceContext(
             (rootSize != IntSize.Zero &&
                 rootSize.height / density.density < COMPACT_HEIGHT_DP) ||
                 density.fontScale >= COMPACT_FONT_SCALE
-        !listManager.isOpen && !isCompact && imeInsets.getBottom(density) == 0
+        !searchEditing.isOpen && !isCompact && imeInsets.getBottom(density) == 0
     }
     val captureContextCurrent = {
         val phase = importedOwner.state.value.phase

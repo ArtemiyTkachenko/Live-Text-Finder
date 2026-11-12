@@ -18,13 +18,13 @@ internal fun SearchListTransferContextEffect(
     transferOwner: SearchListTransferOwner,
     session: SearchSessionController,
     sessionState: SearchSessionState,
-    listManager: SearchListManagerState,
+    searchEditing: SavedSearchEditingState,
 ) {
     val transferCopy = searchListTransferCopy()
     SideEffect {
-        val managerOpen = listManager.isOpen
-        val editor = listManager.editor
-        val contextRevision = listManager.contextRevision
+        val managerOpen = searchEditing.isOpen
+        val editor = searchEditing.editor
+        val contextRevision = searchEditing.contextRevision
         transferOwner.updateContext(
             sessionState = sessionState,
             managerOpen = managerOpen,
@@ -33,11 +33,11 @@ internal fun SearchListTransferContextEffect(
             copy = transferCopy,
             isContextCurrent = {
                 session.state.value == sessionState &&
-                    listManager.isOpen == managerOpen &&
-                    listManager.editor == editor &&
-                    listManager.contextRevision == contextRevision
+                    searchEditing.isOpen == managerOpen &&
+                    searchEditing.editor == editor &&
+                    searchEditing.contextRevision == contextRevision
             },
-            onImportDraft = listManager::acceptImportedDraft,
+            onImportDraft = searchEditing::acceptImportedDraft,
         )
     }
 }

@@ -33,31 +33,15 @@ import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal fun FinderLiveDock(
-    query: String,
-    onQueryChange: (String) -> Unit,
-    activeListName: String?,
-    activeListTermCount: Int,
-    matchMode: SearchMatchMode,
-    searchListsLabel: String,
-    onSearchLists: () -> Unit,
-    onTerms: () -> Unit,
-    onUseManual: () -> Unit,
-    onResults: () -> Unit,
-    onOccurrences: () -> Unit = onResults,
+    search: FinderSearchBar,
+    capture: FinderCaptureActions,
     resultsLabel: String?,
+    onCancelShare: () -> Unit,
+    onOccurrences: () -> Unit = search.onResults,
     occurrencesEnabled: Boolean = true,
-    saving: Boolean,
-    captureLabel: String?,
-    captureEnabled: Boolean,
-    onCapture: () -> Unit,
-    pendingCaptureLabel: String?,
-    onCancelCapture: () -> Unit,
-    secondaryActionLabel: String?,
-    onSecondaryAction: () -> Unit,
     returnLabel: String? = null,
     onReturn: () -> Unit = {},
     onShare: () -> Unit = {},
-    onCancelShare: () -> Unit,
     sharePreparing: Boolean = false,
 ) {
     var moreExpanded by remember { mutableStateOf(false) }
@@ -75,8 +59,8 @@ internal fun FinderLiveDock(
             verticalArrangement = Arrangement.spacedBy(FinderSpacing.extraSmall),
         ) {
             OutlinedTextField(
-                value = query,
-                onValueChange = onQueryChange,
+                value = search.query,
+                onValueChange = search.onQueryChange,
                 label = { Text(stringResource(Res.string.finder_find_text)) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
@@ -84,22 +68,22 @@ internal fun FinderLiveDock(
                 textStyle = MaterialTheme.typography.bodyLarge,
             )
             SearchContext(
-                activeListName = activeListName,
-                termCount = activeListTermCount,
+                activeListName = search.activeListName,
+                termCount = search.activeListTermCount,
                 manualQuery = "",
-                matchMode = matchMode,
-                saving = saving,
+                matchMode = search.matchMode,
+                saving = search.saving,
                 compact = true,
-                onTerms = onTerms,
-                onUseManual = onUseManual,
-                contextOverride = activeListName?.let {
+                onTerms = search.onTerms,
+                onUseManual = search.onUseManual,
+                contextOverride = search.activeListName?.let {
                     stringResource(Res.string.search_context_list_identity, it)
                 },
                 additionalActions = {
                     resultsLabel?.let {
                         FinderSecondaryAction(
                             it,
-                            if (returnLabel != null) onOccurrences else onResults,
+                            if (returnLabel != null) onOccurrences else search.onResults,
                             enabled = returnLabel == null || occurrencesEnabled,
                         )
                     }
@@ -114,10 +98,10 @@ internal fun FinderLiveDock(
                                 onDismissRequest = { moreExpanded = false },
                             ) {
                                 DropdownMenuItem(
-                                    text = { Text(searchListsLabel) },
+                                    text = { Text(search.searchListsLabel) },
                                     onClick = {
                                         moreExpanded = false
-                                        onSearchLists()
+                                        search.onSearchLists()
                                     },
                                 )
                                 DropdownMenuItem(
@@ -141,10 +125,10 @@ internal fun FinderLiveDock(
                             }
                         }
                     } else {
-                        FinderSecondaryAction(searchListsLabel, onSearchLists)
+                        FinderSecondaryAction(search.searchListsLabel, search.onSearchLists)
                     }
                 },
-                showUseManualAction = activeListName != null,
+                showUseManualAction = search.activeListName != null,
             )
             if (sharePreparing) {
                 androidx.compose.foundation.layout.Row(
@@ -159,6 +143,11 @@ internal fun FinderLiveDock(
                     )
                 }
             }
+            // FinderPrimaryAction adds its own bottom inset. The other alternatives reserve the
+            // same space, so the dock keeps one height when the action changes.
+            val actionSlot = Modifier.fillMaxWidth()
+                .padding(bottom = FinderSpacing.large)
+                .heightIn(min = 52.dp)
             when {
                 returnLabel != null -> FinderPrimaryAction(
                     label = returnLabel,
@@ -166,71 +155,24 @@ internal fun FinderLiveDock(
                     modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
                     onClick = onReturn,
                 )
-                captureLabel != null -> FinderPrimaryAction(
-                    label = captureLabel,
-                    enabled = captureEnabled,
+                capture.captureLabel != null -> FinderPrimaryAction(
+                    label = capture.captureLabel,
+                    enabled = capture.captureEnabled,
                     modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
-                    onClick = onCapture,
+                    onClick = capture.onCapture,
                 )
-                pendingCaptureLabel != null -> FinderSecondaryAction(
-                    label = pendingCaptureLabel,
-                    onClick = onCancelCapture,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                capture.pendingCaptureLabel != null -> FinderSecondaryAction(
+                    label = capture.pendingCaptureLabel,
+                    onClick = capture.onCancelCapture,
+                    modifier = actionSlot,
                 )
-                secondaryActionLabel != null -> FinderSecondaryAction(
-                    label = secondaryActionLabel,
-                    onClick = onSecondaryAction,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                capture.secondaryActionLabel != null -> FinderSecondaryAction(
+                    label = capture.secondaryActionLabel,
+                    onClick = capture.onSecondaryAction,
+                    modifier = actionSlot,
                 )
-                else -> Spacer(Modifier.fillMaxWidth().heightIn(min = 52.dp))
+                else -> Spacer(actionSlot)
             }
         }
     }
-}
-
-/**
- * Bottom dock for a grouped [search] bar and [capture] actions. A non-null [returnLabel] puts
- * the dock in retained-image mode, where the primary button returns to the camera.
- */
-@Composable
-internal fun FinderLiveDock(
-    search: FinderSearchBar,
-    capture: FinderCaptureActions,
-    resultsLabel: String?,
-    onOccurrences: () -> Unit,
-    occurrencesEnabled: Boolean,
-    returnLabel: String?,
-    onReturn: () -> Unit,
-    onShare: () -> Unit,
-    onCancelShare: () -> Unit,
-    sharePreparing: Boolean,
-) {
-    FinderLiveDock(
-        query = search.query,
-        onQueryChange = search.onQueryChange,
-        activeListName = search.activeListName,
-        activeListTermCount = search.activeListTermCount,
-        matchMode = search.matchMode,
-        searchListsLabel = search.searchListsLabel,
-        onSearchLists = search.onSearchLists,
-        onTerms = search.onTerms,
-        onUseManual = search.onUseManual,
-        onResults = search.onResults,
-        onOccurrences = onOccurrences,
-        resultsLabel = resultsLabel,
-        occurrencesEnabled = occurrencesEnabled,
-        saving = search.saving,
-        captureLabel = capture.captureLabel,
-        captureEnabled = capture.captureEnabled,
-        onCapture = capture.onCapture,
-        pendingCaptureLabel = capture.pendingCaptureLabel,
-        onCancelCapture = capture.onCancelCapture,
-        secondaryActionLabel = capture.secondaryActionLabel,
-        onSecondaryAction = capture.onSecondaryAction,
-        returnLabel = returnLabel,
-        onReturn = onReturn,
-        onShare = onShare,
-        onCancelShare = onCancelShare,
-        sharePreparing = sharePreparing,
-    )
 }

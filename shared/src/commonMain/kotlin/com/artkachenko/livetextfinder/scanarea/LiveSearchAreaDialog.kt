@@ -43,10 +43,20 @@ import kotlin.math.roundToInt
 import livetextfinder.shared.generated.resources.Res
 import livetextfinder.shared.generated.resources.area_bounds_description
 import livetextfinder.shared.generated.resources.area_guide_caption
+import livetextfinder.shared.generated.resources.area_guide_description
 import livetextfinder.shared.generated.resources.area_guide_title
+import livetextfinder.shared.generated.resources.area_height
+import livetextfinder.shared.generated.resources.area_horizontal_position
 import livetextfinder.shared.generated.resources.area_position_group
 import livetextfinder.shared.generated.resources.area_position_help
 import livetextfinder.shared.generated.resources.area_size_group
+import livetextfinder.shared.generated.resources.area_slider_value
+import livetextfinder.shared.generated.resources.area_vertical_position
+import livetextfinder.shared.generated.resources.area_width
+import livetextfinder.shared.generated.resources.scan_area_apply
+import livetextfinder.shared.generated.resources.scan_area_cancel
+import livetextfinder.shared.generated.resources.scan_area_dialog_title
+import livetextfinder.shared.generated.resources.scan_area_full_frame
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
@@ -98,7 +108,7 @@ internal fun LiveSearchAreaDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Text("Scan area")
+            Text(stringResource(Res.string.scan_area_dialog_title))
         },
         text = {
             Column(
@@ -109,8 +119,18 @@ internal fun LiveSearchAreaDialog(
             ) {
                 AreaGuide(width, height, horizontal, vertical)
                 AreaGroup(title = stringResource(Res.string.area_size_group)) {
-                    AreaSlider("Width", width, 20, 100) { width = it }
-                    AreaSlider("Height", height, 20, 100) { height = it }
+                    AreaSlider(
+                        stringResource(Res.string.area_width),
+                        width,
+                        20,
+                        100,
+                    ) { width = it }
+                    AreaSlider(
+                        stringResource(Res.string.area_height),
+                        height,
+                        20,
+                        100,
+                    ) { height = it }
                 }
                 AreaGroup(title = stringResource(Res.string.area_position_group)) {
                     Text(
@@ -118,8 +138,18 @@ internal fun LiveSearchAreaDialog(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    AreaSlider("Horizontal position", horizontal, 0, 100) { horizontal = it }
-                    AreaSlider("Vertical position", vertical, 0, 100) { vertical = it }
+                    AreaSlider(
+                        stringResource(Res.string.area_horizontal_position),
+                        horizontal,
+                        0,
+                        100,
+                    ) { horizontal = it }
+                    AreaSlider(
+                        stringResource(Res.string.area_vertical_position),
+                        vertical,
+                        0,
+                        100,
+                    ) { vertical = it }
                 }
             }
         },
@@ -129,7 +159,7 @@ internal fun LiveSearchAreaDialog(
                 horizontalArrangement = Arrangement.End,
             ) {
                 FinderPrimaryAction(
-                    label = "Apply",
+                    label = stringResource(Res.string.scan_area_apply),
                     enabled = true,
                     onClick = {
                         val next = NormalizedSearchArea.fromSizeAndPosition(
@@ -146,9 +176,12 @@ internal fun LiveSearchAreaDialog(
                         onDismiss()
                     },
                 )
-                FinderSecondaryAction(label = "Cancel", onClick = onDismiss)
                 FinderSecondaryAction(
-                    label = "Full frame",
+                    label = stringResource(Res.string.scan_area_cancel),
+                    onClick = onDismiss,
+                )
+                FinderSecondaryAction(
+                    label = stringResource(Res.string.scan_area_full_frame),
                     onClick = {
                         if (onDraftApply != null) {
                             onDraftApply(null)
@@ -181,8 +214,14 @@ private fun AreaGuide(width: Int, height: Int, horizontal: Int, vertical: Int) {
         (bounds.right * 100).roundToInt(),
         (bounds.bottom * 100).roundToInt(),
     )
-    val label = "Schematic search area: ${width}% wide, ${height}% high, " +
-        "horizontal travel ${horizontal}%, vertical travel ${vertical}%. $boundsDescription"
+    val label = stringResource(
+        Res.string.area_guide_description,
+        width,
+        height,
+        horizontal,
+        vertical,
+        boundsDescription,
+    )
     Column(verticalArrangement = Arrangement.spacedBy(FinderSpacing.small)) {
         Text(
             stringResource(Res.string.area_guide_title),
@@ -233,7 +272,7 @@ private fun AreaSlider(
     val interactionSource = remember { MutableInteractionSource() }
     val sliderColors = SliderDefaults.colors()
     Column {
-        Text("$label: $value%")
+        Text(stringResource(Res.string.area_slider_value, label, value))
         Slider(
             value = value.toFloat(),
             onValueChange = {

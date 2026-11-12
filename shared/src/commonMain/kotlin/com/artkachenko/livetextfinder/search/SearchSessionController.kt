@@ -11,7 +11,7 @@ class SearchSessionController(private val store: SearchSessionStore) {
     private var persistedRevision = 0L
     private var writeInFlight = false
     private var queuedWrite: Pair<Long, PersistedSearchState>? = null
-    private var queryValidationError: String? = null
+    private var queryValidationError: SearchSessionError? = null
     private var resetInFlight = false
 
     init {
@@ -21,8 +21,7 @@ class SearchSessionController(private val store: SearchSessionStore) {
     /** Updates the latest manual query and exits saved-list mode. */
     fun setManualQuery(query: String) {
         if (query.length > MAX_MANUAL_QUERY_LENGTH) {
-            queryValidationError =
-                "Manual queries can contain at most $MAX_MANUAL_QUERY_LENGTH characters."
+            queryValidationError = SearchSessionError.ManualQueryTooLong
             val current = state.value
             val error = if (current.recoveryRequired) current.error else queryValidationError
             state.value = current.copy(error = error)
@@ -52,32 +51,32 @@ class SearchSessionController(private val store: SearchSessionStore) {
     }
 
     /** Creates or updates a list. Returns a visible validation error when rejected. */
-    fun saveList(id: String?, nameInput: String, termsInput: String): String? {
+    fun saveList(id: String?, nameInput: String, termsInput: String): SearchSessionError? {
         if (!state.value.loaded || state.value.recoveryRequired) {
-            return "Search lists are unavailable until storage is recovered."
+            return SearchSessionError.ListsUnavailable
         }
         val current = state.value.persisted
         validatePersistedSearchState(current)?.let { error -> return error }
         if (id != null && current.lists.none { it.id == id }) {
-            return "That saved list no longer exists. Reopen the editor before saving."
+            return SearchSessionError.ListMissing
         }
 
         val name = nameInput.trim()
         if (name.isEmpty()) {
-            return "Enter a list name."
+            return SearchSessionError.ListNameBlank
         }
         if (name.length > MAX_NAME_LENGTH) {
-            return "List names can contain at most $MAX_NAME_LENGTH characters."
+            return SearchSessionError.ListNameTooLong
         }
         if (current.lists.any { it.id != id && it.name.equals(name, ignoreCase = true) }) {
-            return "That list name is already in use."
+            return SearchSessionError.ListNameDuplicate
         }
 
         val terms = validateSearchListTerms(termsInput).getOrElse { error ->
-            return error.message ?: "Search list terms are invalid."
+            return error.toSearchSessionError(SearchSessionError.BlankTermLine)
         }
         if (id == null && current.lists.size >= MAX_LISTS) {
-            return "You can save at most $MAX_LISTS lists."
+            return SearchSessionError.TooManyLists
         }
 
         val stableId = id ?: newListId()
@@ -163,7 +162,8 @@ class SearchSessionController(private val store: SearchSessionStore) {
                     queueSave()
                 } else {
                     state.value = latest.copy(
-                        error = result.exceptionOrNull()?.message ?: "Storage reset failed.",
+                        error = result.exceptionOrNull()
+                            .toSearchSessionError(SearchSessionError.StorageResetFailed),
                         recoveryRequired = true,
                         saving = false,
                     )
@@ -206,14 +206,17 @@ class SearchSessionController(private val store: SearchSessionStore) {
             onFailure = { failure ->
                 state.value = before.copy(
                     loaded = true,
-                    error = failure.message ?: "Saved search data could not be read.",
+                    error = failure.toSearchSessionError(SearchSessionError.StorageUnreadable),
                     recoveryRequired = true,
                 )
             },
         )
     }
 
-    private fun update(persisted: PersistedSearchState, validationError: String? = null) {
+    private fun update(
+        persisted: PersistedSearchState,
+        validationError: SearchSessionError? = null,
+    ) {
         val old = state.value
         val error = when {
             old.recoveryRequired -> old.error
@@ -259,7 +262,8 @@ class SearchSessionController(private val store: SearchSessionStore) {
                 val error = when {
                     state.value.recoveryRequired -> state.value.error
                     queryValidationError != null -> queryValidationError
-                    else -> result.exceptionOrNull()?.message
+                    else -> result.exceptionOrNull()
+                        ?.toSearchSessionError(SearchSessionError.StorageSaveFailed)
                 }
                 state.value = state.value.copy(saving = false, error = error)
             }

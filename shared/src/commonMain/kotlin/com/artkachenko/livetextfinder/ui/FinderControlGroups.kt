@@ -6,15 +6,15 @@ import com.artkachenko.livetextfinder.search.SearchMatchMode
 internal class FinderSearchBar(
     val query: String,
     val onQueryChange: (String) -> Unit,
-    val activeListName: String?,
-    val activeListTermCount: Int,
-    val matchMode: SearchMatchMode,
-    val saving: Boolean,
     val searchListsLabel: String,
     val onSearchLists: () -> Unit,
-    val onTerms: () -> Unit,
-    val onUseManual: () -> Unit,
-    val onResults: () -> Unit,
+    val activeListName: String? = null,
+    val activeListTermCount: Int = 0,
+    val matchMode: SearchMatchMode = SearchMatchMode.Substring,
+    val saving: Boolean = false,
+    val onTerms: () -> Unit = {},
+    val onUseManual: () -> Unit = {},
+    val onResults: () -> Unit = {},
 )
 
 /**
