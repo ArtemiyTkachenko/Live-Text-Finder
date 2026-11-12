@@ -190,6 +190,21 @@ Physical zoom/crop/rotation alignment still requires a camera-device check.
 
 ## Screen composition and state holders
 
+Shared code under `com.artkachenko.livetextfinder` is grouped by feature area of the single
+screen. The root package holds only `App`. `screen` holds `FinderScreen`, its regions, the
+per-composition values and `HighlightOverlay`; `inspection` holds the retained-image source,
+selection, navigation and copy; `scanarea` holds the live scan-area state, editor, dialog and
+the platform back handler; `status` holds status derivation and the status region; `lists`
+holds the saved-list manager state and list-transfer wiring. `ui`, `search`, `camera` and `ocr`
+keep their existing layer-based contents. Tests sit in the package of their subject.
+
+Host tests share one JVM, and Robolectric keeps one sandbox per SDK and graphics mode. Once a
+Compose test has run in a sandbox, a snapshot-state write on the main thread makes Compose post
+a global apply to its process-wide UI dispatcher. Robolectric discards messages still queued
+when a test ends, which leaves that dispatcher marked as scheduled with nothing queued, so no
+later test in the sandbox can recompose. Any host test that writes snapshot state, including
+through an owner or state holder, must therefore end with `drainMainLooper()` in `@After`.
+
 `App` only applies the theme and background and calls `FinderScreen`. `FinderScreen` owns the
 screen's state holders, derives what is displayed and wires callbacks; region composables render
 it. `StillSource` models the retained image shown instead of the live camera (imported or

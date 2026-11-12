@@ -52,6 +52,8 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.artkachenko.livetextfinder.search.SearchMatchMode
 import com.artkachenko.livetextfinder.search.inMemorySearchSessionController
+import com.artkachenko.livetextfinder.status.RecognitionDetails
+import com.artkachenko.livetextfinder.status.StatusSource
 import com.artkachenko.livetextfinder.ui.FinderCaptureControls
 import com.artkachenko.livetextfinder.ui.FinderContentAssembly
 import com.artkachenko.livetextfinder.ui.FinderLiveAppBar

@@ -49,12 +49,6 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntSize
-import com.artkachenko.livetextfinder.FinderStatusRegion
-import com.artkachenko.livetextfinder.StillMatchCopyCoordinator
-import com.artkachenko.livetextfinder.StillMatchCopyOutcome
-import com.artkachenko.livetextfinder.StillMatchCopySession
-import com.artkachenko.livetextfinder.StillMatchNavigationCoordinator
-import com.artkachenko.livetextfinder.adjacentStillMatchRow
 import com.artkachenko.livetextfinder.camera.FreezeMode
 import com.artkachenko.livetextfinder.camera.FreezePresentationState
 import com.artkachenko.livetextfinder.camera.FrozenFrameFit
@@ -66,8 +60,17 @@ import com.artkachenko.livetextfinder.camera.ImportedImageState
 import com.artkachenko.livetextfinder.camera.ProcessedImportedImage
 import com.artkachenko.livetextfinder.camera.StillViewTransform
 import com.artkachenko.livetextfinder.camera.plainTextClipEntry
-import com.artkachenko.livetextfinder.effectiveStillMatchRows
-import com.artkachenko.livetextfinder.filterStillMatchRows
+import com.artkachenko.livetextfinder.drainMainLooper
+import com.artkachenko.livetextfinder.inspection.StillMatchCopyCoordinator
+import com.artkachenko.livetextfinder.inspection.StillMatchCopyOutcome
+import com.artkachenko.livetextfinder.inspection.StillMatchCopySession
+import com.artkachenko.livetextfinder.inspection.StillMatchNavigationCoordinator
+import com.artkachenko.livetextfinder.inspection.adjacentStillMatchRow
+import com.artkachenko.livetextfinder.inspection.effectiveStillMatchRows
+import com.artkachenko.livetextfinder.inspection.filterStillMatchRows
+import com.artkachenko.livetextfinder.inspection.performStillMatchLocate
+import com.artkachenko.livetextfinder.inspection.rememberStillMatchCopySession
+import com.artkachenko.livetextfinder.inspection.rememberStillMatchNavigationCoordinator
 import com.artkachenko.livetextfinder.ocr.FrameInfo
 import com.artkachenko.livetextfinder.ocr.ImportedTextSnapshot
 import com.artkachenko.livetextfinder.ocr.OcrSnapshot
@@ -77,9 +80,6 @@ import com.artkachenko.livetextfinder.ocr.TextBounds
 import com.artkachenko.livetextfinder.ocr.TextElement
 import com.artkachenko.livetextfinder.ocr.TextLine
 import com.artkachenko.livetextfinder.ocr.TextPoint
-import com.artkachenko.livetextfinder.performStillMatchLocate
-import com.artkachenko.livetextfinder.rememberStillMatchCopySession
-import com.artkachenko.livetextfinder.rememberStillMatchNavigationCoordinator
 import com.artkachenko.livetextfinder.search.ActiveSearchSpec
 import com.artkachenko.livetextfinder.search.ElementOutline
 import com.artkachenko.livetextfinder.search.FrameIdentity
@@ -102,6 +102,7 @@ import com.artkachenko.livetextfinder.search.inMemorySearchSessionController
 import com.artkachenko.livetextfinder.search.searchRecognizedContent
 import com.artkachenko.livetextfinder.search.searchRecognizedText
 import com.artkachenko.livetextfinder.search.stillMatchRows
+import com.artkachenko.livetextfinder.status.FinderStatusRegion
 import java.io.File
 import java.io.FileOutputStream
 import kotlin.math.roundToInt
@@ -151,6 +152,7 @@ class StillInspectionUiTest {
         recomposer?.cancel()
         scope?.cancel()
         activity?.finish()
+        drainMainLooper()
     }
 
     @Test

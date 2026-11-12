@@ -13,10 +13,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.unit.dp
-import com.artkachenko.livetextfinder.RecognitionDetails
-import com.artkachenko.livetextfinder.SearchFeedback
-import com.artkachenko.livetextfinder.SearchFeedbackKind
-import com.artkachenko.livetextfinder.StatusSource
+import com.artkachenko.livetextfinder.status.RecognitionDetails
+import com.artkachenko.livetextfinder.status.SearchFeedback
+import com.artkachenko.livetextfinder.status.SearchFeedbackKind
+import com.artkachenko.livetextfinder.status.StatusSource
 import livetextfinder.shared.generated.resources.Res
 import livetextfinder.shared.generated.resources.status_area_waiting
 import livetextfinder.shared.generated.resources.status_details

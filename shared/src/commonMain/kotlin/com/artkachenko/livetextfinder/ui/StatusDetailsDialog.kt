@@ -11,8 +11,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.artkachenko.livetextfinder.RecognitionDetails
-import com.artkachenko.livetextfinder.StatusSource
+import com.artkachenko.livetextfinder.status.RecognitionDetails
+import com.artkachenko.livetextfinder.status.StatusSource
 import livetextfinder.shared.generated.resources.Res
 import livetextfinder.shared.generated.resources.status_details_close
 import livetextfinder.shared.generated.resources.status_dimensions

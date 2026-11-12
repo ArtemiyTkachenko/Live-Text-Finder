@@ -1,6 +1,7 @@
 package com.artkachenko.livetextfinder.camera
 
 import android.graphics.Bitmap
+import com.artkachenko.livetextfinder.drainMainLooper
 import com.artkachenko.livetextfinder.ocr.CapturedCameraFrame
 import com.artkachenko.livetextfinder.ocr.FrameInfo
 import com.artkachenko.livetextfinder.ocr.OcrSnapshot
@@ -12,6 +13,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
+import org.junit.After
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
@@ -19,6 +21,11 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], manifest = Config.NONE)
 class AndroidFrozenFrameOwnerTest {
+    @After
+    fun runPendingMainLooperWork() {
+        drainMainLooper()
+    }
+
     @Test
     fun acceptedPixelsAndSnapshotSurviveSessionReplacementUntilResume() {
         val owner = FrozenFrameOwner()

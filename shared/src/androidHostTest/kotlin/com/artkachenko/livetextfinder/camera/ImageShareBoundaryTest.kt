@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.Looper
 import androidx.core.content.FileProvider
 import androidx.core.content.IntentCompat
+import com.artkachenko.livetextfinder.drainMainLooper
 import com.artkachenko.livetextfinder.ocr.CapturedCameraFrame
 import com.artkachenko.livetextfinder.ocr.FrameInfo
 import com.artkachenko.livetextfinder.ocr.ImportedTextSnapshot
@@ -49,6 +50,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import org.junit.After
 import org.junit.Before
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -63,6 +65,11 @@ import org.xmlpull.v1.XmlPullParser
 @Config(sdk = [35])
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class ImageShareBoundaryTest {
+    @After
+    fun runPendingMainLooperWork() {
+        drainMainLooper()
+    }
+
     @Before
     fun resetRealProviderPathCacheForCurrentTestContext() {
         val context = RuntimeEnvironment.getApplication()
