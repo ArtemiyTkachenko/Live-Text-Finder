@@ -921,3 +921,46 @@ errors, skips, or differing images across all 58 baselines. The third run also p
 `:shared:compileKotlinIosSimulatorArm64` and `:androidApp:compileDebugKotlin`. There is no
 configured Kotlin formatter. Physical-device rendering, including native camera content, and
 pixel stability across hosts remain unverified.
+
+## Phase 3 screen screenshot baselines — 2026-11-12
+
+Before changes, the clean checkout at `e9fca65` passed 463 host tests across 64 suites
+with 58 matching baselines. Android debug Kotlin and shared iOS simulator Kotlin compilation
+both succeeded.
+
+The [screen baseline directory](../shared/src/androidHostTest/screenshots/screen) contains nine
+360 × 800 PNGs at mdpi. Five use the real `App()` with camera permission denied: light and
+dark permission screens, plus light list manager, Options, and Help. The tests use the actual
+Compose actions to open those states and composite the active window over the app for Options
+and Help. Dark mode also sets the Robolectric night qualifier because `App()` selects its
+theme from the system.
+
+The four light `assembled-finder` fixtures combine `FinderContentAssembly` and production UI
+regions with a deterministic receipt bitmap. They cover live matches, a frozen frame, an imported
+image, and scan-area editing. The host renders these UI states without a physical camera, file
+picker, or OCR. Full-screen captures retain the viewport bounds to preserve layout position.
+
+Record or update only the Phase 3 baselines.
+
+```sh
+./gradlew :shared:cleanTestAndroidHostTest :shared:testAndroidHostTest \
+  --tests '*AppScreenScreenshotTest' --tests '*AssembledScreenScreenshotTest' \
+  -PltfRecordScreenshots=true --no-build-cache
+```
+
+Verify the entire host suite and existing baselines.
+
+```sh
+./gradlew :shared:cleanTestAndroidHostTest :shared:testAndroidHostTest --no-build-cache
+```
+
+Removing `app__list-manager-open__light.png` failed verification and left the file absent.
+Temporarily setting the app's manual query to `invoice` also failed for that image and produced
+actual and comparison PNGs under `shared/build/reports/screenshot-tests/diffs`. The original
+fixture and test setup were restored.
+
+Three consecutive uncached clean runs each passed 471 tests across 66 suites with zero failures,
+errors, skips, or differing images across all 67 baselines. The third run also passed
+`:shared:compileKotlinIosSimulatorArm64` and `:androidApp:compileDebugKotlin`. The project has no
+configured Kotlin formatter. Device rendering, native camera content, OCR results, and
+cross-host pixel stability remain unverified by these screenshot tests.

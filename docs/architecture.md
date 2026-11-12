@@ -265,9 +265,10 @@ navigation and copy coordinator tests. Device behaviour of the restructured scre
 placement remains a device check.
 
 Android host screenshot tests render a fixed-size Compose view or dialog window with a controlled
-frame clock, density, locale, font scale, and theme. The capture trims unused background equally
-on opposite sides so the PNG is smaller while preserving its position relative to the viewport
-center. Roborazzi compares the result against a PNG fixture under
+frame clock, density, locale, font scale, and theme. Element and region captures trim unused
+background equally on opposite sides to preserve position relative to the viewport center.
+Screen captures retain the full viewport and composite any active dialog window over the app.
+Roborazzi compares the result against a PNG fixture under
 `shared/src/androidHostTest/screenshots`. The host test task verifies fixtures by default and
 records them only when requested explicitly. Visual mismatches produce actual and comparison
 PNGs under `shared/build/reports/screenshot-tests/diffs`.

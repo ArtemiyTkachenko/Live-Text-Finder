@@ -2,8 +2,11 @@ package com.artkachenko.livetextfinder
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Color
 import android.view.View
 import android.view.ViewGroup
+import android.view.Window
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -32,6 +35,7 @@ import com.github.takahirom.roborazzi.RoborazziOptions
 import com.github.takahirom.roborazzi.RoborazziTaskType
 import com.github.takahirom.roborazzi.captureRoboImage
 import java.io.File
+import kotlin.math.roundToInt
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -48,6 +52,7 @@ internal enum class ScreenshotTier(
 ) {
     ELEMENT("element", 112, 12),
     REGION("region", 560, 0),
+    SCREEN("screen", 800, 0),
 }
 
 internal enum class ScreenshotVariant(val suffix: String, val dark: Boolean, val fontScale: Float) {
@@ -63,7 +68,7 @@ internal fun assertScreenshot(
     variant: ScreenshotVariant,
     content: @Composable () -> Unit,
 ) {
-    assertScreenshot(tier, subject, state, variant, null, content)
+    assertScreenshot(tier, subject, state, variant, false, emptyList(), content)
 }
 
 internal fun assertDialogScreenshot(
@@ -73,7 +78,18 @@ internal fun assertDialogScreenshot(
     onDialogReady: (SemanticsNode) -> Unit = {},
     content: @Composable () -> Unit,
 ) {
-    assertScreenshot(ScreenshotTier.REGION, subject, state, variant, onDialogReady, content)
+    assertScreenshot(
+        ScreenshotTier.REGION, subject, state, variant, true, listOf(onDialogReady), content,
+    )
+}
+
+internal fun assertAppScreenshot(
+    state: String,
+    variant: ScreenshotVariant,
+    steps: List<(SemanticsNode) -> Unit>,
+    content: @Composable () -> Unit,
+) {
+    assertScreenshot(ScreenshotTier.SCREEN, "app", state, variant, false, steps, content)
 }
 
 private fun assertScreenshot(
@@ -81,11 +97,12 @@ private fun assertScreenshot(
     subject: String,
     state: String,
     variant: ScreenshotVariant,
-    onDialogReady: ((SemanticsNode) -> Unit)?,
+    requireDialog: Boolean,
+    steps: List<(SemanticsNode) -> Unit>,
     content: @Composable () -> Unit,
 ) {
     val filename = "${subject}__${state}__${variant.suffix}.png"
-    val bitmap = captureScreenshot(tier, variant, onDialogReady, content)
+    val bitmap = captureScreenshot(tier, variant, requireDialog, steps, content)
     try {
         compareScreenshot(bitmap, "${tier.directory}/$filename")
     } finally {
@@ -120,12 +137,21 @@ private fun compareScreenshot(bitmap: Bitmap, relativePath: String) {
 private fun captureScreenshot(
     tier: ScreenshotTier,
     variant: ScreenshotVariant,
-    onDialogReady: ((SemanticsNode) -> Unit)?,
+    requireDialog: Boolean,
+    steps: List<(SemanticsNode) -> Unit>,
     content: @Composable () -> Unit,
 ): Bitmap {
     val previousQualifiers = RuntimeEnvironment.getQualifiers()
     val previousFontScale = RuntimeEnvironment.getApplication().resources.configuration.fontScale
-    RuntimeEnvironment.setQualifiers("en-rUS-w360dp-h640dp-mdpi")
+    val fullScreen = tier == ScreenshotTier.SCREEN
+    val captureWindows = requireDialog || steps.isNotEmpty()
+    val qualifiers = if (fullScreen) {
+        val night = if (variant.dark) "night" else "notnight"
+        "en-rUS-w360dp-h${tier.heightDp}dp-$night-mdpi"
+    } else {
+        "en-rUS-w360dp-h640dp-mdpi"
+    }
+    RuntimeEnvironment.setQualifiers(qualifiers)
     RuntimeEnvironment.setFontScale(variant.fontScale)
     val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup()
     val activity = controller.get()
@@ -157,49 +183,61 @@ private fun captureScreenshot(
         activity.setContentView(view)
         Snapshot.sendApplyNotifications()
         val root = view.getChildAt(0) as ViewRootForTest
-        var dialogDecor: View? = null
-        var dialogReadyFrame: Int? = null
-        repeat(96) { frame ->
+        var previousWindow: Window? = null
+        var stepIndex = 0
+        var nextActionFrame = if (steps.isEmpty()) 0 else SETTLE_FRAMES
+        repeat((steps.size + 3) * SETTLE_FRAMES) { frame ->
             clock.sendFrame(1_000_000_000L + frame * 16_000_000L)
             drainMainLooper()
             layoutScreenshotView(view, tier.heightDp)
             root.measureAndLayoutForTest()
-            if (onDialogReady != null) {
-                val window = ShadowDialog.getLatestDialog()?.takeIf { it.isShowing }?.window
-                    ?: return@repeat
-                if (dialogDecor != window.decorView) {
-                    dialogDecor = window.decorView
-                    window.setLayout(360, tier.heightDp)
-                }
-                val decor = window.decorView
-                layoutScreenshotView(decor, tier.heightDp)
-                val dialogRoot = findComposeRoot(decor) ?: return@repeat
-                dialogRoot.measureAndLayoutForTest()
-                // Advance the sheet entrance and any dialog state change on the test clock.
-                if (dialogReadyFrame == null && frame >= 32) {
-                    onDialogReady(dialogRoot.semanticsOwner.rootSemanticsNode)
-                    Snapshot.sendApplyNotifications()
-                    dialogReadyFrame = frame
-                    return@repeat
-                }
-                val readyFrame = dialogReadyFrame ?: return@repeat
-                if (frame - readyFrame < 32 || clock.hasAwaiters) return@repeat
+            val window = if (captureWindows) {
+                ShadowDialog.getLatestDialog()?.takeIf { it.isShowing }?.window
+            } else {
+                null
             }
+            val dialogRoot = window?.let {
+                if (previousWindow != window) {
+                    window.setLayout(360, tier.heightDp)
+                    previousWindow = window
+                }
+                layoutScreenshotView(window.decorView, tier.heightDp)
+                findComposeRoot(window.decorView)?.apply { measureAndLayoutForTest() }
+            }
+            if ((requireDialog || window != null) && dialogRoot == null) return@repeat
+            // Advance the test clock between steps so window transitions and layout can settle.
+            if (frame < nextActionFrame) return@repeat
+            if (stepIndex < steps.size) {
+                val activeRoot = dialogRoot ?: root
+                steps[stepIndex++](activeRoot.semanticsOwner.rootSemanticsNode)
+                Snapshot.sendApplyNotifications()
+                nextActionFrame = frame + SETTLE_FRAMES
+                return@repeat
+            }
+            if (steps.isNotEmpty() && clock.hasAwaiters) return@repeat
             if (recomposer.currentState.value == Recomposer.State.Idle) {
                 val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+                var keepBitmap = false
                 try {
                     val canvas = Canvas(bitmap)
                     view.draw(canvas)
-                    dialogDecor?.draw(canvas)
+                    if (window != null) {
+                        if (fullScreen) canvas.drawWindowDim(window)
+                        window.decorView.draw(canvas)
+                    }
+                    if (fullScreen) {
+                        keepBitmap = true
+                        return bitmap
+                    }
                     return bitmap.cropToContent(backgroundColor)
                 } finally {
-                    bitmap.recycle()
+                    if (!keepBitmap) bitmap.recycle()
                 }
             }
         }
         error("Screenshot composition did not settle")
     } finally {
-        if (onDialogReady != null) {
+        if (captureWindows) {
             ShadowDialog.getLatestDialog()?.takeIf { it.isShowing }?.dismiss()
         }
         view.disposeComposition()
@@ -208,6 +246,13 @@ private fun captureScreenshot(
         controller.pause().stop().destroy()
         RuntimeEnvironment.setQualifiers(previousQualifiers)
         RuntimeEnvironment.setFontScale(previousFontScale)
+    }
+}
+
+private fun Canvas.drawWindowDim(window: Window) {
+    val attributes = window.attributes
+    if (attributes.flags and WindowManager.LayoutParams.FLAG_DIM_BEHIND != 0) {
+        drawColor(Color.argb((attributes.dimAmount * 255).roundToInt(), 0, 0, 0))
     }
 }
 
@@ -227,6 +272,7 @@ private fun findComposeRoot(view: View): ViewRootForTest? = when (view) {
     else -> null
 }
 
+private const val SETTLE_FRAMES = 32
 private const val SCREENSHOT_GUTTER_PX = 4
 
 private fun Bitmap.cropToContent(backgroundColor: Int): Bitmap {
