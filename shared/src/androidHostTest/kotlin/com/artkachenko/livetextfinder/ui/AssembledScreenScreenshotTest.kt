@@ -6,6 +6,7 @@ import android.graphics.Paint
 import android.graphics.Typeface
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,8 +14,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Size
@@ -28,6 +31,7 @@ import com.artkachenko.livetextfinder.ScreenshotVariant
 import com.artkachenko.livetextfinder.assertScreenshot
 import com.artkachenko.livetextfinder.camera.FrozenFrameOwner
 import com.artkachenko.livetextfinder.camera.ImportedImageOwner
+import com.artkachenko.livetextfinder.camera.LiveCaptureActions
 import com.artkachenko.livetextfinder.camera.LiveCaptureControls
 import com.artkachenko.livetextfinder.drainMainLooper
 import com.artkachenko.livetextfinder.scanarea.LiveSearchAreaEditorOverlay
@@ -36,6 +40,7 @@ import com.artkachenko.livetextfinder.scanarea.ScanAreaEditBar
 import com.artkachenko.livetextfinder.screen.FinderLayoutMode
 import com.artkachenko.livetextfinder.screen.FinderSourceContext
 import com.artkachenko.livetextfinder.screen.FinderTopRegion
+import com.artkachenko.livetextfinder.screen.FloatingLiveScanner
 import com.artkachenko.livetextfinder.search.ElementOutline
 import com.artkachenko.livetextfinder.search.InMemorySearchSessionStore
 import com.artkachenko.livetextfinder.search.MatchOutlineBounds
@@ -113,11 +118,64 @@ class AssembledScreenScreenshotTest {
         }
         val searchBar = FinderSearchBar(
             query = "invoice",
-            onQueryChange = { _ -> Unit },
+            onQueryChange = {},
             searchListsLabel = stringResource(Res.string.inspection_lists),
             onSearchLists = ::ignore,
         )
         val resultsLabel = stringResource(Res.string.inspection_results, receipt.matches.size)
+        if (layoutMode.isLiveCamera) {
+            val controls = remember {
+                LiveCaptureControls({ true }, { true }).apply {
+                    val lease = attach(NoCaptureActions, ::ignore)
+                    update(lease) { it.copy(ready = true, maxZoom = 4f, hasFlash = true) }
+                }
+            }
+            BoxWithConstraints(Modifier.fillMaxSize()) {
+                val draft = areaEditor.editorDraft
+                ReceiptPreview(
+                    receipt.bitmap.asImageBitmap(),
+                    if (draft == null) receipt.matches else emptyList(),
+                    isStill = false,
+                    selected = false,
+                )
+                if (draft != null) {
+                    LiveSearchAreaEditorOverlay(
+                        area = checkNotNull(draft.area),
+                        viewportSize = IntSize(constraints.maxWidth, constraints.maxHeight),
+                        onAreaChange = { areaEditor.updateEditor(draft.token, it) },
+                        modifier = Modifier.matchParentSize(),
+                    )
+                    Box(Modifier.align(Alignment.BottomCenter).safeDrawingPadding()) {
+                        FixtureScanAreaBar(areaEditor)
+                    }
+                } else {
+                    FloatingLiveScanner(
+                        searchBar = searchBar,
+                        liveControls = controls,
+                        captureEnabled = true,
+                        freezePending = false,
+                        onFreeze = ::ignore,
+                        onCancelFreeze = ::ignore,
+                        areaEnabled = true,
+                        onArea = ::ignore,
+                        importEnabled = true,
+                        importPending = false,
+                        onImport = ::ignore,
+                        onCancelImport = ::ignore,
+                        onMatchMode = {},
+                        onOptions = ::ignore,
+                        statusLabel = sourceStatusMessage(
+                            StatusSource.LiveCamera,
+                            SearchFeedback(SearchFeedbackKind.Matches, receipt.matches.size),
+                            scanning = true,
+                        ),
+                        onStatus = ::ignore,
+                        snackbarHostState = remember { SnackbarHostState() },
+                    )
+                }
+            }
+            return
+        }
         FinderContentAssembly(
             scrollState = rememberScrollState(),
             scrollable = false,
@@ -134,47 +192,45 @@ class AssembledScreenScreenshotTest {
                     status = { FixtureStatus(state, receipt) },
                 )
             },
-            managerContent = { Unit },
+            managerContent = {},
             viewportContent = {
-                val draft = areaEditor.editorDraft
                 BoxWithConstraints(
                     Modifier.weight(1f).fillMaxWidth()
                         .background(FinderCameraOverlay.viewportBackground),
                 ) {
                     ReceiptPreview(
                         image = receipt.bitmap.asImageBitmap(),
-                        matches = if (draft == null) receipt.matches else emptyList(),
-                        isStill = layoutMode == FinderLayoutMode.StillInspection,
+                        matches = receipt.matches,
+                        isStill = true,
                         selected = state == AssemblyState.Imported,
                     )
-                    if (draft != null) {
-                        LiveSearchAreaEditorOverlay(
-                            area = draft.area ?: NormalizedSearchArea(0f, 0f, 1f, 1f),
-                            viewportSize = IntSize(constraints.maxWidth, constraints.maxHeight),
-                            onAreaChange = { areaEditor.updateEditor(draft.token, it) },
-                            modifier = Modifier.matchParentSize(),
-                        )
-                    }
                 }
             },
-            footerContent = {
-                if (layoutMode == FinderLayoutMode.AreaEditing) {
-                    val context = remember {
-                        FinderSourceContext(
-                            session = SearchSessionController(InMemorySearchSessionStore()),
-                            importedOwner = ImportedImageOwner(),
-                            frozenOwner = FrozenFrameOwner(),
-                            liveCaptureControls = LiveCaptureControls({ true }, { false }),
-                            isContentVisible = { true },
-                            isCaptureContextCurrent = { false },
-                        )
-                    }
-                    ScanAreaEditBar(areaEditor, checkNotNull(areaEditor.editorDraft).token, context)
-                } else {
-                    FixtureDock(state, searchBar, resultsLabel, receipt.matches.size)
-                }
-            },
+            footerContent = { FixtureDock(state, searchBar, resultsLabel, receipt.matches.size) },
         )
+    }
+
+    @Composable
+    private fun FixtureScanAreaBar(areaEditor: LiveSearchAreaState) {
+        val context = remember {
+            FinderSourceContext(
+                session = SearchSessionController(InMemorySearchSessionStore()),
+                importedOwner = ImportedImageOwner(),
+                frozenOwner = FrozenFrameOwner(),
+                liveCaptureControls = LiveCaptureControls({ true }, { false }),
+                isContentVisible = { true },
+                isCaptureContextCurrent = { false },
+            )
+        }
+        ScanAreaEditBar(areaEditor, checkNotNull(areaEditor.editorDraft).token, context, floating = true)
+    }
+
+    private object NoCaptureActions : LiveCaptureActions {
+        override fun zoom(ratio: Float) = Unit
+
+        override fun torch(enabled: Boolean) = Unit
+
+        override fun focus() = Unit
     }
 
     @Composable

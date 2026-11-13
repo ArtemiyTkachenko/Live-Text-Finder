@@ -3,6 +3,7 @@ package com.artkachenko.livetextfinder.screen
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
 import androidx.compose.ui.Alignment
@@ -10,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.dp
 import com.artkachenko.livetextfinder.camera.CameraPreview
 import com.artkachenko.livetextfinder.camera.FreezeMode
 import com.artkachenko.livetextfinder.camera.FreezePresentationState
@@ -49,6 +51,7 @@ internal fun FinderViewport(
     areaEditing: Boolean,
     areaGestureEnabled: Boolean,
     modifier: Modifier = Modifier,
+    showLegacyLiveControls: Boolean = true,
 ) {
     val editorDraft = liveArea.editorDraft
     val editorToken = editorDraft?.token ?: 0L
@@ -110,9 +113,14 @@ internal fun FinderViewport(
             context.frozenOwner.state.value.mode == FreezeMode.Live &&
             context.isContentVisible()
         ) {
-            ScanAreaBadge(Modifier.align(Alignment.TopStart))
+            val badgeModifier = Modifier.align(Alignment.TopStart)
+            ScanAreaBadge(
+                if (showLegacyLiveControls) badgeModifier else {
+                    badgeModifier.safeDrawingPadding().padding(start = 4.dp, top = 56.dp)
+                },
+            )
         }
-        if (inspection.source == null) {
+        if (showLegacyLiveControls && inspection.source == null) {
             LiveCaptureControlRow(
                 controls = context.liveCaptureControls,
                 contextEnabled = context.isCaptureContextCurrent(),

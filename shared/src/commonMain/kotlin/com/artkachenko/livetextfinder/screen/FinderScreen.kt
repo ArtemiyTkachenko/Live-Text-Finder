@@ -1,34 +1,27 @@
 package com.artkachenko.livetextfinder.screen
 
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.layout.positionInParent
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntSize
 import com.artkachenko.livetextfinder.camera.FreezeMode
 import com.artkachenko.livetextfinder.camera.ImageShareStatus
 import com.artkachenko.livetextfinder.camera.LiveSearchAreaLifecycle
 import com.artkachenko.livetextfinder.camera.allowsLiveCamera
+import com.artkachenko.livetextfinder.camera.isImportInProgress
 import com.artkachenko.livetextfinder.camera.liveSearchAreaAvailable
 import com.artkachenko.livetextfinder.camera.rememberImageShareOwner
 import com.artkachenko.livetextfinder.inspection.stillInspectionState
@@ -39,14 +32,19 @@ import com.artkachenko.livetextfinder.ocr.OcrUiState
 import com.artkachenko.livetextfinder.ocr.isCameraRunning
 import com.artkachenko.livetextfinder.scanarea.LiveAreaBackHandler
 import com.artkachenko.livetextfinder.scanarea.LiveSearchAreaState
+import com.artkachenko.livetextfinder.scanarea.ScanAreaEditBar
 import com.artkachenko.livetextfinder.search.SearchSessionController
 import com.artkachenko.livetextfinder.search.rememberSearchListTransferOwner
 import com.artkachenko.livetextfinder.status.FinderStatusRegion
+import com.artkachenko.livetextfinder.ui.ContextMessage
 import com.artkachenko.livetextfinder.ui.FinderCaptureActions
-import com.artkachenko.livetextfinder.ui.FinderContentAssembly
 import com.artkachenko.livetextfinder.ui.FinderSearchBar
 import com.artkachenko.livetextfinder.ui.FinderSearchLists
 import com.artkachenko.livetextfinder.ui.RetainedInspectionActionDispatcher
+import livetextfinder.shared.generated.resources.Res
+import livetextfinder.shared.generated.resources.capture_cancel_import
+import livetextfinder.shared.generated.resources.search_list_transfer_cancel
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * The scanner screen: the live preview or a retained image, the search dock, the saved-list
@@ -187,53 +185,134 @@ internal fun FinderScreen(session: SearchSessionController) {
     )
 
     val snackbarHostState = remember { SnackbarHostState() }
-    var footerTop by remember { mutableFloatStateOf(0f) }
     FinderFeedbackEffects(
         hostState = snackbarHostState,
         copySession = inspection.copySession,
         shareState = shareOwner.state,
         transferState = transferOwner.state,
     )
-    val density = LocalDensity.current
-    Box(Modifier.fillMaxSize()) {
-        // This column is the only IME inset owner. The weighted viewport receives the
-        // remaining height directly, so status changes do not recalculate its space.
-        FinderContentAssembly(
-            scrollState = rememberScrollState(),
-            scrollable = !shouldShowViews,
-            modifier = Modifier.fillMaxSize()
-                .safeDrawingPadding()
-                .imePadding()
-                .onSizeChanged { rootSizeState.value = it },
-            topContent = {
-                FinderTopRegion(
-                    layoutMode = layoutMode,
-                    shouldShowViews = shouldShowViews,
-                    searchBar = searchBar,
-                    inlineResultsLabel = labels.results,
-                    transferState = transferState,
-                    onCancelTransfer = transferOwner::cancel,
-                    onOptions = { dialogs.optionsOpen = true },
-                    status = {
-                        FinderStatusRegion(
-                            state = ocrState,
-                            importedState = importedState,
-                            freezeState = freezeState,
-                            sessionState = sessionState,
-                            search = search,
-                            presentation = searchState.presentation,
-                            highlights = searchState.highlights,
-                            resultsAvailable = searchState.resultsAvailable,
-                            areaSelected = liveArea.area != null,
-                            shouldShowViews = shouldShowViews,
-                            liveStageBand = shouldShowViews && layoutMode.isLiveCamera,
-                            onRetrySavedData = searchEditing::retrySavedSearches,
-                            onRequestReset = { dialogs.resetConfirmOpen = true },
-                        )
-                    },
-                )
-            },
-            managerContent = {
+    val floatingLive = layoutMode == FinderLayoutMode.Live
+    val recognitionDetailsAvailable = importedState.phase.allowsLiveCamera &&
+        freezeState.mode == FreezeMode.Live
+    LaunchedEffect(floatingLive, recognitionDetailsAvailable) {
+        if (!floatingLive || !recognitionDetailsAvailable) dialogs.recognitionDetailsOpen = false
+    }
+    val floatingViewport = floatingLive || layoutMode == FinderLayoutMode.AreaEditing
+    val viewport: @Composable (Modifier) -> Unit = { modifier ->
+        FinderViewport(
+            inspection = inspection,
+            viewportState = viewportState,
+            searchState = searchState,
+            ocrState = ocrState,
+            onOcrState = { ocrState = it },
+            importedState = importedState,
+            freezeState = freezeState,
+            liveArea = liveArea,
+            context = context,
+            areaEditing = areaEditing,
+            areaGestureEnabled = areaGestureEnabled,
+            modifier = modifier,
+            showLegacyLiveControls = !floatingViewport,
+        )
+    }
+    val status: @Composable ((@Composable (String, @Composable () -> Unit) -> Unit)?) -> Unit =
+        { floatingContent ->
+            FinderStatusRegion(
+                state = ocrState,
+                importedState = importedState,
+                freezeState = freezeState,
+                sessionState = sessionState,
+                search = search,
+                presentation = searchState.presentation,
+                highlights = searchState.highlights,
+                resultsAvailable = searchState.resultsAvailable,
+                areaSelected = liveArea.area != null,
+                shouldShowViews = shouldShowViews,
+                liveStageBand = shouldShowViews && layoutMode.isLiveCamera,
+                floatingContent = floatingContent,
+                floatingDetailsOpen = floatingLive && dialogs.recognitionDetailsOpen,
+                onDismissFloatingDetails = { dialogs.recognitionDetailsOpen = false },
+                onRetrySavedData = searchEditing::retrySavedSearches,
+                onRequestReset = { dialogs.resetConfirmOpen = true },
+            )
+        }
+    if (floatingViewport) {
+        Box(Modifier.fillMaxSize()) {
+            viewport(Modifier.fillMaxSize())
+            if (floatingLive) {
+                status { label, messages ->
+                    FloatingLiveScanner(
+                        searchBar = searchBar,
+                        liveControls = context.liveCaptureControls,
+                        captureEnabled = actions.captureEnabled &&
+                            importedState.phase.allowsLiveCamera,
+                        freezePending = freezeState.mode == FreezeMode.Freezing,
+                        onFreeze = actions::capture,
+                        onCancelFreeze = actions::cancelCapture,
+                        areaEnabled = labels.liveArea != null,
+                        onArea = actions::startAreaEditing,
+                        importEnabled = importedState.phase.allowsLiveCamera,
+                        importPending = importedState.phase.isImportInProgress,
+                        onImport = actions::beginImport,
+                        onCancelImport = actions::leaveOrCancelImport,
+                        onMatchMode = searchEditing::setMatchMode,
+                        onOptions = { dialogs.optionsOpen = true },
+                        statusLabel = label,
+                        onStatus = searchBar.onTerms,
+                        snackbarHostState = snackbarHostState,
+                        matchModeEnabled = sessionState.loaded && !sessionState.recoveryRequired,
+                        messages = {
+                            val transferMessage = transferState.message
+                            if (transferState.busy && transferMessage != null) {
+                                ContextMessage(
+                                    message = transferMessage,
+                                    actionLabel = stringResource(
+                                        Res.string.search_list_transfer_cancel,
+                                    ),
+                                    onAction = transferOwner::cancel,
+                                    floating = true,
+                                )
+                            }
+                            messages()
+                            if (importedState.phase.isImportInProgress) {
+                                ContextMessage(
+                                    message = label,
+                                    actionLabel = stringResource(Res.string.capture_cancel_import),
+                                    onAction = actions::leaveOrCancelImport,
+                                    floating = true,
+                                )
+                            }
+                        },
+                    )
+                }
+            } else {
+                Column(Modifier.align(Alignment.BottomCenter).safeDrawingPadding()) {
+                    SnackbarHost(snackbarHostState, Modifier.fillMaxWidth())
+                    ScanAreaEditBar(liveArea, editorDraft?.token ?: 0L, context, floating = true)
+                }
+            }
+        }
+    } else {
+        FinderStackedContent(
+            layoutMode = layoutMode,
+            searchBar = searchBar,
+            captureActions = captureActions,
+            labels = labels,
+            actions = actions,
+            dialogs = dialogs,
+            inspection = inspection,
+            liveArea = liveArea,
+            context = context,
+            shouldShowViews = shouldShowViews,
+            resultsAvailable = searchState.resultsAvailable,
+            sharePreparing = shareOwner.state.value.status == ImageShareStatus.Preparing,
+            snackbarHostState = snackbarHostState,
+            transferState = transferState,
+            onCancelTransfer = transferOwner::cancel,
+            rootSizeState = rootSizeState,
+            viewport = viewport,
+            status = { status(null) },
+            manager = {
                 if (searchEditing.isOpen) {
                     FinderSearchLists(
                         lists = sessionState.persisted.lists,
@@ -251,54 +330,6 @@ internal fun FinderScreen(session: SearchSessionController) {
                     )
                 }
             },
-            viewportContent = {
-                if (shouldShowViews) {
-                    FinderViewport(
-                        inspection = inspection,
-                        viewportState = viewportState,
-                        searchState = searchState,
-                        ocrState = ocrState,
-                        onOcrState = { ocrState = it },
-                        importedState = importedState,
-                        freezeState = freezeState,
-                        liveArea = liveArea,
-                        context = context,
-                        areaEditing = areaEditing,
-                        areaGestureEnabled = areaGestureEnabled,
-                        modifier = Modifier.weight(1f).fillMaxWidth(),
-                    )
-                }
-            },
-            footerContent = {
-                Spacer(Modifier.onGloballyPositioned { footerTop = it.positionInParent().y })
-                FinderFooter(
-                    layoutMode = layoutMode,
-                    searchBar = searchBar,
-                    captureActions = captureActions,
-                    labels = labels,
-                    actions = actions,
-                    dialogs = dialogs,
-                    inspection = inspection,
-                    liveArea = liveArea,
-                    context = context,
-                    shouldShowViews = shouldShowViews,
-                    resultsAvailable = searchState.resultsAvailable,
-                    sharePreparing = shareOwner.state.value.status == ImageShareStatus.Preparing,
-                )
-            },
-        )
-        // Sits above the footer while the preview is shown, so it never covers the dock.
-        val footerHeight = if (shouldShowViews) {
-            (rootSizeState.value.height - footerTop).coerceAtLeast(0f)
-        } else {
-            0f
-        }
-        SnackbarHost(
-            hostState = snackbarHostState,
-            modifier = Modifier.align(Alignment.BottomCenter)
-                .safeDrawingPadding()
-                .imePadding()
-                .padding(bottom = with(density) { footerHeight.toDp() }),
         )
     }
     FinderDialogs(
@@ -315,5 +346,7 @@ internal fun FinderScreen(session: SearchSessionController) {
         shouldShowViews = shouldShowViews,
         onImportList = transferOwner::importList,
         onExportList = transferOwner::exportSelectedList,
+        floatingLive = floatingLive,
+        recognitionDetailsAvailable = recognitionDetailsAvailable,
     )
 }

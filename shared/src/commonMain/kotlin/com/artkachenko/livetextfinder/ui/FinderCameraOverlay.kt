@@ -29,6 +29,14 @@ internal object FinderCameraOverlay {
     /** Text colour on [labelScrim]. */
     val onLabelScrim: Color = Color.White
 
+    /** Shared surface and foreground for floating scanner controls. */
+    val controlScrim: Color = Color.Black.copy(alpha = 0.6f)
+    val onControlScrim: Color = Color.White
+
+    /** Inverted surface for the selected Whole words toggle. */
+    val selectedControlContainer: Color = Color.White
+    val onSelectedControl: Color = Color.Black
+
     val guideStrokeWidth: Dp = 3.dp
     val guideUnderlayStrokeWidth: Dp = 5.dp
     val guideDashLength: Dp = 10.dp

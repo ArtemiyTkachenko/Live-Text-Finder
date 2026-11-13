@@ -13,6 +13,7 @@ import com.artkachenko.livetextfinder.camera.FreezeMode
 import com.artkachenko.livetextfinder.camera.FrozenFrameOwner
 import com.artkachenko.livetextfinder.camera.ImportedImageOwner
 import com.artkachenko.livetextfinder.camera.ImportedImagePicker
+import com.artkachenko.livetextfinder.camera.ImportedImagePhase
 import com.artkachenko.livetextfinder.camera.LiveCaptureControls
 import com.artkachenko.livetextfinder.camera.allowsLiveCamera
 import com.artkachenko.livetextfinder.camera.liveSearchAreaAvailable
@@ -34,7 +35,7 @@ internal class FinderSourceContext(
     val importedOwner: ImportedImageOwner,
     val frozenOwner: FrozenFrameOwner,
     val liveCaptureControls: LiveCaptureControls,
-    /** True when the preview is shown: no list manager, compact layout or keyboard. */
+    /** True when the displayed source has a viewport. */
     val isContentVisible: () -> Boolean,
     /** True when live capture controls may act: live camera, visible and no area editing. */
     val isCaptureContextCurrent: () -> Boolean,
@@ -68,13 +69,22 @@ internal fun finderSourceContext(
     val frozenOwner = rememberFrozenFrameOwner()
     val density = LocalDensity.current
     val imeInsets = WindowInsets.ime
-    val isContentVisible = {
+    val legacyContentVisible = {
         val rootSize = rootSizeState.value
         val isCompact =
             (rootSize != IntSize.Zero &&
                 rootSize.height / density.density < COMPACT_HEIGHT_DP) ||
                 density.fontScale >= COMPACT_FONT_SCALE
         !searchEditing.isOpen && !isCompact && imeInsets.getBottom(density) == 0
+    }
+    val isContentVisible = {
+        if (frozenOwner.state.value.mode == FreezeMode.Frozen ||
+            importedOwner.state.value.phase == ImportedImagePhase.Imported
+        ) {
+            legacyContentVisible()
+        } else {
+            !searchEditing.isOpen
+        }
     }
     val captureContextCurrent = {
         val phase = importedOwner.state.value.phase

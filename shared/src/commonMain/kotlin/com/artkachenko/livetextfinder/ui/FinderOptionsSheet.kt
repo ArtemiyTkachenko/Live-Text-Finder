@@ -44,6 +44,7 @@ import livetextfinder.shared.generated.resources.highlight_color_custom_descript
 import livetextfinder.shared.generated.resources.search_list_export
 import livetextfinder.shared.generated.resources.search_list_import
 import livetextfinder.shared.generated.resources.search_list_transfer_help
+import livetextfinder.shared.generated.resources.status_details_title
 import org.jetbrains.compose.resources.stringResource
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -67,6 +68,8 @@ internal fun FinderOptionsSheet(
     onImport: () -> Unit,
     onHelp: () -> Unit,
     onDismissRequest: () -> Unit,
+    onRecognitionDetails: (() -> Unit)? = null,
+    recognitionDetailsEnabled: Boolean = true,
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
@@ -92,26 +95,34 @@ internal fun FinderOptionsSheet(
                     Res.string.highlight_color_custom_description,
                 ),
             )
-            Column(modifier = Modifier.selectableGroup()) {
-                MatchModeOption(
-                    label = stringResource(Res.string.finder_match_substring),
-                    selected = matchMode == SearchMatchMode.Substring,
-                    enabled = matchModeEnabled,
-                    onClick = { onMatchMode(SearchMatchMode.Substring) },
+            if (onRecognitionDetails != null) {
+                FinderOptionsActionRow(
+                    label = stringResource(Res.string.status_details_title),
+                    onClick = onRecognitionDetails,
+                    enabled = recognitionDetailsEnabled,
                 )
-                MatchModeOption(
-                    label = stringResource(Res.string.finder_match_whole_words),
-                    selected = matchMode == SearchMatchMode.WholeWord,
-                    enabled = matchModeEnabled,
-                    onClick = { onMatchMode(SearchMatchMode.WholeWord) },
+            } else {
+                Column(modifier = Modifier.selectableGroup()) {
+                    MatchModeOption(
+                        label = stringResource(Res.string.finder_match_substring),
+                        selected = matchMode == SearchMatchMode.Substring,
+                        enabled = matchModeEnabled,
+                        onClick = { onMatchMode(SearchMatchMode.Substring) },
+                    )
+                    MatchModeOption(
+                        label = stringResource(Res.string.finder_match_whole_words),
+                        selected = matchMode == SearchMatchMode.WholeWord,
+                        enabled = matchModeEnabled,
+                        onClick = { onMatchMode(SearchMatchMode.WholeWord) },
+                    )
+                }
+                Text(
+                    stringResource(Res.string.finder_match_help),
+                    modifier = Modifier.padding(horizontal = 12.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Text(
-                stringResource(Res.string.finder_match_help),
-                modifier = Modifier.padding(horizontal = 12.dp),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
             if (liveAreaLabel != null || showImport) {
                 OptionsGroupTitle(stringResource(Res.string.finder_options_camera_group))
                 if (liveAreaLabel != null) {
@@ -253,6 +264,8 @@ internal fun FinderOptionsSheetHost(
     onImport: () -> Unit,
     onHelp: () -> Unit,
     onDismiss: () -> Unit,
+    onRecognitionDetails: (() -> Unit)? = null,
+    recognitionDetailsEnabled: Boolean = true,
 ) {
     val savedSearchEditable = sessionState.loaded && !sessionState.recoveryRequired
     val dismissThen: (() -> Unit) -> () -> Unit = { action ->
@@ -287,5 +300,7 @@ internal fun FinderOptionsSheetHost(
         onImport = dismissThen(onImport),
         onHelp = dismissThen(onHelp),
         onDismissRequest = onDismiss,
+        onRecognitionDetails = onRecognitionDetails?.let(dismissThen),
+        recognitionDetailsEnabled = recognitionDetailsEnabled,
     )
 }

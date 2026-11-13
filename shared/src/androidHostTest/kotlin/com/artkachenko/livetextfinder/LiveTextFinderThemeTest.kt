@@ -964,7 +964,7 @@ class LiveTextFinderThemeTest {
     @Test
     @Config(sdk = [35])
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
-    fun appKeepsFocusedLiveDockQueryAcrossImeAndLargeFontPolicyChanges() {
+    fun appKeepsFocusedFloatingQueryAndViewportAcrossImeAndCompactLayout() {
         val session = inMemorySearchSessionController()
         session.setManualQuery("invoice-2048")
         val fontScale = mutableFloatStateOf(1f)
@@ -977,7 +977,11 @@ class LiveTextFinderThemeTest {
         }
 
         var nodes = semanticsNodes()
-        assertTrue(nodes.any { it.config.getOrNull(TestTag) == "finder-image-viewport" })
+        val fullViewport = nodes.single {
+            it.config.getOrNull(TestTag) == "finder-image-viewport"
+        }.boundsInRoot
+        assertEquals(360f, fullViewport.width)
+        assertEquals(800f, fullViewport.height)
         var queryNode = nodes.single {
             it.config.getOrNull(SemanticsProperties.EditableText)?.text == "invoice-2048"
         }
@@ -994,47 +998,39 @@ class LiveTextFinderThemeTest {
         measureCurrentComposition()
 
         nodes = semanticsNodes()
-        assertFalse(nodes.any { it.config.getOrNull(TestTag) == "finder-image-viewport" })
+        assertEquals(fullViewport, nodes.single {
+            it.config.getOrNull(TestTag) == "finder-image-viewport"
+        }.boundsInRoot)
+        assertFalse(nodes.any { it.config.getOrNull(TestTag) == "floating-live-status" })
+        assertFalse(nodes.any { it.config.getOrNull(TestTag) == "floating-live-action-bar" })
         queryNode = nodes.single {
             it.config.getOrNull(SemanticsProperties.EditableText)?.text == "invoice-2048"
         }
         assertEquals(true, queryNode.config.getOrNull(Focused))
-        assertTrue(nodeWithText(nodes, "Options", clickable = true).boundsInRoot.height > 0f)
-        assertTrue(nodeWithText(nodes, "Lists", clickable = true).boundsInRoot.height > 0f)
+        assertTrue(queryNode.boundsInRoot.bottom <= 480f)
 
-        fontScale.floatValue = 1.5f
+        val closedIme = WindowInsetsCompat.Builder()
+            .setInsets(WindowInsetsCompat.Type.ime(), Insets.NONE)
+            .setVisible(WindowInsetsCompat.Type.ime(), false)
+            .build()
+        ViewCompat.dispatchApplyWindowInsets(checkNotNull(composeView), closedIme)
+        fontScale.floatValue = 1.3f
         shadowOf(Looper.getMainLooper()).idleFor(16, TimeUnit.MILLISECONDS)
         measureAt(checkNotNull(composeView), checkNotNull(activity), widthDp = 360, heightDp = 400)
         measureCurrentComposition()
         nodes = semanticsNodes()
-        assertFalse(nodes.any { it.config.getOrNull(TestTag) == "finder-image-viewport" })
+        assertEquals(400f, nodes.single {
+            it.config.getOrNull(TestTag) == "finder-image-viewport"
+        }.boundsInRoot.height)
+        assertFalse(nodes.any { it.config.getOrNull(TestTag) == "floating-live-zoom" })
         queryNode = nodes.single {
             it.config.getOrNull(SemanticsProperties.EditableText)?.text == "invoice-2048"
         }
         assertEquals(true, queryNode.config.getOrNull(Focused))
-        assertEquals(1.5f, queryNode.layoutInfo.density.fontScale)
-        val scrollNode = checkNotNull(
-            nodes.firstOrNull { it.config.contains(SemanticsActions.ScrollBy) },
-        )
-        val scrollBy = checkNotNull(
-            scrollNode.config.getOrNull(SemanticsActions.ScrollBy)?.action,
-        )
-        assertTrue(scrollBy(0f, -1000f))
-        measureCurrentComposition()
-        nodes = semanticsNodes()
-        queryNode = nodes.single {
-            it.config.getOrNull(SemanticsProperties.EditableText)?.text == "invoice-2048"
-        }
-        assertEquals(true, queryNode.config.getOrNull(Focused))
-        assertTrue(nodeWithText(nodes, "Options", clickable = true).boundsInRoot.height > 0f)
-        assertTrue(scrollBy(0f, 1000f))
-        measureCurrentComposition()
-        nodes = semanticsNodes()
-        queryNode = nodes.single {
-            it.config.getOrNull(SemanticsProperties.EditableText)?.text == "invoice-2048"
-        }
-        assertEquals(true, queryNode.config.getOrNull(Focused))
-        assertTrue(nodeWithText(nodes, "Freeze frame").boundsInRoot.height > 0f)
+        assertEquals(1.3f, queryNode.layoutInfo.density.fontScale)
+        val freeze = nodeWithText(nodes, "Freeze")
+        assertTrue(freeze.boundsInRoot.height > 0f)
+        assertTrue(freeze.boundsInRoot.bottom <= 400f)
         val setText = checkNotNull(queryNode.config.getOrNull(SemanticsActions.SetText)?.action)
         assertTrue(setText(AnnotatedString("compact query preserved")))
         Snapshot.sendApplyNotifications()

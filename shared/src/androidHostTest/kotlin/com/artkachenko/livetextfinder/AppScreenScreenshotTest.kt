@@ -111,7 +111,8 @@ class AppScreenScreenshotTest {
     }
 
     private fun SemanticsNode.hasText(label: String): Boolean =
-        config.getOrNull(SemanticsProperties.Text)?.any { it.text == label } == true
+        config.getOrNull(SemanticsProperties.Text)?.any { it.text == label } == true ||
+            config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true
 
     private fun nodes(root: SemanticsNode): Sequence<SemanticsNode> = sequence {
         yield(root)

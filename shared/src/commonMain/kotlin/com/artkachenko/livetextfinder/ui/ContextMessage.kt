@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -19,10 +20,22 @@ internal fun ContextMessage(
     onAction: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     isError: Boolean = false,
+    floating: Boolean = false,
 ) {
+    val foreground = if (floating) {
+        FinderCameraOverlay.onControlScrim
+    } else if (isError) {
+        MaterialTheme.colorScheme.error
+    } else {
+        MaterialTheme.colorScheme.onSurface
+    }
     Surface(
         modifier = modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surfaceContainer,
+        color = if (floating) {
+            FinderCameraOverlay.controlScrim
+        } else {
+            MaterialTheme.colorScheme.surfaceContainer
+        },
         shape = MaterialTheme.shapes.medium,
     ) {
         Column(
@@ -34,11 +47,7 @@ internal fun ContextMessage(
         ) {
             Text(
                 text = message,
-                color = if (isError) {
-                    MaterialTheme.colorScheme.error
-                } else {
-                    MaterialTheme.colorScheme.onSurface
-                },
+                color = foreground,
                 style = MaterialTheme.typography.bodyMedium,
             )
             if (actionLabel != null && onAction != null) {
@@ -46,7 +55,14 @@ internal fun ContextMessage(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End,
                 ) {
-                    TextButton(onClick = onAction) { Text(actionLabel) }
+                    TextButton(
+                        onClick = onAction,
+                        colors = if (floating) {
+                            ButtonDefaults.textButtonColors(contentColor = foreground)
+                        } else {
+                            ButtonDefaults.textButtonColors()
+                        },
+                    ) { Text(actionLabel) }
                 }
             }
         }

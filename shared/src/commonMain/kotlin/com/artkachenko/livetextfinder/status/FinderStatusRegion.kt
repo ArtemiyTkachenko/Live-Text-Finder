@@ -56,6 +56,9 @@ internal fun FinderStatusRegion(
     liveStageBand: Boolean = false,
     onRetrySavedData: () -> Unit,
     onRequestReset: () -> Unit,
+    floatingContent: (@Composable (String, @Composable () -> Unit) -> Unit)? = null,
+    floatingDetailsOpen: Boolean = false,
+    onDismissFloatingDetails: () -> Unit = {},
 ) {
     var detailsOpen by remember { mutableStateOf(false) }
     LaunchedEffect(shouldShowViews) {
@@ -144,41 +147,57 @@ internal fun FinderStatusRegion(
     val statusVisible = shouldShowViews || source == StatusSource.ImportProgress ||
         source == StatusSource.ImportedImage
 
-    freezeState.error?.let { error ->
-        ContextMessage(message = error, isError = true)
+    val messages: @Composable () -> Unit = {
+        freezeState.error?.let { error ->
+            ContextMessage(message = error, isError = true, floating = floatingContent != null)
+        }
+        when {
+            sessionState.recoveryRequired -> ContextMessage(
+                message = listOfNotNull(
+                    sessionState.error?.let { error -> searchSessionErrorMessage(error) }
+                        ?: stringResource(Res.string.status_recovery),
+                    stringResource(Res.string.status_reset_explanation),
+                ).joinToString("\n"),
+                actionLabel = stringResource(Res.string.status_reset_saved_data),
+                onAction = onRequestReset,
+                isError = true,
+                floating = floatingContent != null,
+            )
+            sessionState.error != null -> ContextMessage(
+                message = searchSessionErrorMessage(sessionState.error) + if (sessionState.saving) {
+                    " · ${stringResource(Res.string.status_saving)}"
+                } else {
+                    ""
+                },
+                actionLabel = stringResource(Res.string.status_retry),
+                onAction = onRetrySavedData,
+                isError = true,
+                floating = floatingContent != null,
+            )
+            !sessionState.loaded -> ContextMessage(
+                stringResource(Res.string.status_loading_searches),
+                floating = floatingContent != null,
+            )
+        }
+        if (importedState.phase == ImportedImagePhase.Error) {
+            ContextMessage(
+                message = importedState.message ?: stringResource(Res.string.status_import_error),
+                isError = true,
+                floating = floatingContent != null,
+            )
+        }
     }
-    when {
-        sessionState.recoveryRequired -> ContextMessage(
-            message = listOfNotNull(
-                sessionState.error?.let { error -> searchSessionErrorMessage(error) }
-                    ?: stringResource(Res.string.status_recovery),
-                stringResource(Res.string.status_reset_explanation),
-            ).joinToString("\n"),
-            actionLabel = stringResource(Res.string.status_reset_saved_data),
-            onAction = onRequestReset,
-            isError = true,
-        )
-        sessionState.error != null -> ContextMessage(
-            message = searchSessionErrorMessage(sessionState.error) + if (sessionState.saving) {
-                " · ${stringResource(Res.string.status_saving)}"
-            } else {
-                ""
-            },
-            actionLabel = stringResource(Res.string.status_retry),
-            onAction = onRetrySavedData,
-            isError = true,
-        )
-        !sessionState.loaded -> ContextMessage(
-            stringResource(Res.string.status_loading_searches),
-        )
+    if (floatingContent != null) {
+        floatingContent(statusMessage) {
+            messages()
+            if (source == StatusSource.LiveCamera && state.status == OcrStatus.Error) {
+                ContextMessage(message = statusMessage, isError = true, floating = true)
+            }
+        }
+    } else {
+        messages()
     }
-    if (importedState.phase == ImportedImagePhase.Error) {
-        ContextMessage(
-            message = importedState.message ?: stringResource(Res.string.status_import_error),
-            isError = true,
-        )
-    }
-    if (statusVisible) {
+    if (floatingContent == null && statusVisible) {
         StatusSummary(
             message = statusMessage,
             details = selectedDetails.takeIf { shouldShowViews },
@@ -187,11 +206,14 @@ internal fun FinderStatusRegion(
             stageBand = liveStageBand,
         )
     }
-    if (detailsOpen && shouldShowViews && selectedDetails != null) {
+    if ((detailsOpen || floatingDetailsOpen) && shouldShowViews && selectedDetails != null) {
         StatusDetailsDialog(
             title = stringResource(Res.string.status_details_title),
             details = selectedDetails,
-            onDismissRequest = { detailsOpen = false },
+            onDismissRequest = {
+                detailsOpen = false
+                onDismissFloatingDetails()
+            },
         )
     }
 }

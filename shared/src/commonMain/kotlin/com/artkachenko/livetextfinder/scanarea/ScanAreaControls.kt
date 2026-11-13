@@ -6,10 +6,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import com.artkachenko.livetextfinder.camera.FreezeMode
 import com.artkachenko.livetextfinder.camera.allowsLiveCamera
 import com.artkachenko.livetextfinder.camera.liveSearchAreaAvailable
@@ -55,9 +57,16 @@ internal fun ScanAreaEditBar(
     editorToken: Long,
     context: FinderSourceContext,
     modifier: Modifier = Modifier,
+    floating: Boolean = false,
 ) {
     Column(
-        modifier.fillMaxWidth().padding(
+        modifier.fillMaxWidth().then(
+            if (floating) {
+                Modifier.background(FinderCameraOverlay.controlScrim, RoundedCornerShape(20.dp))
+            } else {
+                Modifier
+            },
+        ).padding(
             horizontal = FinderSpacing.large,
             vertical = FinderSpacing.extraSmall,
         ),
@@ -68,6 +77,8 @@ internal fun ScanAreaEditBar(
         Text(
             stringResource(Res.string.scan_area_editing),
             style = MaterialTheme.typography.labelLarge,
+            color = if (floating) FinderCameraOverlay.onControlScrim else
+                MaterialTheme.colorScheme.onSurface,
         )
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(
@@ -95,13 +106,14 @@ internal fun ScanAreaEditBar(
             )
             FinderSecondaryAction(stringResource(Res.string.scan_area_cancel), {
                 liveArea.cancelEditor(editorToken)
-            })
+            }, floating = floating)
             FinderSecondaryAction(stringResource(Res.string.scan_area_full_frame), {
                 liveArea.updateEditor(editorToken, null)
-            })
+            }, floating = floating)
             FinderSecondaryAction(
                 stringResource(Res.string.scan_area_precise),
                 liveArea.precisionAction(editorToken, context::isLiveAreaContextCurrent),
+                floating = floating,
             )
         }
     }

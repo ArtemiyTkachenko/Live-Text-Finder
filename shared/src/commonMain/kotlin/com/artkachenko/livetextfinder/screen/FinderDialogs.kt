@@ -30,6 +30,7 @@ import org.jetbrains.compose.resources.stringResource
 
 /** Which of the main screen's own dialogs and sheets are open. */
 internal class FinderDialogsState {
+    var recognitionDetailsOpen by mutableStateOf(false)
     var optionsOpen by mutableStateOf(false)
     var highlightColorOpen by mutableStateOf(false)
     var helpOpen by mutableStateOf(false)
@@ -73,6 +74,8 @@ internal fun FinderDialogs(
     shouldShowViews: Boolean,
     onImportList: () -> Unit,
     onExportList: () -> Unit,
+    floatingLive: Boolean = false,
+    recognitionDetailsAvailable: Boolean = false,
 ) {
     val resultsAvailable = searchState.resultsAvailable
     val hasStillSource = inspection.source != null
@@ -145,6 +148,12 @@ internal fun FinderDialogs(
             onImport = actions::beginImport,
             onHelp = { dialogs.helpOpen = true },
             onDismiss = { dialogs.optionsOpen = false },
+            recognitionDetailsEnabled = recognitionDetailsAvailable,
+            onRecognitionDetails = if (floatingLive) {
+                { dialogs.recognitionDetailsOpen = true }
+            } else {
+                null
+            },
         )
     }
 }
