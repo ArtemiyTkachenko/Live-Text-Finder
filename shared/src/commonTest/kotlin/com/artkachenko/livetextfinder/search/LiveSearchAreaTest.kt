@@ -74,6 +74,238 @@ class LiveSearchAreaTest {
     }
 
     @Test
+    fun editorSessionKeepsDraftsTemporaryAndRejectsStaleCancelApplyAndResetCallbacks() {
+        val owner = LiveSearchAreaOwner()
+        val committed = NormalizedSearchArea(0.1f, 0.1f, 0.9f, 0.9f)
+        assertTrue(owner.apply(owner.revision, committed))
+        val editor = LiveSearchAreaEditorSession(owner)
+        val first = editor.begin(NormalizedSearchArea.CENTERED_DEFAULT)
+        assertTrue(editor.update(first.token, null))
+        assertEquals(committed, owner.area)
+        assertEquals(null, editor.draft?.area)
+        assertTrue(editor.cancel(first.token))
+        assertEquals(committed, owner.area)
+
+        val second = editor.begin(NormalizedSearchArea.CENTERED_DEFAULT)
+        assertFalse(editor.cancel(first.token))
+        assertFalse(editor.apply(first.token) { true })
+        assertFalse(editor.apply(second.token) { false })
+        assertEquals(committed, owner.area)
+        assertTrue(editor.apply(second.token) { true })
+        assertEquals(NormalizedSearchArea.CENTERED_DEFAULT, owner.area)
+
+        val third = editor.begin(NormalizedSearchArea(0.3f, 0.3f, 0.7f, 0.7f))
+        owner.reset()
+        editor.cancelCurrent()
+        val fourth = editor.begin(NormalizedSearchArea.CENTERED_DEFAULT)
+        assertFalse(editor.apply(third.token) { true })
+        assertEquals(NormalizedSearchArea.CENTERED_DEFAULT, editor.draft?.area)
+        assertTrue(owner.area == null)
+        assertEquals(fourth.token, editor.draft?.token)
+    }
+
+    @Test
+    fun retainedPrecisionOpenerCannotReplaceReopenedDialogOrOpenAfterContextInvalidation() {
+        val owner = LiveSearchAreaOwner()
+        val editor = LiveSearchAreaEditorSession(owner)
+        val dialogs = LiveSearchAreaDialogSession()
+        var contextCurrent = true
+        var opens = 0
+        val open: (Long) -> Unit = {
+            dialogs.open()
+            opens++
+        }
+        val first = editor.begin(NormalizedSearchArea.CENTERED_DEFAULT)
+        val oldAction = editor.precisionAction(first.token, { contextCurrent }, open)
+        oldAction()
+        assertEquals(1, opens)
+        editor.cancel(first.token)
+        val second = editor.begin(NormalizedSearchArea.CENTERED_DEFAULT)
+        val currentAction = editor.precisionAction(second.token, { contextCurrent }, open)
+        currentAction()
+        val secondDialog = dialogs.currentToken
+        oldAction()
+        assertEquals(secondDialog, dialogs.currentToken)
+        assertEquals(second.token, editor.draft?.token)
+        assertEquals(2, opens)
+        contextCurrent = false
+        currentAction()
+        assertEquals(secondDialog, dialogs.currentToken)
+        assertEquals(2, opens)
+        contextCurrent = true
+        currentAction()
+        assertEquals(3, opens)
+        val currentDialog = dialogs.currentToken
+        owner.reset()
+        currentAction()
+        assertEquals(currentDialog, dialogs.currentToken)
+        assertEquals(3, opens)
+        editor.cancelCurrent()
+        currentAction()
+        assertEquals(3, opens)
+    }
+
+    @Test
+    fun directAreaMoveClampsAndPreservesDimensionsForNonSquarePreview() {
+        val start = NormalizedSearchArea(0.2f, 0.25f, 0.7f, 0.65f)
+        assertArea(NormalizedSearchArea(0.3f, 0f, 0.8f, 0.4f),
+            moveSearchArea(start, 100f, -100f, 1000f, 250f))
+        assertArea(NormalizedSearchArea(0.5f, 0.6f, 1f, 1f),
+            moveSearchArea(start, 900f, 900f, 1000f, 250f))
+        assertNull(moveSearchArea(start, 1f, 1f, 0f, 250f))
+        assertNull(moveSearchArea(start, Float.NaN, 1f, 100f, 100f))
+    }
+
+    @Test
+    fun directAreaResizeAnchorsOppositeCornerAndEnforcesMinimumWithoutFlipping() {
+        val start = NormalizedSearchArea(0.2f, 0.2f, 0.8f, 0.8f)
+        assertArea(NormalizedSearchArea(0.3f, 0.3f, 0.8f, 0.8f),
+            resizeSearchArea(start, SearchAreaCorner.TopLeft, 100f, 50f, 1000f, 500f))
+        assertArea(NormalizedSearchArea(0.2f, 0.2f, 1f, 0.8f),
+            resizeSearchArea(start, SearchAreaCorner.TopRight, 500f, 0f, 1000f, 500f))
+        assertArea(NormalizedSearchArea(0.6f, 0.2f, 0.8f, 0.4f),
+            resizeSearchArea(start, SearchAreaCorner.BottomLeft, 900f, -900f, 1000f, 500f))
+        assertArea(NormalizedSearchArea(0.2f, 0.2f, 0.4f, 0.4f),
+            resizeSearchArea(start, SearchAreaCorner.BottomRight, -900f, -900f, 1000f, 500f))
+        assertNull(resizeSearchArea(start, SearchAreaCorner.BottomRight, 1f, 1f, 0f, 500f))
+    }
+
+    @Test
+    fun cornerHitTargetsClampInwardAtEdgesAndChooseNearestDeterministicallyWhenOverlapping() {
+        val fullFrame = NormalizedSearchArea(0f, 0f, 1f, 1f)
+        assertEquals(
+            SearchAreaCorner.TopLeft,
+            searchAreaCornerAt(fullFrame, 24f, 24f, 400f, 400f, 48f),
+        )
+        assertEquals(
+            SearchAreaCorner.TopLeft,
+            searchAreaCornerAt(NormalizedSearchArea.CENTERED_DEFAULT, 20f, 20f, 40f, 40f, 48f),
+        )
+        assertNull(searchAreaCornerAt(fullFrame, 24f, 24f, 0f, 400f, 48f))
+    }
+
+    @Test
+    fun cornerAccessibilityStepsGrowAndShrinkEachEdgeWhileKeepingOppositeEdgeAnchored() {
+        val start = NormalizedSearchArea(0.2f, 0.2f, 0.8f, 0.8f)
+        SearchAreaCorner.values().forEach { corner ->
+            listOf(-1 to 0, 1 to 0, 0 to -1, 0 to 1).forEach { (dx, dy) ->
+                val growHorizontal = dx < 0 &&
+                    (corner == SearchAreaCorner.TopLeft ||
+                        corner == SearchAreaCorner.BottomLeft) || dx > 0 &&
+                    (corner == SearchAreaCorner.TopRight ||
+                        corner == SearchAreaCorner.BottomRight)
+                val growVertical = dy < 0 &&
+                    (corner == SearchAreaCorner.TopLeft ||
+                        corner == SearchAreaCorner.TopRight) || dy > 0 &&
+                    (corner == SearchAreaCorner.BottomLeft ||
+                        corner == SearchAreaCorner.BottomRight)
+                val expected = when {
+                    dx != 0 && corner == SearchAreaCorner.TopLeft -> start.copy(
+                        left = if (growHorizontal) 0.15f else 0.25f,
+                    )
+                    dx != 0 && corner == SearchAreaCorner.BottomLeft -> start.copy(
+                        left = if (growHorizontal) 0.15f else 0.25f,
+                    )
+                    dx != 0 && corner == SearchAreaCorner.TopRight -> start.copy(
+                        right = if (growHorizontal) 0.85f else 0.75f,
+                    )
+                    dx != 0 -> start.copy(right = if (growHorizontal) 0.85f else 0.75f)
+                    dy != 0 && corner == SearchAreaCorner.TopLeft -> start.copy(
+                        top = if (growVertical) 0.15f else 0.25f,
+                    )
+                    dy != 0 && corner == SearchAreaCorner.TopRight -> start.copy(
+                        top = if (growVertical) 0.15f else 0.25f,
+                    )
+                    dy != 0 && corner == SearchAreaCorner.BottomLeft -> start.copy(
+                        bottom = if (growVertical) 0.85f else 0.75f,
+                    )
+                    else -> start.copy(bottom = if (growVertical) 0.85f else 0.75f)
+                }
+                assertArea(
+                    expected,
+                    resizeSearchAreaByStep(start, corner, dx, dy, 100f, 100f),
+                )
+            }
+        }
+        assertArea(
+            NormalizedSearchArea(0f, 0f, 1f, 1f),
+            resizeSearchAreaByStep(
+                NormalizedSearchArea(0f, 0f, 1f, 1f),
+                SearchAreaCorner.TopLeft,
+                -1,
+                -1,
+                100f,
+                100f,
+            ),
+        )
+    }
+
+    @Test
+    fun precisionFullFrameResultRemainsNullDraftForOuterApply() {
+        assertNull(normalizeEditorDraftArea(NormalizedSearchArea(0f, 0f, 1f, 1f)))
+        val custom = NormalizedSearchArea(0.1f, 0.1f, 0.9f, 0.9f)
+        assertEquals(custom, normalizeEditorDraftArea(custom))
+        assertNull(normalizeEditorDraftArea(null))
+    }
+
+    @Test
+    fun precisionDialogSessionRejectsStaleApplyDismissAndOuterEditorCallbacks() {
+        val owner = LiveSearchAreaOwner()
+        val committed = NormalizedSearchArea(0.1f, 0.1f, 0.9f, 0.9f)
+        owner.apply(owner.revision, committed)
+        val editor = LiveSearchAreaEditorSession(owner)
+        val outer = editor.begin(NormalizedSearchArea.CENTERED_DEFAULT)
+        val dialogs = LiveSearchAreaDialogSession()
+        val first = dialogs.open()
+        assertTrue(dialogs.dismiss(first) {})
+        val reopenedInSameEditor = dialogs.open()
+        assertFalse(dialogs.dispatch(first) { editor.update(outer.token, null) })
+        assertFalse(dialogs.dismiss(first) { editor.cancel(outer.token) })
+        assertEquals(reopenedInSameEditor, dialogs.currentToken)
+        assertEquals(NormalizedSearchArea.CENTERED_DEFAULT, editor.draft?.area)
+        assertTrue(dialogs.dispatch(reopenedInSameEditor) {
+            editor.update(outer.token, null)
+        })
+        assertEquals(committed, owner.area)
+
+        assertTrue(editor.cancel(outer.token))
+        dialogs.invalidate()
+        val nextOuter = editor.begin(NormalizedSearchArea(0.3f, 0.3f, 0.7f, 0.7f))
+        val nextDialog = dialogs.open()
+        assertFalse(dialogs.dispatch(reopenedInSameEditor) {
+            editor.update(outer.token, NormalizedSearchArea.CENTERED_DEFAULT)
+        })
+        assertTrue(dialogs.dispatch(nextDialog) {
+            editor.update(nextOuter.token, NormalizedSearchArea.CENTERED_DEFAULT)
+        })
+        assertEquals(NormalizedSearchArea.CENTERED_DEFAULT, editor.draft?.area)
+        assertEquals(committed, owner.area)
+        assertTrue(editor.cancel(nextOuter.token))
+
+        val standaloneFirst = dialogs.open()
+        assertTrue(dialogs.dismiss(standaloneFirst) {})
+        val standaloneReopen = dialogs.open()
+        assertFalse(dialogs.dispatch(standaloneFirst) {
+            owner.apply(owner.revision, null)
+        })
+        assertFalse(dialogs.dismiss(standaloneFirst) { owner.reset() })
+        assertEquals(standaloneReopen, dialogs.currentToken)
+        assertEquals(committed, owner.area)
+        assertTrue(dialogs.dispatch(standaloneReopen) {
+            owner.apply(owner.revision, null)
+        })
+        assertNull(owner.area)
+    }
+
+    private fun assertArea(expected: NormalizedSearchArea, actual: NormalizedSearchArea?) {
+        assertNotNull(actual)
+        assertEquals(expected.left, actual.left, 0.0001f)
+        assertEquals(expected.top, actual.top, 0.0001f)
+        assertEquals(expected.right, actual.right, 0.0001f)
+        assertEquals(expected.bottom, actual.bottom, 0.0001f)
+    }
+
+    @Test
     fun multiTermFilteringRequiresEveryParticipantAndInvalidMappingSuppressesCustomCounts() {
         val snapshot = OcrSnapshot(
             "alpha beta unknown",

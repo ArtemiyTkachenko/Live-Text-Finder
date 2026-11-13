@@ -13,11 +13,15 @@ internal class LiveFrameTracker(
     private var generation = 0L
     private var running = false
     private var disposed = false
+    private var contentSuspended = false
     private var target: PreviewTarget? = null
     private var lastTimestamp: Long? = null
     private var receivedAt: Long? = null
     var state = OcrUiState(OcrStatus.Starting, "Waiting for camera preview…")
         private set
+
+    fun canCapture(): Boolean = !disposed && running && !contentSuspended &&
+        (state.status == OcrStatus.Scanning || state.status == OcrStatus.TextRecognized)
 
     fun ticket() = FrameIdentity(session, generation)
 
@@ -45,8 +49,20 @@ internal class LiveFrameTracker(
         state = state.copy(projection = null)
     }
 
+    /** Invalidates both sides of a hardware content change without pausing the camera. */
+    fun suspendContent(value: Boolean) {
+        if (disposed || contentSuspended == value) return
+        contentSuspended = value
+        generation++
+        receivedAt = null
+        state = OcrUiState(
+            if (running) OcrStatus.Scanning else state.status,
+            "Waiting for fresh text results…",
+        )
+    }
+
     fun receive(identity: FrameIdentity, result: OcrUiState): Boolean {
-        if (disposed || !running || identity != ticket()) return false
+        if (disposed || !running || contentSuspended || identity != ticket()) return false
         val snapshot = result.snapshot
         if (result.status != OcrStatus.Scanning && result.status != OcrStatus.TextRecognized || snapshot == null) {
             receivedAt = null

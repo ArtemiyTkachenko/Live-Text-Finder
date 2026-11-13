@@ -6,6 +6,7 @@ import android.os.Handler
 import android.os.Looper
 import android.view.View
 import android.view.ViewTreeObserver
+import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.CameraState
 import androidx.camera.core.ImageAnalysis
@@ -14,9 +15,9 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.Observer
+import com.artkachenko.livetextfinder.ocr.CameraTimingDiagnostics
 import com.artkachenko.livetextfinder.ocr.CapturedCameraFrame
 import com.artkachenko.livetextfinder.ocr.LiveFrameTracker
 import com.artkachenko.livetextfinder.ocr.MlKitTextAnalyzer
@@ -29,6 +30,8 @@ internal class AndroidCameraSession(
     private val context: Context,
     private val owner: LifecycleOwner,
     private val view: PreviewView,
+    private val controls: LiveCaptureControls,
+    private val isControlsContextCurrent: () -> Boolean,
     private val onCaptured: (CapturedCameraFrame) -> Boolean = { false },
     private val onCaptureFailure: (Long, String) -> Unit = { _, _ -> },
     private val onState: (OcrUiState) -> Unit,
@@ -40,10 +43,19 @@ internal class AndroidCameraSession(
         .build()
     private var analyzer: MlKitTextAnalyzer? = null
     private var provider: ProcessCameraProvider? = null
+    private var boundCamera: Camera? = null
+    private var captureControls: AndroidLiveCaptureControls? = null
     private var cameraState: androidx.lifecycle.LiveData<CameraState>? = null
     private var closed = false
     private val handler = Handler(Looper.getMainLooper())
     private val frames = LiveFrameTracker(++nextSessionId)
+    private val diagnostics = if (
+        context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
+    ) {
+        CameraTimingDiagnostics()
+    } else {
+        null
+    }
     private var emittedState: OcrUiState? = null
     private var targetRotation: Int? = null
     private val expiry = Runnable {
@@ -54,7 +66,12 @@ internal class AndroidCameraSession(
     private val layoutListener = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> refreshMapping() }
     private val preDrawListener = ViewTreeObserver.OnPreDrawListener { refreshMapping(); true }
     private val streamObserver = Observer<PreviewView.StreamState> { refreshMapping() }
-    private val lifecycleObserver = LifecycleEventObserver { _, _ -> refreshMapping() }
+    private val lifecycleObserver = CameraFeedLifecycleObserver(
+        onForegroundChanged = { refreshMapping() },
+        onResume = {
+        },
+        onStop = ::close,
+    )
     private val displayManager = context.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
     private val displayListener = object : DisplayManager.DisplayListener {
         override fun onDisplayAdded(displayId: Int) = Unit
@@ -64,7 +81,7 @@ internal class AndroidCameraSession(
         }
     }
     private val stateObserver = Observer<CameraState> { state ->
-        if (!closed && state.error != null) {
+        if (!closed && ownsControlLease() && state.error != null) {
             fail(OcrUiState(OcrStatus.Error, "Camera is unavailable (code ${state.error?.code}). Retry the camera."))
         }
     }
@@ -82,21 +99,35 @@ internal class AndroidCameraSession(
                     frames.ticket()
                 },
                 captureExecutor = CaptureCopyWorker,
+                diagnostics = diagnostics,
                 onCaptured = { captured ->
-                    !closed && frames.ticket() == captured.identity && onCaptured(captured)
+                    !closed && captureControls?.isCurrent() == true &&
+                        controls.canCapture() && controlsContextCurrent() &&
+                        frames.ticket() == captured.identity && onCaptured(captured)
                 },
                 onCaptureFailure = { requestId, message ->
-                    if (!closed) onCaptureFailure(requestId, message)
-                },
-            ) { state, identity ->
-                if (!closed) {
-                    refreshMapping()
-                    if (frames.receive(identity, state)) {
-                        publish()
-                        scheduleExpiry()
+                    if (!closed && ownsControlLease()) {
+                        onCaptureFailure(requestId, message)
                     }
-                }
-            }
+                },
+                onState = { state, identity ->
+                    if (!closed && ownsControlLease()) {
+                        refreshMapping()
+                        val accepted = frames.receive(identity, state)
+                        val frame = state.snapshot?.frame
+                        if (accepted) {
+                            diagnostics?.frameAccepted(identity, frame)
+                        } else {
+                            val current = frames.ticket()
+                            diagnostics?.frameRejected(identity, current, frame)
+                        }
+                        if (accepted) {
+                            publish()
+                            scheduleExpiry()
+                        }
+                    }
+                },
+            )
             analysis.setAnalyzer(executor, checkNotNull(analyzer))
             preview.surfaceProvider = view.surfaceProvider
             displayManager.registerDisplayListener(displayListener, Handler(Looper.getMainLooper()))
@@ -110,8 +141,25 @@ internal class AndroidCameraSession(
                             fail(OcrUiState(OcrStatus.Unavailable, "No rear camera is available on this device."))
                         } else {
                             updateRotation()
+                            // Release the old hardware lease before binding its replacement.
+                            controls.detach(controls.state.value.lease)
                             val camera = cameraProvider.bindToLifecycle(
                                 owner, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis,
+                            )
+                            boundCamera = camera
+                            captureControls = AndroidLiveCaptureControls(
+                                controls = controls,
+                                cameraInfo = camera.cameraInfo,
+                                cameraControl = camera.cameraControl,
+                                view = view,
+                                lifecycleOwner = owner,
+                                isNativeContextCurrent = ::controlsContextCurrent,
+                                onZoomBoundary = { pending ->
+                                    frames.suspendContent(pending)
+                                    publish()
+                                    scheduleExpiry()
+                                },
+                                mainExecutor = executor,
                             )
                             cameraState = camera.cameraInfo.cameraState
                             cameraState?.observe(owner, stateObserver)
@@ -127,11 +175,18 @@ internal class AndroidCameraSession(
     }
 
     fun requestCapture(requestId: Long): Boolean {
-        if (closed) return false
-        refreshMapping()
-        if (frames.state.status != OcrStatus.Scanning &&
-            frames.state.status != OcrStatus.TextRecognized
+        if (closed || captureControls?.isCurrent() != true ||
+            controls.state.value.zoomPending
         ) {
+            return false
+        }
+        refreshMapping()
+        if (captureControls?.isCurrent() != true || !controlsContextCurrent() ||
+            !controls.canCapture()
+        ) {
+            return false
+        }
+        if (!frames.canCapture()) {
             return false
         }
         return analyzer?.requestCapture(requestId) == true
@@ -143,11 +198,15 @@ internal class AndroidCameraSession(
 
     private fun fail(state: OcrUiState) {
         if (closed) return
+        val shouldReport = ownsControlLease()
         close()
-        onState(state)
+        if (shouldReport) {
+            onState(state)
+        }
     }
 
     private fun updateRotation() {
+        if (closed || !ownsControlLease()) return
         view.display?.rotation?.let { rotation ->
             if (targetRotation != rotation) {
                 frames.invalidateGeometry()
@@ -159,9 +218,17 @@ internal class AndroidCameraSession(
         }
     }
 
+    private fun ownsControlLease(): Boolean = captureControls?.isCurrent() != false
+
+    private fun controlsContextCurrent(): Boolean =
+        !closed && boundCamera != null && isControlsContextCurrent() &&
+            owner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) &&
+            view.previewStreamState.value == PreviewView.StreamState.STREAMING &&
+            view.width > 0 && view.height > 0 && view.isAttachedToWindow
+
     /** All capture/listener paths are main-thread confined; no ImageProxy is retained here. */
     private fun refreshMapping() {
-        if (closed) return
+        if (closed || !ownsControlLease()) return
         updateRotation()
         val active = owner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) &&
             view.previewStreamState.value == PreviewView.StreamState.STREAMING &&
@@ -174,6 +241,7 @@ internal class AndroidCameraSession(
             PreviewTarget(view.width, view.height, values.toList())
         }
         frames.updateTarget(target)
+        captureControls?.refresh()
         // Invalidate stale results even if pre-draw arrives before a delayed expiry callback.
         frames.expire()
         publish()
@@ -181,7 +249,7 @@ internal class AndroidCameraSession(
     }
 
     private fun publish() {
-        if (!closed && emittedState != frames.state) {
+        if (!closed && ownsControlLease() && emittedState != frames.state) {
             emittedState = frames.state
             onState(frames.state)
         }
@@ -189,19 +257,27 @@ internal class AndroidCameraSession(
 
     private fun scheduleExpiry() {
         handler.removeCallbacks(expiry)
-        if (!closed) frames.millisUntilExpiry()?.let { handler.postDelayed(expiry, it) }
+        if (!closed && ownsControlLease()) {
+            frames.millisUntilExpiry()?.let { handler.postDelayed(expiry, it) }
+        }
     }
 
     override fun close() {
         if (closed) return
+        val shouldReport = ownsControlLease()
         closed = true
+        captureControls?.close()
+        captureControls = null
+        boundCamera = null
         frames.dispose()
         handler.removeCallbacks(expiry)
         view.removeOnLayoutChangeListener(layoutListener)
         if (view.viewTreeObserver.isAlive) view.viewTreeObserver.removeOnPreDrawListener(preDrawListener)
         view.previewStreamState.removeObserver(streamObserver)
         owner.lifecycle.removeObserver(lifecycleObserver)
-        onState(frames.state)
+        if (shouldReport) {
+            onState(frames.state)
+        }
         displayManager.unregisterDisplayListener(displayListener)
         cameraState?.removeObserver(stateObserver)
         analysis.clearAnalyzer()

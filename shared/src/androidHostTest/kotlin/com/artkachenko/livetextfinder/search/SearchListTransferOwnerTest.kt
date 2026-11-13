@@ -2,6 +2,7 @@ package com.artkachenko.livetextfinder.search
 
 import android.net.Uri
 import android.os.Looper
+import com.artkachenko.livetextfinder.drainMainLooper
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
@@ -14,6 +15,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import org.junit.After
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
@@ -23,6 +25,11 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], manifest = Config.NONE)
 class SearchListTransferOwnerTest {
+    @After
+    fun runPendingMainLooperWork() {
+        drainMainLooper()
+    }
+
     @Test
     fun importPickerStopDefersUriAndAdoptsAnEditableDraftWithoutPersistence() {
         val session = healthySession()
@@ -334,7 +341,10 @@ class SearchListTransferOwnerTest {
         configureOwner(owner, selected.copy(recoveryRequired = true)) { _, _ -> error("No import") }
         assertFalse(owner.state.value.importEnabled)
         assertFalse(owner.state.value.exportEnabled)
-        configureOwner(owner, selected.copy(error = "Storage error")) { _, _ -> error("No import") }
+        configureOwner(
+            owner,
+            selected.copy(error = SearchSessionError.StorageSaveFailed),
+        ) { _, _ -> error("No import") }
         assertFalse(owner.state.value.importEnabled)
         assertFalse(owner.state.value.exportEnabled)
 

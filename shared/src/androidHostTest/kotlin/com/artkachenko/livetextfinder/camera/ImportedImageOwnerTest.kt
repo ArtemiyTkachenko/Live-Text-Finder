@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import android.net.Uri
 import android.os.Looper
+import com.artkachenko.livetextfinder.drainMainLooper
 import com.artkachenko.livetextfinder.ocr.ImportedTextSnapshot
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -14,6 +15,7 @@ import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
+import org.junit.After
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
@@ -23,6 +25,11 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], manifest = Config.NONE)
 class ImportedImageOwnerTest {
+    @After
+    fun runPendingMainLooperWork() {
+        drainMainLooper()
+    }
+
     @Test
     fun stoppedPickerResultWaitsForForegroundThenAdoptsAndRetainsImportedContent() {
         val owner = ImportedImageOwner()

@@ -49,7 +49,7 @@ class SearchListTextTransferTest {
     fun rejectsDuplicatesAfterWhitespaceCanonicalization() {
         val result = parseSearchListText("Match  phrase\nmatch phrase".encodeToByteArray())
 
-        assertFailureContains(result, "unique")
+        assertFailureIs(result, SearchSessionError.DuplicateTerms)
     }
 
     @Test
@@ -94,11 +94,17 @@ class SearchListTextTransferTest {
             index.toString() + "x".repeat(MAX_TERM_LENGTH - index.toString().length)
         } + "extra").joinToString("\n")
 
-        assertFailureContains(parseSearchListText(tooMany.encodeToByteArray()), "at most 32")
-        assertFailureContains(parseSearchListText(tooLong.encodeToByteArray()), "120 characters")
-        assertFailureContains(
+        assertFailureIs(
+            parseSearchListText(tooMany.encodeToByteArray()),
+            SearchSessionError.TooManyTerms,
+        )
+        assertFailureIs(
+            parseSearchListText(tooLong.encodeToByteArray()),
+            SearchSessionError.TermTooLong,
+        )
+        assertFailureIs(
             parseSearchListText(totalOverflow.encodeToByteArray()),
-            "total term characters",
+            SearchSessionError.TooManyTermCharacters,
         )
     }
 
@@ -131,6 +137,10 @@ class SearchListTextTransferTest {
         val name = "a".repeat(MAX_NAME_LENGTH - 1) + "😀tail"
 
         assertEquals("a".repeat(MAX_NAME_LENGTH - 1), searchListImportName(name, "Fallback"))
+    }
+
+    private fun assertFailureIs(result: Result<List<String>>, expected: SearchSessionError) {
+        assertEquals(expected, (result.exceptionOrNull() as? SearchSessionException)?.error)
     }
 
     private fun assertFailureContains(result: Result<List<String>>, message: String) {

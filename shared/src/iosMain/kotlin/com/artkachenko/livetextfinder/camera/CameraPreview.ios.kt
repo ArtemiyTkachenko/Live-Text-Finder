@@ -52,6 +52,7 @@ internal actual class FrozenFrameOwner actual constructor() {
 internal actual fun CameraPreview(
     modifier: Modifier,
     owner: FrozenFrameOwner,
+    controls: LiveCaptureControls,
     isContentVisible: () -> Boolean,
     onState: (OcrUiState) -> Unit,
 ) {

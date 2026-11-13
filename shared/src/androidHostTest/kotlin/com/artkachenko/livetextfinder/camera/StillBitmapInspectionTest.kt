@@ -1,7 +1,6 @@
 package com.artkachenko.livetextfinder.camera
 
 import android.graphics.Bitmap
-import android.graphics.Canvas as AndroidCanvas
 import android.graphics.Color as AndroidColor
 import android.os.Looper
 import android.view.View
@@ -19,12 +18,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.MotionDurationScale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.ViewRootForTest
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import com.artkachenko.livetextfinder.captureScreenshotBitmap
 import com.artkachenko.livetextfinder.ocr.CapturedCameraFrame
 import com.artkachenko.livetextfinder.ocr.FrameInfo
 import com.artkachenko.livetextfinder.ocr.ImportedTextSnapshot
@@ -39,17 +42,18 @@ import com.artkachenko.livetextfinder.search.FrameIdentity
 import com.artkachenko.livetextfinder.search.HighlightColor
 import com.artkachenko.livetextfinder.search.PreviewPoint
 import com.artkachenko.livetextfinder.search.drawHighlightOutlines
+import com.artkachenko.livetextfinder.search.highlightOutlineWidth
 import com.artkachenko.livetextfinder.search.importedHighlightsForDraw
 import com.artkachenko.livetextfinder.search.manualSearchSpec
 import com.artkachenko.livetextfinder.search.projectFrozenHighlights
 import com.artkachenko.livetextfinder.search.searchRecognizedContent
 import com.artkachenko.livetextfinder.search.searchRecognizedText
 import com.artkachenko.livetextfinder.ui.StillInspectionViewport
-import java.io.File
-import java.io.FileOutputStream
+import com.artkachenko.livetextfinder.writeVisualScreenshot
 import kotlin.math.roundToInt
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -121,39 +125,70 @@ class StillBitmapInspectionTest {
                 VIEWPORT_HEIGHT.toFloat(),
             )
             assertEquals(1, outlines.outlines.size)
-            val rendered = renderViewport(
+            val (rendered, reference, missing, wrong) = renderViewportVariants(
                 sourceIdentity = "frozen:${fixture.frame.requestId}",
                 fit = fit,
                 transform = transform,
-            ) {
+            ) { paint ->
                 Canvas(Modifier.matchParentSize()) {
                     drawFrozenBitmap(fixture.owner, fixture.frame, bitmap) { true }
-                    drawHighlightOutlines(outlines.outlines, HighlightColor.fromRgb(0, 255, 255))
+                    if (paint != OutlinePaint.Actual) {
+                        drawOutlineReference(outlines.outlines.single().points, paint)
+                    } else {
+                        drawHighlightOutlines(
+                            outlines.outlines,
+                            HighlightColor.fromRgb(0, 255, 255),
+                        )
+                    }
                 }
             }
 
             assertBitmapLandmarks(rendered, bitmap, rotation, fit, transform)
-            assertOutlineAligned(rendered, outlines.outlines.single().points, transform)
+            assertOutlineAligned(
+                rendered,
+                reference,
+                missing,
+                wrong,
+                outlines.outlines.single().points,
+                transform,
+            )
             assertEquals(AndroidColor.MAGENTA, rendered.getPixel(130, 85))
-            saveVisual(rendered, "frozen-rotation-$rotation.png")
+            writeVisualScreenshot(rendered, "frozen-rotation-$rotation.png")
+            reference.recycle()
+            missing.recycle()
+            wrong.recycle()
             rendered.recycle()
 
             val reset = StillViewTransform()
-            val resetRender = renderViewport(
+            val (resetRender, resetReference, resetMissing, resetWrong) = renderViewportVariants(
                 sourceIdentity = "frozen:${fixture.frame.requestId}",
                 fit = fit,
                 transform = reset,
-            ) {
+            ) { paint ->
                 Canvas(Modifier.matchParentSize()) {
                     drawFrozenBitmap(fixture.owner, fixture.frame, bitmap) { true }
-                    drawHighlightOutlines(
-                        outlines.outlines,
-                        HighlightColor.fromRgb(0, 255, 255),
-                    )
+                    if (paint != OutlinePaint.Actual) {
+                        drawOutlineReference(outlines.outlines.single().points, paint)
+                    } else {
+                        drawHighlightOutlines(
+                            outlines.outlines,
+                            HighlightColor.fromRgb(0, 255, 255),
+                        )
+                    }
                 }
             }
             assertBitmapLandmarks(resetRender, bitmap, rotation, fit, reset)
-            assertOutlineAligned(resetRender, outlines.outlines.single().points, reset)
+            assertOutlineAligned(
+                resetRender,
+                resetReference,
+                resetMissing,
+                resetWrong,
+                outlines.outlines.single().points,
+                reset,
+            )
+            resetReference.recycle()
+            resetMissing.recycle()
+            resetWrong.recycle()
             resetRender.recycle()
 
             val resizedWidth = 140
@@ -170,21 +205,26 @@ class StillBitmapInspectionTest {
                 resizedWidth.toFloat(),
                 resizedHeight.toFloat(),
             )
-            val resizedRender = renderViewport(
-                sourceIdentity = "frozen:${fixture.frame.requestId}",
-                fit = resizedFit,
-                transform = reset,
-                viewportWidth = resizedWidth,
-                viewportHeight = resizedHeight,
-            ) {
-                Canvas(Modifier.matchParentSize()) {
-                    drawFrozenBitmap(fixture.owner, fixture.frame, bitmap) { true }
-                    drawHighlightOutlines(
-                        resizedOutlines.outlines,
-                        HighlightColor.fromRgb(0, 255, 255),
-                    )
+            val (resizedRender, resizedReference, resizedMissing, resizedWrong) =
+                renderViewportVariants(
+                    sourceIdentity = "frozen:${fixture.frame.requestId}",
+                    fit = resizedFit,
+                    transform = reset,
+                    viewportWidth = resizedWidth,
+                    viewportHeight = resizedHeight,
+                ) { paint ->
+                    Canvas(Modifier.matchParentSize()) {
+                        drawFrozenBitmap(fixture.owner, fixture.frame, bitmap) { true }
+                        if (paint != OutlinePaint.Actual) {
+                            drawOutlineReference(resizedOutlines.outlines.single().points, paint)
+                        } else {
+                            drawHighlightOutlines(
+                                resizedOutlines.outlines,
+                                HighlightColor.fromRgb(0, 255, 255),
+                            )
+                        }
+                    }
                 }
-            }
             assertBitmapLandmarks(
                 resizedRender,
                 bitmap,
@@ -196,11 +236,17 @@ class StillBitmapInspectionTest {
             )
             assertOutlineAligned(
                 resizedRender,
+                resizedReference,
+                resizedMissing,
+                resizedWrong,
                 resizedOutlines.outlines.single().points,
                 reset,
                 resizedWidth,
                 resizedHeight,
             )
+            resizedReference.recycle()
+            resizedMissing.recycle()
+            resizedWrong.recycle()
             resizedRender.recycle()
             fixture.owner.stop()
             bitmap.recycle()
@@ -241,35 +287,52 @@ class StillBitmapInspectionTest {
         )
         assertTrue(outlines.ready)
         assertEquals(1, outlines.outlines.size)
-        val rendered = renderViewport(
+        val (rendered, reference, missing, wrong) = renderViewportVariants(
             sourceIdentity = "import:${fixture.snapshot.sourceIdentity}",
             fit = fit,
             transform = transform,
-        ) {
+        ) { paint ->
             Canvas(Modifier.matchParentSize()) {
                 drawImportedBitmap(
                     fixture.owner,
                     fixture.snapshot.sourceIdentity,
                     bitmap,
                 ) { true }
-                val currentOutlines = importedHighlightsForDraw(
-                    search,
-                    fixture.owner.state.value.snapshot,
-                    fixture.owner.state.value,
-                    search.spec.identity,
-                    search.spec.identity,
-                    size.width,
-                    size.height,
-                    true,
-                )
-                drawHighlightOutlines(currentOutlines.outlines, HighlightColor.fromRgb(0, 255, 255))
+                if (paint != OutlinePaint.Actual) {
+                    drawOutlineReference(outlines.outlines.single().points, paint)
+                } else {
+                    val currentOutlines = importedHighlightsForDraw(
+                        search,
+                        fixture.owner.state.value.snapshot,
+                        fixture.owner.state.value,
+                        search.spec.identity,
+                        search.spec.identity,
+                        size.width,
+                        size.height,
+                        true,
+                    )
+                    drawHighlightOutlines(
+                        currentOutlines.outlines,
+                        HighlightColor.fromRgb(0, 255, 255),
+                    )
+                }
             }
         }
 
         assertBitmapLandmarks(rendered, bitmap, 0, fit, transform)
-        assertOutlineAligned(rendered, outlines.outlines.single().points, transform)
+        assertOutlineAligned(
+            rendered,
+            reference,
+            missing,
+            wrong,
+            outlines.outlines.single().points,
+            transform,
+        )
         assertEquals(AndroidColor.MAGENTA, rendered.getPixel(130, 85))
-        saveVisual(rendered, "imported-zoom-pan.png")
+        writeVisualScreenshot(rendered, "imported-zoom-pan.png")
+        reference.recycle()
+        missing.recycle()
+        wrong.recycle()
         rendered.recycle()
         fixture.owner.dispose()
         bitmap.recycle()
@@ -299,10 +362,40 @@ class StillBitmapInspectionTest {
                 )
             }
         }
-        val view = checkNotNull(composeView)
-        return Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888).also {
-            bitmap ->
-            view.draw(AndroidCanvas(bitmap))
+        return captureScreenshotBitmap(checkNotNull(composeView))
+    }
+
+    private enum class OutlinePaint { Actual, Cyan, Missing, Wrong }
+
+    private fun renderViewportVariants(
+        sourceIdentity: String,
+        fit: FrozenFrameFit,
+        transform: StillViewTransform,
+        viewportWidth: Int = VIEWPORT_WIDTH,
+        viewportHeight: Int = VIEWPORT_HEIGHT,
+        content: @Composable BoxScope.(OutlinePaint) -> Unit,
+    ): List<Bitmap> = OutlinePaint.entries.map { paint ->
+        renderViewport(
+            sourceIdentity,
+            fit,
+            transform,
+            viewportWidth,
+            viewportHeight,
+        ) { content(paint) }
+    }
+
+    private fun DrawScope.drawOutlineReference(points: List<PreviewPoint>, paint: OutlinePaint) {
+        val first = points.firstOrNull() ?: return
+        val outerWidth = highlightOutlineWidth(points, 2.dp.toPx()) ?: return
+        val path = Path().apply {
+            moveTo(first.x, first.y)
+            points.drop(1).forEach { lineTo(it.x, it.y) }
+            close()
+        }
+        drawPath(path, Color.Black, style = Stroke(outerWidth))
+        if (paint != OutlinePaint.Missing) {
+            val foreground = if (paint == OutlinePaint.Wrong) Color.Green else Color.Cyan
+            drawPath(path, foreground, style = Stroke(outerWidth * 0.5f))
         }
     }
 
@@ -336,6 +429,9 @@ class StillBitmapInspectionTest {
 
     private fun assertOutlineAligned(
         rendered: Bitmap,
+        reference: Bitmap,
+        missing: Bitmap,
+        wrong: Bitmap,
         points: List<PreviewPoint>,
         transform: StillViewTransform,
         viewportWidth: Int = VIEWPORT_WIDTH,
@@ -351,9 +447,29 @@ class StillBitmapInspectionTest {
             viewportHeight.toFloat(),
         )
         assertTrue(transformed != null)
+        assertTrue(reference.width == rendered.width && reference.height == rendered.height)
+        val centerX = transformed.x.roundToInt()
+        val centerY = transformed.y.roundToInt()
+        val witnesses = buildList {
+            for (y in (centerY - 1)..(centerY + 1)) {
+                for (x in (centerX - 1)..(centerX + 1)) {
+                    if (x !in 0 until rendered.width || y !in 0 until rendered.height) continue
+                    val expected = reference.getPixel(x, y)
+                    if (expected != missing.getPixel(x, y) && expected != wrong.getPixel(x, y)) {
+                        add(x to y)
+                    }
+                }
+            }
+        }
+        assertTrue(witnesses.isNotEmpty(), "No cyan contribution at $transformed")
+        fun matchesReference(candidate: Bitmap): Boolean = witnesses.all { (x, y) ->
+            candidate.getPixel(x, y) == reference.getPixel(x, y)
+        }
+        assertFalse(matchesReference(missing), "Missing foreground passed the color assertion")
+        assertFalse(matchesReference(wrong), "Wrong foreground passed the color assertion")
         assertTrue(
-            nearColor(rendered, transformed, HIGHLIGHT_COLOR),
-            "Production highlight outline did not move with the bitmap at $transformed",
+            matchesReference(rendered),
+            "Production outline did not match the explicit cyan paint reference at $transformed",
         )
     }
 
@@ -462,14 +578,6 @@ class StillBitmapInspectionTest {
                 }
             }
         }
-
-    private fun saveVisual(bitmap: Bitmap, fileName: String) {
-        val outputDirectory = System.getenv("LTF_VISUAL_OUTPUT_DIR") ?: return
-        File(outputDirectory).mkdirs()
-        FileOutputStream(File(outputDirectory, fileName)).use { output ->
-            bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)
-        }
-    }
 
     private fun mount(content: @Composable () -> Unit) {
         clearComposition()

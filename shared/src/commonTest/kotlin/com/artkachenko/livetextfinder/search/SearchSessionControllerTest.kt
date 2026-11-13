@@ -314,9 +314,15 @@ class SearchSessionControllerTest {
         val store = ControlledStore()
         val session = SearchSessionController(store)
         store.completeLoad(null)
-        assertTrue(session.saveList(null, "  ", "foo")!!.contains("name"))
-        assertTrue(session.saveList(null, "Parts", "foo\n ")!!.contains("blank"))
-        assertTrue(session.saveList(null, "Parts", "foo\nFOO")!!.contains("unique"))
+        assertEquals(SearchSessionError.ListNameBlank, session.saveList(null, "  ", "foo"))
+        assertEquals(
+            SearchSessionError.BlankTermLine,
+            session.saveList(null, "Parts", "foo\n "),
+        )
+        assertEquals(
+            SearchSessionError.DuplicateTerms,
+            session.saveList(null, "Parts", "foo\nFOO"),
+        )
         assertNull(session.saveList(null, "Parts", "new york\nfoo"))
         assertEquals(listOf("new york", "foo"), session.state.value.persisted.lists.single().terms)
     }
@@ -335,7 +341,7 @@ class SearchSessionControllerTest {
         assertTrue(session.state.value.saving)
         store.completeWrite(1, Result.failure(IllegalStateException("disk full")))
         assertFalse(session.state.value.saving)
-        assertEquals("disk full", session.state.value.error)
+        assertEquals(SearchSessionError.StorageSaveFailed, session.state.value.error)
         session.retry()
         assertEquals(3, store.writes.size)
         assertEquals("two", store.writes[2].first.manualQuery)
@@ -385,7 +391,7 @@ class SearchSessionControllerTest {
         val failedState = session.state.value
         session.selectList(null)
         assertEquals(failedState, session.state.value)
-        assertEquals("disk full", session.state.value.error)
+        assertEquals(SearchSessionError.StorageSaveFailed, session.state.value.error)
         assertEquals(1, store.writes.size)
     }
 
@@ -415,7 +421,7 @@ class SearchSessionControllerTest {
         session.setManualQuery("")
 
         assertTrue(session.state.value.recoveryRequired)
-        assertEquals("unsupported version", session.state.value.error)
+        assertEquals(SearchSessionError.StorageUnreadable, session.state.value.error)
         assertTrue(store.writes.isEmpty())
         session.retry()
         assertEquals(1, store.resets)
@@ -439,7 +445,7 @@ class SearchSessionControllerTest {
 
         assertTrue(session.state.value.recoveryRequired)
         assertEquals("latest typed query", session.state.value.persisted.manualQuery)
-        assertEquals("reset failed", session.state.value.error)
+        assertEquals(SearchSessionError.StorageResetFailed, session.state.value.error)
         assertTrue(store.writes.isEmpty())
     }
 
@@ -456,7 +462,7 @@ class SearchSessionControllerTest {
         val tooLong = boundary + "x"
         session.setManualQuery(tooLong)
         assertEquals(boundary, session.state.value.persisted.manualQuery)
-        assertTrue(session.state.value.error!!.contains("at most"))
+        assertEquals(SearchSessionError.ManualQueryTooLong, session.state.value.error)
         assertEquals(1, store.writes.size)
     }
 
@@ -504,12 +510,12 @@ class SearchSessionControllerTest {
         assertEquals(expected, session.state.value.persisted)
         assertEquals(expected, store.writes.single().first)
         assertTrue(session.state.value.saving)
-        assertTrue(session.state.value.error!!.contains("at most"))
+        assertEquals(SearchSessionError.ManualQueryTooLong, session.state.value.error)
 
         store.completeWrite(0)
 
         assertFalse(session.state.value.saving)
-        assertTrue(session.state.value.error!!.contains("at most"))
+        assertEquals(SearchSessionError.ManualQueryTooLong, session.state.value.error)
     }
 
     @Test
@@ -526,12 +532,12 @@ class SearchSessionControllerTest {
         assertEquals(expected, session.state.value.persisted)
         assertEquals(expected, store.writes.single().first)
         assertTrue(session.state.value.saving)
-        assertTrue(session.state.value.error!!.contains("at most"))
+        assertEquals(SearchSessionError.ManualQueryTooLong, session.state.value.error)
 
         store.completeWrite(0)
 
         assertFalse(session.state.value.saving)
-        assertTrue(session.state.value.error!!.contains("at most"))
+        assertEquals(SearchSessionError.ManualQueryTooLong, session.state.value.error)
     }
 
     @Test
@@ -554,12 +560,12 @@ class SearchSessionControllerTest {
         assertEquals(expected, session.state.value.persisted)
         assertEquals(expected, store.writes.single().first)
         assertTrue(session.state.value.saving)
-        assertTrue(session.state.value.error!!.contains("at most"))
+        assertEquals(SearchSessionError.ManualQueryTooLong, session.state.value.error)
 
         store.completeWrite(0)
 
         assertFalse(session.state.value.saving)
-        assertTrue(session.state.value.error!!.contains("at most"))
+        assertEquals(SearchSessionError.ManualQueryTooLong, session.state.value.error)
     }
 
     @Test
@@ -577,7 +583,7 @@ class SearchSessionControllerTest {
 
         assertEquals("stored manual query", session.state.value.persisted.manualQuery)
         assertEquals("saved", session.state.value.persisted.activeListId)
-        assertTrue(session.state.value.error!!.contains("at most"))
+        assertEquals(SearchSessionError.ManualQueryTooLong, session.state.value.error)
         assertTrue(store.writes.isEmpty())
     }
 
@@ -593,7 +599,7 @@ class SearchSessionControllerTest {
 
         val error = session.saveList(id, "Parts", "bar")
 
-        assertTrue(error!!.contains("no longer exists"))
+        assertEquals(SearchSessionError.ListMissing, error)
         assertEquals(before, session.state.value.persisted)
     }
 }

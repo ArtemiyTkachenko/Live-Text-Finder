@@ -1,10 +1,26 @@
-# Shared live search requirements — CS-001 / CS-002 / CS-003
+# Search requirements
+
+The implemented contract is summarized first. Dated increments below record its evolution; later
+increments supersede earlier stage exclusions and storage versions. Validation history remains in
+validation.md.
 
 ## Implemented contract
 
-One labeled, single-line manual query is restored from the last completed Android save, including explicit clear. A named saved list can instead activate several independent terms/phrases simultaneously without discarding the manual query. Typing/editing/clearing switches to manual mode and derives results immediately from the latest eligible `OcrUiState`; no submit or OCR restart is required. Presentation retains individual missing matched occurrences briefly, including when other matches remain. Each occurrence keeps its own exact source snapshot, projection and element provenance; latest OCR diagnostics and recognized count remain authoritative and separate. New observations replace their geometry immediately. Missing occurrences expire at the earlier of 300ms after their first missing accepted result or 1,500ms after their last actual observation; repeated misses and recomposition cannot extend this deadline. Query edits discard held entries and recompute against the latest eligible snapshot. Association is conservative, local and one-to-one; current geometry wins over overlapping or clearly displaced old entries. No synthetic mixed OCR snapshot, coordinate smoothing or image-based motion tracking is promised.
+One labeled, single-line manual query is restored from the last completed Android save, including explicit clear. A named saved list can instead activate several independent terms/phrases simultaneously without discarding the manual query. Typing/editing/clearing switches to manual mode and derives results immediately from the latest eligible `OcrUiState`; no submit or OCR restart is required. Presentation retains individual missing matched occurrences briefly, including when other matches remain. Each occurrence keeps its own exact source snapshot, projection and element provenance; latest OCR diagnostics and recognized count remain authoritative and separate. New observations replace their geometry immediately. Missing occurrences expire at the earlier of 300ms after their first missing accepted result or 1,500ms after their last actual observation; repeated misses and recomposition cannot extend this deadline. Query edits discard held entries and recompute against the latest eligible snapshot. Association is conservative, local and one-to-one; current geometry wins over overlapping or clearly displaced old entries. Raw snapshots remain unchanged. Continuously observed display geometry uses the bounded smoothing described below; no image-based motion tracking is promised.
 
-The root layout is one inset-aware Column: search input receives priority, preview takes the remaining height, and a compact source-aware status region keeps secondary diagnostics in an explicitly opened, scrollable Recognition details dialog when space permits. Keyboard/compact/large-font layouts hide the camera preview and secondary content so the field stays visible. The user chose this behavior after device testing; shrinking the preview is deferred. Android explicitly requests adjustResize; Compose owns IME padding once. Android permission/settings content and action remain scrollable together in the preview viewport. Camera session/resource ownership is unchanged. Actual keyboard, landscape and large-font behavior still require device observation.
+The live scanner uses an inset-aware app bar, a compact status band, the weighted preview and a
+bottom search/capture dock. Recognition details remain in an explicitly opened scrollable dialog.
+Keyboard/compact/large-font and list-manager layouts hide the preview, retaining input focus and
+reachable actions. Live, frozen and imported sources share the same editable query field and
+full-width primary-action dock. The primary action changes from Freeze frame to Resume scanning or
+Return to camera in place. Retained-image zoom and match navigation remain contextual controls
+before the dock; Terms and Results open their existing result routes, More contains Lists and share,
+and Options stays in the app bar.
+Android requests adjustResize; Compose owns IME padding once. Permission/settings recovery remains
+scrollable. Direct area editing temporarily replaces the dock with draft actions; precise sliders
+remain available when direct editing cannot be shown. General positive device feedback was received
+on 2026-11-07 for the preceding build; the new area interaction and unreported historical scenarios
+remain unverified on hardware.
 
 - Normalize query and each element by trimming leading/trailing Kotlin `Char.isWhitespace` characters and collapsing internal runs to one space. Preserve punctuation, hyphens, accents and all other characters.
 - Join each line's nonempty normalized elements with one space in existing order. Search lines independently; never cross line boundaries. Aggregate `line.text`/`snapshot.text` remain diagnostic only and do not create extra occurrences.
@@ -22,7 +38,7 @@ Thirteen common host-executed tests cover empty query; identifiers/case; literal
 
 ## Element outlines and actual mapping (CS-002)
 
-Outline each distinct original `(lineIndex, elementIndex)` participating in current matches once. Repeated occurrences in one element count separately but draw once. Within-line phrases can outline several elements; partial matches outline whole OCR elements, never claimed character boxes. Prefer four ordered convex nondegenerate OCR corners; otherwise use a valid positive bounds rectangle. Missing/unusable geometry affects drawable-element count only. Fully off-preview polygons are omitted; partly visible polygons keep their original vertices and are clipped by Canvas. The selected outline colour (Yellow by default) uses a black under-stroke to retain readable text. No editor or animation mode is included.
+Outline each distinct original `(lineIndex, elementIndex)` participating in current matches once. Repeated occurrences in one element count separately but draw once. Within-line phrases can outline several elements; partial matches outline whole OCR elements, never claimed character boxes. Prefer four ordered convex nondegenerate OCR corners; otherwise use a valid positive bounds rectangle. Missing/unusable geometry affects drawable-element count only. Fully off-preview polygons are omitted; partly visible polygons keep their original vertices and are clipped by Canvas. The selected outline colour (Yellow by default) uses a black under-stroke to retain readable text.
 
 Android supplies the actual `PreviewView.sensorToViewTransform`, while the frame's copied `sensorToBufferMatrix` supplies analysis provenance. Matrices use Android's nine-value row-major representation acting on column vectors, rightmost mapping first:
 
@@ -44,9 +60,9 @@ Checked public [PreviewView API](https://developer.android.com/reference/android
 
 New common tests use hand-derived asymmetric landmarks for all four rotations, nonidentity sensor mapping, nonzero crop, fill-centre unequal aspects and portrait view rotation; invalid input, corner/bounds fallback, clipping, selection identity, query/snapshot replacement and fake monotonic-clock/session/generation transitions. These prove shared math/state, not executed native CameraX transform extraction or device rendering. Source inspection grounds that adapter; no extra Android platform test dependency/stub assertion was added. [Validation](validation.md) records actual executed test counts and limits.
 
-Current durable preferences include query/list data, active selection and global highlight colour. Recognized OCR and retained source images remain transient; explicit sharing creates only a bounded temporary PNG derivative. Freeze, import and sharing are covered by the later bounded requirements below. Monetization and iOS camera remain excluded. Code/automated completion still cannot establish full milestone runtime acceptance.
+Current schema-5 durable preferences include query/list data, active selection, per-entry palette slots, global highlight colour and match mode. Recognized OCR and retained source images remain transient; explicit sharing creates only a bounded temporary PNG derivative. Freeze, import and sharing are covered by the later bounded requirements below. Monetization and iOS camera remain excluded. Code/automated completion still cannot establish full milestone runtime acceptance.
 
-Manual checks still pending: type/edit/clear against a live printed identifier/phrase; repeated matches and blank surface; keyboard/landscape/large-font reachability; permission/error/background recovery. The full milestone needs actual Android outline/rotation/aspect/layout evidence; first-launch offline validation also remains pending. APK generation/install belongs to the user. Automated/source evidence cannot substitute for those observations.
+Historical acceptance scenarios (not a claim that the recent user feedback failed): type/edit/clear against a live printed identifier/phrase; repeated matches and blank surface; keyboard/landscape/large-font reachability; permission/error/background recovery. The full milestone needs actual Android outline/rotation/aspect/layout evidence; first-launch offline validation also remains pending. APK generation/install belongs to the user. Automated/source evidence cannot substitute for those observations.
 
 ## Pinned bundled result boundary — CS-003
 
@@ -86,7 +102,7 @@ Required evidence includes actual Android storage round-trips across separate in
 
 Use **Options → Import search list** or **Export selected list** to transfer only saved-list terms. The format is strict UTF-8 text with one canonical term per line, LF or CRLF separators, and at most 65,536 bytes. Import creates a new editable draft; saving remains an explicit Search lists action and never replaces an existing list automatically. Export serializes the selected list's terms with a terminal newline. Names, colours, active selection, manual query and search settings are excluded. Import is unavailable during editing or unhealthy/busy storage; export requires a healthy saved selection. Android uses system Open Document/Create Document pickers without storage permissions, URI history or persistent grants. iOS does not expose these actions. Provider-specific picker/stream behavior remains a device acceptance check.
 
-## Android freeze/resume — next bounded increment
+## Android freeze/resume
 
 Freeze requests one next analyzed frame, pairing its copied full-buffer pixels with that same frame's OCR snapshot. It is not a preview screenshot. While capture is pending, show cancellation; a five-second deadline invalidates late results. Freeze preserves up to one 4,000,000-pixel ARGB image in memory, with no per-frame image cache or disk persistence. Reject oversized or failed captures visibly.
 
@@ -134,7 +150,7 @@ Draw all black under-strokes before all foreground strokes in both preview and P
 
 Default Full frame preserves all existing matching/count and geometry behaviour. Optional Custom restricts live matches to occurrences whose every participating OCR element has a valid raw projected quad fully inside inclusive normalized preview bounds. A crossing word/phrase or missing participant geometry excludes the complete occurrence. OCR still processes the full frame. Invalid mapping or viewport reports waiting for live-area mapping without substituting full-frame counts or claiming no matches.
 
-A scrollable labelled dialog edits width/height (20–100%) and position within available travel, with percentages, Apply, Cancel and Full frame. The initial uncommitted draft is centred 60%×60%. A distinct dashed preview border and Live area label identify Custom; custom outline strokes clip to that area. No direct dragging/handles or image-cropping feature is included.
+A direct editor overlays the measured live camera preview with a dashed draft boundary and four 48dp corner targets. Drag inside the bounds to move; drag a corner to resize while preserving the opposite corner, enforcing a 20% minimum and clamping to the preview. The initial uncommitted draft is centered 60%×60%; Full frame sets an uncommitted null draft. Precise opened from that pending Full frame starts at 100%×100%, and applying without slider changes keeps the null draft. Apply alone commits through the revision-guarded area owner; Cancel, Back, hidden-preview transitions and disposal discard the draft. Precision width/height and position sliders remain available from the editor and as a fallback when direct editing is unavailable. Their nested Apply returns to the preview with a draft update; outer Apply owns the commit. The preview overlay hides applied match outlines and counts while editing. Full-frame OCR, area eligibility, filtering, clipping and source-reset behavior remain unchanged. No image-cropping feature is included.
 
 Keep area state ephemeral and separate from saved search identity. Apply is atomic and rejects a draft whose captured revision was invalidated. Every source/background reset advances revision, including when already Full frame. Filter before retention/smoothing; area edits clear those histories, and current/composed/presentation revision guards suppress stale drawing before recomposition. Keyboard/list hiding preserves the area; starting Freeze/Import, return/resume, background or disposal/recreation reset it. Frozen/imported/shared matching and geometry remain full-source. iOS area controls remain unavailable with its unsupported camera placeholder.
 
@@ -179,3 +195,18 @@ For frozen/imported images, tapping a nonzero term row locates its first matchin
 Substring remains the default. The Options Matching selector applies the chosen mode to manual and active-list terms after existing whitespace normalization, without changing literal casing, source provenance, UTF-16 offsets, independent terms, or per-term palette slots. Whole words accepts a literal occurrence only when both outer neighbors are absent or are not Unicode letters, numbers, combining marks, or underscore. Punctuation, hyphens, apostrophes, whitespace and emoji separate words. Apply boundaries to the complete phrase; keep its internal punctuation and spacing literal. Rejected overlapping candidates advance by one code unit so a later valid occurrence remains discoverable; accepted repeats remain non-overlapping. No user-query regex, stemming, synonyms or classifier is introduced.
 
 Persist `substring` or `whole_word` as required schema-5 state. Schema 1–4 loads default to Substring without rewriting until an ordinary save. Schema 5 requires its exact root field count and a known mode key; malformed/missing/unknown values and extra fields follow existing recovery while preserving original bytes. Keep palette-slot validation and migration rules. Mode belongs in manual and list search identities so existing source/search guards invalidate stale projection, copy, navigation and pending share work; manual highlight colour stays outside identity. iOS keeps mode in memory. The scrollable Options selector uses measured 48dp rows, selected/disabled radio semantics and existing healthy-load/recovery gates. Help briefly explains literal whole-word boundaries.
+
+## Live capture assistance
+
+Android exposes hardware zoom, flashlight and measured-center autofocus only when the bound rear
+camera reports support. Controls use named 48dp targets, observed torch state and zoom limits;
+unsupported actions are absent. Live zoom adjusts CameraX rather than scaling the Compose preview.
+The compact strip overlays the preview without moving the shared search or primary-action dock.
+Frozen-image zoom/pan remains independent. No pinch/tap gesture competes with scan-area editing.
+
+Zoom immediately clears live results and blocks OCR/capture admission until the hardware request
+completes, then requires a fresh frame. Applied scan-area bounds survive zoom. New adjustments are
+disabled during freeze capture and area editing; an enabled light remains on through requested
+capture, then owned camera disposal requests light-off. Source, visibility, permission, lifecycle,
+stream and lease changes reject stale actions. No blur, lighting or distance advice is inferred.
+iOS retains its explicit unsupported camera placeholder.

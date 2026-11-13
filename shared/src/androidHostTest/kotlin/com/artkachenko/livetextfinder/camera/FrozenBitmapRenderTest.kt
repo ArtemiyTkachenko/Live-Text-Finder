@@ -8,6 +8,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
+import com.artkachenko.livetextfinder.drainMainLooper
 import com.artkachenko.livetextfinder.ocr.CapturedCameraFrame
 import com.artkachenko.livetextfinder.ocr.FrameInfo
 import com.artkachenko.livetextfinder.ocr.OcrSnapshot
@@ -27,6 +28,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import org.junit.After
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
@@ -37,6 +39,11 @@ import org.robolectric.annotation.GraphicsMode
 @Config(sdk = [35], manifest = Config.NONE)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class FrozenBitmapRenderTest {
+    @After
+    fun runPendingMainLooperWork() {
+        drainMainLooper()
+    }
+
     @Test
     fun productionRendererRotatesAsymmetricPixelsAndRefitsAfterViewportResize() {
         val wide = mapOf(
@@ -127,8 +134,8 @@ class FrozenBitmapRenderTest {
                 highlightColor = highlightColor,
             )
             assertEquals(Color.RED, preview.getPixel(1, 1))
-            assertEquals(highlightColor.argb.toInt(), preview.getPixel(40, 12))
-            assertEquals(Color.BLACK, preview.getPixel(17, 20))
+            assertSelectedColorBlend(preview.getPixel(40, 12), highlightColor.argb.toInt())
+            assertEquals(Color.RED, preview.getPixel(17, 20))
             preview.recycle()
         }
         owner.stop()
@@ -187,6 +194,20 @@ class FrozenBitmapRenderTest {
         }
         bitmap.setPixels(pixels, 0, 80, 0, 0, 80, 48)
         return bitmap
+    }
+
+    private fun assertSelectedColorBlend(actual: Int, foreground: Int) {
+        val actualChannels = intArrayOf(Color.red(actual), Color.green(actual), Color.blue(actual))
+        val foregroundChannels = intArrayOf(
+            Color.red(foreground),
+            Color.green(foreground),
+            Color.blue(foreground),
+        )
+        val matchesExpectedBlend = actualChannels.indices.all { channel ->
+            val expected = foregroundChannels[channel] * 0.5
+            kotlin.math.abs(actualChannels[channel] - expected) <= 8.0
+        }
+        assertTrue(matchesExpectedBlend, "Expected foreground blend $foreground, got $actual")
     }
 
     private fun frozenOwner(

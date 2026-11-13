@@ -30,6 +30,7 @@ private data class PendingFrame(
     val frameInfo: FrameInfo,
     val identity: FrameIdentity,
     val capture: CaptureWork?,
+    var submittedAtNanos: Long? = null,
 )
 
 private class CaptureWork(
@@ -52,6 +53,7 @@ internal class MlKitTextAnalyzer(
     private val copyImage: (ImageProxy) -> Bitmap = ImageProxy::toBitmap,
     private val onCaptured: (CapturedCameraFrame) -> Boolean = { false },
     private val onCaptureFailure: (Long, String) -> Unit = { _, _ -> },
+    private val diagnostics: CameraTimingDiagnostics? = null,
     private val onState: (OcrUiState, FrameIdentity) -> Unit,
 ) : ImageAnalysis.Analyzer, AutoCloseable {
     private val lifetime = AnalysisLifetime { recognizer.close() }
@@ -63,11 +65,12 @@ internal class MlKitTextAnalyzer(
     private val delegate = MlKitAnalyzer(
         listOf(recognizer), ImageAnalysis.COORDINATE_SYSTEM_ORIGINAL, executor,
     ) { result ->
+        val callbackAtNanos = diagnostics?.clock()
         val pending = pendingFrame
         pendingFrame = null
         try {
             if (!disposed && pending != null) {
-                deliverResult(result, pending)
+                deliverResult(result, pending, callbackAtNanos)
             } else {
                 discardCapture(pending?.capture)
             }
@@ -201,7 +204,9 @@ internal class MlKitTextAnalyzer(
             return
         }
         work.bitmap = bitmap
-        pendingFrame = PendingFrame(work.frameInfo, work.identity, work)
+        val pending = PendingFrame(work.frameInfo, work.identity, work)
+        pending.submittedAtNanos = diagnostics?.clock()
+        pendingFrame = pending
         try {
             // The recognizer receives the same proxy only after its pixels have been copied.
             delegate.analyze(work.image)
@@ -227,6 +232,7 @@ internal class MlKitTextAnalyzer(
             }
             return
         }
+        pending.submittedAtNanos = diagnostics?.clock()
         pendingFrame = pending
         try {
             delegate.analyze(image)
@@ -249,6 +255,7 @@ internal class MlKitTextAnalyzer(
     private fun deliverResult(
         result: MlKitAnalyzer.Result,
         pending: PendingFrame,
+        callbackAtNanos: Long?,
     ) {
         val capture = pending.capture
         val error = runCatching { result.getThrowable(recognizer) }.getOrNull()
@@ -267,10 +274,21 @@ internal class MlKitTextAnalyzer(
                 onCaptureFailure(capture.requestId, message)
                 discardCapture(capture)
             }
-            onState(OcrUiState(OcrStatus.Error, message), pending.identity)
+            val errorState = OcrUiState(OcrStatus.Error, message)
+            val deliveryStarted = diagnostics?.clock()
+            onState(errorState, pending.identity)
+            val deliveryFinished = diagnostics?.clock()
+            diagnostics?.recognition(
+                elapsedNanos(callbackAtNanos, pending.submittedAtNanos),
+                null,
+                elapsedNanos(deliveryFinished, deliveryStarted),
+                true,
+                capture != null,
+            )
             return
         }
         val snapshot = text.toSnapshot(pending.frameInfo)
+        val snapshotFinished = diagnostics?.clock()
         val resultState = OcrUiState(
             if (snapshot.lines.isEmpty()) OcrStatus.Scanning else OcrStatus.TextRecognized,
             if (snapshot.lines.isEmpty()) {
@@ -280,7 +298,16 @@ internal class MlKitTextAnalyzer(
             },
             snapshot,
         )
+        val deliveryStarted = diagnostics?.clock()
         onState(resultState, pending.identity)
+        val deliveryFinished = diagnostics?.clock()
+        diagnostics?.recognition(
+            elapsedNanos(callbackAtNanos, pending.submittedAtNanos),
+            elapsedNanos(snapshotFinished, callbackAtNanos),
+            elapsedNanos(deliveryFinished, deliveryStarted),
+            false,
+            capture != null,
+        )
         if (capture != null) {
             val bitmap = capture.bitmap
             if (bitmap != null && !capture.cancelled.get() && !disposed) {
@@ -392,3 +419,6 @@ private fun FrameInfo.bundledCornersToUpright(points: Array<Point>?): List<TextP
             else -> null
         }
     }
+
+private fun elapsedNanos(end: Long?, start: Long?): Long? =
+    if (end == null || start == null) null else (end - start).coerceAtLeast(0L)

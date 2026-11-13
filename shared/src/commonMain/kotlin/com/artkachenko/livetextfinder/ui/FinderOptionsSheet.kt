@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
@@ -24,13 +25,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import com.artkachenko.livetextfinder.search.SearchListTransferState
 import com.artkachenko.livetextfinder.search.SearchMatchMode
+import com.artkachenko.livetextfinder.search.SearchSessionState
+import com.artkachenko.livetextfinder.ui.icons.RightChevron
 import livetextfinder.shared.generated.resources.Res
 import livetextfinder.shared.generated.resources.finder_match_help
 import livetextfinder.shared.generated.resources.finder_match_substring
 import livetextfinder.shared.generated.resources.finder_match_whole_words
 import livetextfinder.shared.generated.resources.finder_options_camera_group
 import livetextfinder.shared.generated.resources.finder_options_help
+import livetextfinder.shared.generated.resources.finder_options_highlight
 import livetextfinder.shared.generated.resources.finder_options_import
 import livetextfinder.shared.generated.resources.finder_options_search_group
 import livetextfinder.shared.generated.resources.finder_options_title
@@ -38,6 +43,8 @@ import livetextfinder.shared.generated.resources.finder_options_transfer_group
 import livetextfinder.shared.generated.resources.highlight_color_custom_description
 import livetextfinder.shared.generated.resources.search_list_export
 import livetextfinder.shared.generated.resources.search_list_import
+import livetextfinder.shared.generated.resources.search_list_transfer_help
+import livetextfinder.shared.generated.resources.status_details_title
 import org.jetbrains.compose.resources.stringResource
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -61,8 +68,13 @@ internal fun FinderOptionsSheet(
     onImport: () -> Unit,
     onHelp: () -> Unit,
     onDismissRequest: () -> Unit,
+    onRecognitionDetails: (() -> Unit)? = null,
+    recognitionDetailsEnabled: Boolean = true,
 ) {
-    ModalBottomSheet(onDismissRequest = onDismissRequest) {
+    ModalBottomSheet(
+        onDismissRequest = onDismissRequest,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+    ) {
         Column(
             modifier = Modifier.fillMaxWidth()
                 .verticalScroll(rememberScrollState())
@@ -83,26 +95,34 @@ internal fun FinderOptionsSheet(
                     Res.string.highlight_color_custom_description,
                 ),
             )
-            Column(modifier = Modifier.selectableGroup()) {
-                MatchModeOption(
-                    label = stringResource(Res.string.finder_match_substring),
-                    selected = matchMode == SearchMatchMode.Substring,
-                    enabled = matchModeEnabled,
-                    onClick = { onMatchMode(SearchMatchMode.Substring) },
+            if (onRecognitionDetails != null) {
+                FinderOptionsActionRow(
+                    label = stringResource(Res.string.status_details_title),
+                    onClick = onRecognitionDetails,
+                    enabled = recognitionDetailsEnabled,
                 )
-                MatchModeOption(
-                    label = stringResource(Res.string.finder_match_whole_words),
-                    selected = matchMode == SearchMatchMode.WholeWord,
-                    enabled = matchModeEnabled,
-                    onClick = { onMatchMode(SearchMatchMode.WholeWord) },
+            } else {
+                Column(modifier = Modifier.selectableGroup()) {
+                    MatchModeOption(
+                        label = stringResource(Res.string.finder_match_substring),
+                        selected = matchMode == SearchMatchMode.Substring,
+                        enabled = matchModeEnabled,
+                        onClick = { onMatchMode(SearchMatchMode.Substring) },
+                    )
+                    MatchModeOption(
+                        label = stringResource(Res.string.finder_match_whole_words),
+                        selected = matchMode == SearchMatchMode.WholeWord,
+                        enabled = matchModeEnabled,
+                        onClick = { onMatchMode(SearchMatchMode.WholeWord) },
+                    )
+                }
+                Text(
+                    stringResource(Res.string.finder_match_help),
+                    modifier = Modifier.padding(horizontal = 12.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Text(
-                stringResource(Res.string.finder_match_help),
-                modifier = Modifier.padding(horizontal = 12.dp),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
             if (liveAreaLabel != null || showImport) {
                 OptionsGroupTitle(stringResource(Res.string.finder_options_camera_group))
                 if (liveAreaLabel != null) {
@@ -181,7 +201,7 @@ private fun OptionsGroupTitle(label: String) {
     Text(
         label,
         modifier = Modifier.padding(top = FinderSpacing.small),
-        style = MaterialTheme.typography.titleSmall,
+        style = MaterialTheme.typography.titleMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
 }
@@ -196,18 +216,20 @@ private fun FinderOptionsActionRow(
     TextButton(
         onClick = onClick,
         enabled = enabled,
-        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+        modifier = Modifier.fillMaxWidth()
+            .heightIn(min = 48.dp),
         contentPadding = PaddingValues(
-            horizontal = FinderSpacing.medium,
-            vertical = FinderSpacing.small,
+            horizontal = FinderSpacing.absent,
+            vertical = FinderSpacing.absent,
         ),
         shape = MaterialTheme.shapes.medium,
         colors = ButtonDefaults.textButtonColors(
             contentColor = MaterialTheme.colorScheme.onSurface,
+            containerColor = MaterialTheme.colorScheme.surfaceContainer
         ),
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().padding(FinderSpacing.small),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
@@ -219,7 +241,66 @@ private fun FinderOptionsActionRow(
                     )
                 }
             }
-            Text("›", style = MaterialTheme.typography.titleLarge)
+            RightChevron(Modifier.size(16.dp))
         }
     }
+}
+
+/**
+ * Shows [FinderOptionsSheet] for the current saved-search and list-transfer state. Every action
+ * closes the sheet through [onDismiss] before it runs.
+ */
+@Composable
+internal fun FinderOptionsSheetHost(
+    sessionState: SearchSessionState,
+    transferState: SearchListTransferState,
+    liveAreaLabel: String?,
+    showImport: Boolean,
+    onMatchMode: (SearchMatchMode) -> Unit,
+    onImportList: () -> Unit,
+    onExportList: () -> Unit,
+    onHighlight: () -> Unit,
+    onLiveArea: () -> Unit,
+    onImport: () -> Unit,
+    onHelp: () -> Unit,
+    onDismiss: () -> Unit,
+    onRecognitionDetails: (() -> Unit)? = null,
+    recognitionDetailsEnabled: Boolean = true,
+) {
+    val savedSearchEditable = sessionState.loaded && !sessionState.recoveryRequired
+    val dismissThen: (() -> Unit) -> () -> Unit = { action ->
+        {
+            onDismiss()
+            action()
+        }
+    }
+    FinderOptionsSheet(
+        highlightLabel = stringResource(
+            Res.string.finder_options_highlight,
+            localizedHighlightColorName(sessionState.persisted.highlightColor),
+        ),
+        highlightEnabled = savedSearchEditable,
+        matchMode = sessionState.persisted.matchMode,
+        matchModeEnabled = savedSearchEditable,
+        onMatchMode = onMatchMode,
+        liveAreaLabel = liveAreaLabel,
+        showImport = showImport,
+        showListTransfer = transferState.supported,
+        listTransferHelp = if (transferState.supported) {
+            stringResource(Res.string.search_list_transfer_help)
+        } else {
+            null
+        },
+        importListEnabled = transferState.importEnabled,
+        exportListEnabled = transferState.exportEnabled,
+        onImportList = dismissThen(onImportList),
+        onExportList = dismissThen(onExportList),
+        onHighlight = dismissThen(onHighlight),
+        onLiveArea = dismissThen(onLiveArea),
+        onImport = dismissThen(onImport),
+        onHelp = dismissThen(onHelp),
+        onDismissRequest = onDismiss,
+        onRecognitionDetails = onRecognitionDetails?.let(dismissThen),
+        recognitionDetailsEnabled = recognitionDetailsEnabled,
+    )
 }

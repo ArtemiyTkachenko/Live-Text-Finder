@@ -4,10 +4,14 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Canvas
+import androidx.compose.ui.graphics.Color as ComposeColor
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
+import com.artkachenko.livetextfinder.drainMainLooper
 import com.artkachenko.livetextfinder.ocr.ImportedTextSnapshot
 import com.artkachenko.livetextfinder.ocr.TextBounds
 import com.artkachenko.livetextfinder.ocr.TextElement
@@ -23,8 +27,10 @@ import java.io.ByteArrayOutputStream
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
+import org.junit.After
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
@@ -35,6 +41,11 @@ import org.robolectric.annotation.GraphicsMode
 @Config(sdk = [35], manifest = Config.NONE)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class ImportedImageRenderTest {
+    @After
+    fun runPendingMainLooperWork() {
+        drainMainLooper()
+    }
+
     @Test
     fun decodedAdoptedStillAndMatchingOutlinePaintAndRespectStaleVisibilityGuards() {
         val source = asymmetricBitmap()
@@ -85,20 +96,60 @@ class ImportedImageRenderTest {
 
         val visible = render(owner, search, 44L, decoded, 80, 48)
         assertEquals(Color.RED, visible.getPixel(10, 10))
-        assertEquals(Color.YELLOW, visible.getPixel(40, 12))
+        assertOutlinePixelMatchesReference(
+            visible.getPixel(40, 12),
+            outlines,
+            80,
+            48,
+            40,
+            12,
+            Color.YELLOW,
+            2f,
+            1f,
+        )
         val hidden = render(owner, search, 44L, decoded, 80, 48, isVisible = { false })
         assertTransparent(hidden)
         assertSame(decoded, owner.currentBitmap())
         val staleSource = render(owner, search, 45L, decoded, 80, 48)
         assertTransparent(staleSource)
+        val portraitProjection = importedHighlightsForDraw(
+            search,
+            snapshot,
+            owner.state.value,
+            search.spec.identity,
+            search.spec.identity,
+            48f,
+            80f,
+            true,
+        )
         val portrait = render(owner, search, 44L, decoded, 48, 80)
         assertEquals(Color.RED, portrait.getPixel(6, 32))
-        assertEquals(Color.YELLOW, portrait.getPixel(24, 33))
+        assertOutlinePixelMatchesReference(
+            portrait.getPixel(24, 33),
+            portraitProjection.outlines,
+            48,
+            80,
+            24,
+            33,
+            Color.YELLOW,
+            1.296f,
+            0.648f,
+        )
         val colors = HighlightColor.entries + HighlightColor.fromRgb(18, 171, 239)
         colors.forEach { highlightColor ->
             val colored = render(owner, search, 44L, decoded, 80, 48, highlightColor)
-            assertEquals(highlightColor.argb.toInt(), colored.getPixel(40, 12))
-            assertEquals(Color.BLACK, colored.getPixel(17, 20))
+            assertOutlinePixelMatchesReference(
+                colored.getPixel(40, 12),
+                outlines,
+                80,
+                48,
+                40,
+                12,
+                highlightColor.argb.toInt(),
+                2f,
+                1f,
+            )
+            assertEquals(Color.RED, colored.getPixel(17, 20))
             colored.recycle()
         }
 
@@ -172,5 +223,50 @@ class ImportedImageRenderTest {
         val pixels = IntArray(bitmap.width * bitmap.height)
         bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
         assertTrue(pixels.all { it == Color.TRANSPARENT })
+    }
+
+    private fun assertOutlinePixelMatchesReference(
+        actual: Int,
+        outlines: List<com.artkachenko.livetextfinder.search.ElementOutline>,
+        width: Int,
+        height: Int,
+        sampleX: Int,
+        sampleY: Int,
+        foreground: Int,
+        outerWidth: Float,
+        foregroundWidth: Float,
+    ) {
+        fun referencePixel(color: Int): Int {
+            val reference = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            reference.eraseColor(Color.GREEN)
+            CanvasDrawScope().draw(
+                density = Density(1f),
+                layoutDirection = LayoutDirection.Ltr,
+                canvas = Canvas(reference.asImageBitmap()),
+                size = Size(width.toFloat(), height.toFloat()),
+            ) {
+                outlines.forEach { outline ->
+                    val first = outline.points.first()
+                    val path = Path().apply {
+                        moveTo(first.x, first.y)
+                        outline.points.drop(1).forEach { lineTo(it.x, it.y) }
+                        close()
+                    }
+                    drawPath(path, ComposeColor.Black, style = Stroke(outerWidth))
+                    drawPath(path, ComposeColor(color), style = Stroke(foregroundWidth))
+                }
+            }
+            return reference.getPixel(sampleX, sampleY).also { reference.recycle() }
+        }
+
+        assertEquals(referencePixel(foreground), actual)
+        assertNotEquals(referencePixel(Color.BLACK), actual, "A missing foreground must fail")
+        if (foreground == HighlightColor.fromRgb(18, 171, 239).argb.toInt()) {
+            assertNotEquals(
+                referencePixel(Color.rgb(0, 128, 51)),
+                actual,
+                "A wrong custom color must fail",
+            )
+        }
     }
 }

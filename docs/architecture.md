@@ -1,8 +1,8 @@
-# Camera / OCR foundation
+# Architecture
 
 ## Boundaries
 
-`androidApp` hosts shared `App`. `commonMain` owns the screen, diagnostic state, and immutable OCR result types. An expect/actual camera composable supplies a native preview and reports state; all camera and OCR implementation details stay in `androidMain`. `iosMain` renders an explicit Android-only notice.
+`androidApp` hosts shared `App`. `commonMain` owns scanner, list, settings and inspection UI, search/presentation state, and immutable OCR result types. An expect/actual camera composable supplies a native preview and reports state; all camera and OCR implementation details stay in `androidMain`. `iosMain` renders an explicit Android-only notice.
 
 Android owns a session containing PreviewView, camera use cases, and one bundled Latin recognizer. Use CameraX MlKitAnalyzer in original image coordinates, wrapped only to capture matching frame metadata. Copy text, line/element bounds and corner points before publishing; do not leak ML Kit/Android objects. Common snapshots use adapter-normalized full-buffer upright coordinates, never preview coordinates. The pinned bundled SDK supplies upright bounds but pre-upright corners; CS-003 normalizes corners once during result copying. Record raw size, rotation, crop, timestamp and sensor-to-buffer matrix. Shared projection now reverses full-buffer OCR rotation and the frame sensor-to-buffer transform, then applies the actual PreviewView sensor-to-view transform. See [search requirements](search-requirements.md) for coordinate conventions and limits.
 
@@ -18,7 +18,7 @@ The foundation added no image/text persistence, text logging, search, overlays o
 
 Common code owns immutable saved-list/session values, validation, asynchronous state ordering and the list editor. The Android host retains one application-scoped controller across Activity recreation. Its store lives in `shared/androidMain` and uses versioned app-private JSON through `AtomicFile`, a process-owned serialized background worker and main-thread callbacks. Reads complete before startup edits can be saved; newer manual typing or explicit clear wins over loaded text without discarding the stored library. Pending writes coalesce to the latest state. Load failures keep recovery visible and prevent writes until a confirmed reset; reset completion preserves manual edits made while it was running. The iOS placeholder uses an explicit in-memory store.
 
-The saved preference document contains manual query, list IDs/names/entries, active selection and global highlight colour. Shared validation applies on Android reads and writes, with strict JSON primitive/version checks. OCR results/images remain transient. Multi-term matching counts independent entries separately, deduplicates shared element outlines and scopes retention association to term identity. Draw-time eligibility reads the live session identity to reject outlines composed before a search change.
+The saved preference document contains manual query, list IDs/names/entries and palette slots, active selection, global highlight colour and match mode. Shared validation applies on Android reads and writes, with strict JSON primitive/version checks. OCR results/images remain transient. Multi-term matching counts independent entries separately, deduplicates shared element outlines and scopes retention association to term identity. Draw-time eligibility reads the live session identity to reject outlines composed before a search change.
 
 ## Memory-only freeze
 
@@ -68,25 +68,36 @@ Live stabilization blends at 0.5 only when corresponding displayed/raw vertices 
 
 Draw all black under-strokes before any foreground edges, so a later neighbouring outline cannot erase an earlier coloured side. Keep the same order in preview and PNG rendering; retain viewport clipping rather than manufacturing offscreen borders.
 
-A validated immutable common colour value supplies opaque ARGB to preview drawing and native PNG rendering. It retains the four named presets and uses equality by effective ARGB, so choosing the same colour remains a no-op. Android writes strict AtomicFile schema version 3 with preset keys or canonical custom RGB keys. Version 1 still defaults to Yellow; version 2 remains preset-only. Loading either legacy format does not eagerly rewrite it. The existing controller serializes colour changes with query/list writes and preserves healthy-load/recovery guards. iOS uses its existing in-memory store. Colour remains independent of search identity, geometry and retention. The custom picker edits only local RGB draft values until Apply; Cancel/re-entry starts again from the actual selection.
+A validated immutable common colour supplies opaque ARGB to preview and native PNG rendering.
+Manual search uses the global preset/custom RGB value; saved entries retain individual palette
+slots. Android writes strict AtomicFile schema 5, including match mode, and validates legacy
+schemas 1–4 without eagerly rewriting them. Colours stay separate from matching geometry and
+retention. The compact picker offers swatches and an advanced RGB draft; Apply commits, while
+Cancel leaves the current value unchanged. iOS retains its in-memory store.
 
-App reads current colour inside the Canvas drawing callback. Share requests capture a colour value and separately validate current colour before handoff, preserving immutable rendering and rejecting stale publication. Existing source/search/lifecycle/cache ownership remains intact. No extra store, renderer mapping table or dependency is introduced.
+`HighlightOverlay` reads current colour inside its Canvas drawing callback. Share requests capture a colour value and separately validate current colour before handoff, preserving immutable rendering and rejecting stale publication. Existing source/search/lifecycle/cache ownership remains intact. No extra store, renderer mapping table or dependency is introduced.
 
 ## Live search area
 
 A small common owner holds an optional normalized preview rectangle and revision independently of persisted search identity. Common filtering reuses validated raw element projection, checks every occurrence participant and rejects partial phrases. Full frame bypasses filtering; Custom has explicit readiness when its actual preview mapping is unavailable. The live presentation captures area revision and filters before retaining/smoothing occurrences; draw-time current revision checks complement existing exact raw source guards.
 
-The common control uses a cancellable draft and labelled sliders. Background/source resets invalidate stale drafts before Apply and reset area independently of camera renderer visibility. Android lifecycle binding sits at App scope, while iOS keeps a no-op binding and unsupported controls. Explicit source handlers reset before Freeze/Import; full-source frozen/imported search and shared PNG requests do not carry region state. Area selection affects match eligibility, never OCR buffers, camera generations, transforms or persisted preferences.
+The common editor overlays the measured live preview with move/four-corner resize controls and a cancellable normalized draft. Revision and opening tokens guard commits and precision-dialog callbacks; labelled sliders remain the precision/fallback path. Background/source resets invalidate stale drafts before Apply and reset area independently of camera renderer visibility. Android lifecycle binding sits at screen scope in `FinderScreen`, while iOS keeps a no-op binding and unsupported controls. Explicit source handlers reset before Freeze/Import; full-source frozen/imported search and shared PNG requests do not carry region state. Area selection affects match eligibility, never OCR buffers, camera generations, transforms or persisted preferences.
 
 ## Material theme and primary controls
 
-A small shared `LiveTextFinderTheme` supplies fallback light/dark colour schemes, Material typography/shapes and shared spacing. A narrow platform colour provider uses Android 12+ dynamic colours and fallback schemes on older Android and iOS. Android context and dynamic-colour APIs remain in Android sources. OCR palette values, camera backgrounds/scrims, projection and exported-image colours remain independent of theme personalisation.
+A small shared `LiveTextFinderTheme` supplies fallback light/dark colour schemes, Material typography/shapes and shared spacing. System light/dark selection uses the branded charcoal/mint schemes by default. A narrow platform provider supplies Android 12+ dynamic colours only when explicitly enabled; older Android and iOS use the fallback schemes. Android context and dynamic-colour APIs remain in Android sources. OCR palette values, camera backgrounds/scrims, projection and exported-image colours remain independent of theme personalisation.
 
-The main search/control region uses one restrained tonal surface, consistent content alignment and supporting typography for the active search. The main card and list/editor regions use a shared 16dp outer gutter with deliberately aligned content insets; text fields use the shared medium shape. Highlight/Help actions wrap from the start, and selectable highlight rows use 48dp targets with rounded outlined swatches. Freeze/Resume use a stronger tonal action while secondary actions stay directly available. The existing inset owner, conditional preview policy, actual measured preview bounds and source callbacks remain in place. List-manager and status presentation are described below.
+The live scanner has a compact app bar, opaque status band, weighted camera viewport and raised
+bottom dock for manual/list context and capture. The dock stays at one composition site across
+ordinary IME/large-font preview hiding to preserve query focus. Direct area editing temporarily
+substitutes draft actions without changing the camera session or committed matching area. Retained
+images use their source-aware inspection header and zoom/navigation controls. Shared Material roles,
+spacing and shapes govern list/editor surfaces; primary actions are 52dp and secondary targets at
+least 48dp. The root owns safe/IME insets once, and compact/manager modes scroll for reachability.
 
 ## Search-list presentation
 
-The list manager is a shared stateless presentation component. It receives saved-list, selected-ID and editor snapshots plus callbacks; App retains controller calls, draft ownership and delete-confirmation state. Selection targets, Edit/Delete actions and the tonal editor are separate interaction regions. The existing AppContentColumn owns whole-page scrolling, so manager visibility continues to hide the preview without introducing nested section scrolling.
+The list manager is a shared stateless presentation component. It receives saved-list, selected-ID and editor snapshots plus callbacks; `SavedSearchEditingState` retains controller calls, draft ownership and delete-confirmation state. Selection targets, Edit/Delete actions and the tonal editor are separate interaction regions. The existing `AppContentColumn`, now beside `FinderContentAssembly` in `ui/`, owns whole-page scrolling, so manager visibility continues to hide the preview without introducing nested section scrolling.
 
 Scoped shared string resources provide list/editor labels, list-specific accessible action labels and term-count plurals. This presentation layer does not change validation, persistence, list activation, search semantics or source ownership.
 
@@ -96,9 +107,11 @@ Shared presentation derives feedback from the displayed source: an imported imag
 
 An explicit Details dialog holds source-specific recognition diagnostics and the bounded text sample. It reads the selected source rather than falling back to a previous live camera snapshot. Diagnostic disclosure is secondary and follows the existing hidden-preview policy. Operational messages retain their existing recovery/cancel/reset callbacks and conditions; Android continues to own camera permission/settings and retry actions. No new persistence, image/text logging or automatic transitions are introduced.
 
+Finished outcomes are temporary feedback and use one Material snackbar host owned by `FinderScreen`: copy succeeded or failed, share sheet opened or failed, and list import/export finished, cancelled or failed. Error outcomes use the long duration. `FinderFeedbackEffects` observes the copy session, share owner and transfer owner, shows only outcomes that occur while it is composed, and lets a newer outcome replace the one showing; a message already present when the screen is created or restored is not replayed. The copy session counts published outcomes so a repeated message is shown again. The host is an overlay above the footer while the preview is visible and at the screen bottom in the scrolling compact mode, so an outcome never changes the viewport size. States that need an action stay inline: a running list transfer with Cancel, saved-data recovery, the locate hint, and copy feedback inside the open matches dialog.
+
 ## Compact controls and list draft presentation
 
-App retains source-action and dialog ownership. Main controls expose search, list context and capture/cancellation, while a Material Options sheet routes secondary actions through existing callbacks. The sheet closes before another action is invoked; it does not own a camera session or saved preference. Existing compact/keyboard/list hiding and page scrolling remain unchanged.
+`FinderScreen` retains source-action and dialog ownership. Main controls expose search, list context and capture/cancellation, while a Material Options sheet routes secondary actions through existing callbacks. The sheet closes before another action is invoked; it does not own a camera session or saved preference. Existing compact/keyboard/list hiding and page scrolling remain unchanged.
 
 List draft presentation uses the existing recognized-text normalization to count and preview nonblank entries in order. It retains duplicates and reports blank lines; the controller continues validating every raw line before saving. Preview output is limited to five entries and a remaining count, with no second scroll viewport or new persisted draft.
 
@@ -107,3 +120,157 @@ List draft presentation uses the existing recognized-text normalization to count
 A presentation-only still transform applies zoom and bounded pan once to the complete retained-image/outline subtree inside a fixed viewport clip. Existing bitmap fits, raw geometry, draw-time source/visibility guards and full-source PNG sharing remain unchanged. Inspection state is keyed by the retained source/request and viewport; it is independent of query and colour. Source controls participate in the same page layout rather than overlaying the search header.
 
 Matching and copy-row projection share the normalized element-line builder, so occurrence offsets resolve against exactly the text used by literal matching. Each row retains its occurrence identity and index; copying resolves its actual substring and revalidates current source/content reference, search and selection at the write boundary. A small shared clipboard-entry factory bridges the modern Compose clipboard API to Android/iOS. Images/OCR remain owned by their existing in-memory platform owners; inspection creates no new store or image cache.
+
+
+## Resource limits and performance assessment — 2026-11-07
+
+| Work | Verified admission or storage limit |
+| --- | --- |
+| Live analysis | CameraX latest-frame backpressure; ordinary frames do not copy bitmaps. |
+| Capture | At most 4,000,000 pixels; one process-wide native copy, with overlap rejected. |
+| Import | 16 MiB encoded input; 4,000,000 decoded ARGB pixels and 16,000,000 allocation bytes; one admitted import. |
+| Share | 4,000,000 output pixels; one admitted share; PNG capped at 20 MiB. |
+| Share cache | 16 files, 128 MiB capacity with reservations, 24-hour expiry. |
+| Saved searches | 256 KiB JSON read/write bound on a serialized process worker. |
+| Debug timing | 64 samples; event-driven summaries at most once per two seconds. |
+
+These are individual bounds, not a whole-process memory ceiling. Import orientation can retain
+both decoded and upright bitmaps temporarily; encoded buffers, concurrent retained sources and
+SDK/native allocations add costs. Capture/import/share gates are independent. Matching work grows
+with active terms and recognized text density; no OCR-text/occurrence ceiling is asserted.
+Existing tests cover overlap rejection, ordinary-frame no-copy, cancellation, admission bounds,
+orientation, stale completion and cache/encoding quotas. No new optimization or semantics-changing
+cap is justified by these checks alone.
+
+Physical performance remains unmeasured. Compare fixed sparse/dense printed targets and small/large
+images, keeping lighting, distance, device, build and session duration recorded. Separate cold/warm
+startup, sustained live scanning, repeated Freeze/Resume and import/share cycles. Record visible
+response delay, memory before/after repeated operations, thermal behavior and battery consumption.
+Debug stage timings exclude copy work and Compose scheduling/drawing; measure end-to-end visible
+latency separately. No device latency, heat or battery improvement is claimed.
+
+## Android release configuration
+
+The app retains its application ID, version 1/1.0, signing and minification settings. Legacy and
+modern backup rules allow only saved-searches.json and its AtomicFile .bak recovery companion;
+cloud backup and device transfer use the same allowlist. Temporary .new files, images and unrelated
+future files are outside that allowlist. The existing launcher artwork now has a monochrome layer.
+Camera timing observation is disabled by the runtime debuggable flag in release; its class is not
+claimed to be stripped from the package. Launcher appearance and actual backup/restore transport
+behavior remain device checks. Compilation/resource/lint validation is not a signed distribution.
+
+References: [Android backup rules](https://developer.android.com/identity/data/autobackup),
+[adaptive icons](https://developer.android.com/develop/ui/compose/system/icon_design_adaptive),
+[CameraX analysis](https://developer.android.com/media/camera/camerax/analyze).
+
+## Live capture control ownership
+
+A remembered common `LiveCaptureControls` publishes immutable capabilities/observed state and
+issues monotonically identified action leases. Rendered callbacks retain their lease and recheck
+latest common source/freeze/visibility/editor context. Capture source admission permits Freezing
+while action admission requires Live. Android adds a narrow `AndroidLiveCaptureControls` adapter
+for the bound CameraInfo/CameraControl, owned ZoomState/TorchState observers and measured-center
+AF-only focus support. The native adapter also reads current permission, lifecycle, attached
+measured stream and visibility before dispatch. iOS never attaches a native control lease.
+
+Camera session replacement releases the prior control lease before binding new hardware. Owned
+teardown removes only its observers and independently attempts torch-off and focus cancellation
+before unbinding; stale teardown and asynchronous results cannot issue replacement-lease commands.
+Native teardown also runs directly on lifecycle stop. A stop-only restart epoch recreates the feed
+even when stop/start events coalesce; pause/resume alone preserves the valid camera session.
+Mutable state and future completion remain on main. A rejected completion executor falls back to
+main posting; futures are read only after completion. Focus success uses the actual result flag.
+
+Accepted zoom requests suspend `LiveFrameTracker` content at both start and completion, advancing
+its generation and clearing snapshots/projections without changing running state or scan-area
+bounds. The session rejects pending capture/results; optimistic ZoomState changes do not release
+the gate. Failure/cancellation also requires fresh post-request content. This preserves existing
+analyzer execution, proxy closure and recognizer lifetime ownership without rebinding analysis.
+Physical zoom/crop/rotation alignment still requires a camera-device check.
+
+## Screen composition and state holders
+
+Shared code under `com.artkachenko.livetextfinder` is grouped by feature area of the single
+screen. The root package holds only `App`. `screen` holds `FinderScreen`, its regions, the
+per-composition values and `HighlightOverlay`; `inspection` holds the retained-image source,
+selection, navigation and copy; `scanarea` holds the live scan-area state, editor, dialog and
+the platform back handler; `status` holds status derivation and the status region; `lists`
+holds the saved-list manager state and list-transfer wiring. `ui`, `search`, `camera` and `ocr`
+keep their existing layer-based contents. Tests sit in the package of their subject.
+
+Host tests share one JVM, and Robolectric keeps one sandbox per SDK and graphics mode. Once a
+Compose test has run in a sandbox, a snapshot-state write on the main thread makes Compose post
+a global apply to its process-wide UI dispatcher. Robolectric discards messages still queued
+when a test ends, which leaves that dispatcher marked as scheduled with nothing queued, so no
+later test in the sandbox can recompose. Any host test that writes snapshot state, including
+through an owner or state holder, must therefore end with `drainMainLooper()` in `@After`.
+
+`App` only applies the theme and background and calls `FinderScreen`. `FinderScreen` owns the
+screen's state holders, derives what is displayed and wires callbacks; region composables render
+it. `StillSource` models the retained image shown instead of the live camera (imported or
+frozen) with its identity, inspection key, owner token and viewport fit. `FinderLayoutMode`
+names the four mutually exclusive arrangements: Live, AreaEditing, ListManager and
+StillInspection; a retained source outranks the list manager, which outranks the area editor.
+
+Three plain state holders replace screen-local variables. They follow the existing owner
+pattern rather than a ViewModel, so no lifecycle or DI dependency is added.
+
+- `LiveSearchAreaState` wraps the area owner, the direct-edit draft session and the precision
+  dialog session. The owner stays authoritative; the holder also publishes the committed area
+  and revision as snapshot state, so draw-time checks can still compare published and current
+  values. One nullable dialog request carries the opening token and captured context.
+- `SavedSearchEditingState` holds manager visibility, the editor draft, the pending delete
+  confirmation and the transfer context revision. Every change that could make a pending list
+  transfer stale goes through one method that notifies the transfer owner. Its saver restores
+  visibility, draft and pending confirmation after Activity recreation without notifying the
+  transfer owner. The screen's transfer context predicate captures visibility, draft and
+  revision when the context is published and compares them with live values.
+- `StillInspectionState` is rebuilt on every recomposition by `stillInspectionState`, which
+  remembers selection, term filter, zoom transform, copy session and navigation coordinator
+  keyed by source and search. Constructor values are what that composition displayed; its
+  callbacks compare them with current owner state and do nothing when the source, search,
+  selection or viewport changed. The returned object must not be used as a remember or effect
+  key.
+
+`FinderScreen` itself only creates holders and passes them on. Four per-composition values
+carry what it derives, each rebuilt on every recomposition and never used as a remember or
+effect key: `FinderSourceContext` (the image owners, session, live capture controls and the
+visibility and capture-context predicates, from `finderSourceContext`), `FinderSearchState`
+(displayed result, live presentation and its expiry timer, projected highlights and result
+availability, from `finderSearchState`), `FinderLabels` (state-dependent control labels) and
+`FinderSourceActions` (freeze/resume, import, return, share and starting an area edit; every
+source change resets the scan area first). `FinderDialogsState` holds the screen's own dialog
+flags and `FinderDialogs` hosts them; `SearchListTransferContextEffect` publishes the transfer
+context after each composition.
+
+Region composables receive displayed values as parameters and owners or holders as objects
+where draw-time or tap-time code must read current state: `FinderTopRegion`, `FinderFooter`, `FinderViewport`
+(preview, `HighlightOverlay`, area editor, `ScanAreaBadge`, capture row), `ScanAreaEditBar`,
+`StillInspectionFooter`, `StillInspectionMatchesDialog`, `LiveSearchAreaDialogHost` and
+`ConfirmDestructiveDialog`. `FinderSearchBar` and `FinderCaptureActions` group the values shared
+by the dock, inline search bar and capture controls, and are the only signatures of those
+composables. `FinderOptionsSheet` stays a stateless sheet; `FinderOptionsSheetHost` maps saved
+search and transfer state onto it and closes the sheet before each action. `FinderCameraOverlay` centralizes fixed colours and dimensions for content drawn over
+camera imagery, independent of theme personalisation. Screen copy lives in shared string
+resources. Saved-search problems are typed: validation, the controller and the stores report a
+`SearchSessionError`, carried through failed results by `SearchSessionException`, and
+`searchSessionErrorMessage` resolves the localized text. A store failure that is not typed is
+shown as a generic read, save or reset failure, never as a raw exception message.
+
+This restructuring preserved recognition, matching, projection, freshness and source ownership.
+Its intended behaviour changes are limited to the saved list draft, the transfer context
+predicate, one results-label rule for both search bars, and snackbar outcomes described above.
+Host tests cover the pure models and two holders; `StillInspectionState` relies on the existing
+navigation and copy coordinator tests. Device behaviour of the restructured screen and snackbar
+placement remains a device check.
+
+Android host screenshot tests render a fixed-size Compose view or dialog window with a controlled
+frame clock, density, locale, font scale, and theme. Element and region captures trim unused
+background equally on opposite sides to preserve position relative to the viewport center.
+Screen captures retain the full viewport and composite any active dialog window over the app.
+Roborazzi compares the result against a PNG fixture under
+`shared/src/androidHostTest/screenshots`. The host test task verifies fixtures by default and
+records them only when requested explicitly. Visual mismatches produce actual and comparison
+PNGs under `shared/build/reports/screenshot-tests/diffs`. Legacy visual exports use the same
+bitmap capture and remain available through `LTF_VISUAL_OUTPUT_DIR`. The
+`:shared:generateScreenshotIndex` task builds a browsable index of the reference PNGs.

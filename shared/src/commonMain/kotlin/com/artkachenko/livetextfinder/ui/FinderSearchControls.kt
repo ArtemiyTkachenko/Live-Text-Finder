@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import com.artkachenko.livetextfinder.search.SearchMatchMode
 import livetextfinder.shared.generated.resources.Res
+import livetextfinder.shared.generated.resources.finder_find_text
 import livetextfinder.shared.generated.resources.finder_options
 import livetextfinder.shared.generated.resources.search_context_manual_inactive
 import livetextfinder.shared.generated.resources.search_context_use_manual
@@ -24,21 +25,11 @@ import org.jetbrains.compose.resources.stringResource
 @Composable
 internal fun FinderSearchControls(
     showTitle: Boolean,
-    query: String,
-    onQueryChange: (String) -> Unit,
-    searchListsLabel: String,
-    onSearchLists: () -> Unit,
-    activeListName: String? = null,
-    activeListTermCount: Int = 0,
-    matchMode: SearchMatchMode = SearchMatchMode.Substring,
-    onTerms: () -> Unit = {},
-    onUseManual: () -> Unit = {},
-    searchContext: String? = null,
+    search: FinderSearchBar,
     onOptions: () -> Unit,
-    saving: Boolean = false,
-    savingLabel: String? = null,
     resultsLabel: String? = null,
-    onResults: () -> Unit = {},
+    searchContext: String? = null,
+    savingLabel: String? = null,
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -72,14 +63,14 @@ internal fun FinderSearchControls(
                 )
             }
             OutlinedTextField(
-                value = query,
-                onValueChange = onQueryChange,
-                label = { Text("Find in recognized text") },
-                trailingIcon = if (activeListName != null) {
+                value = search.query,
+                onValueChange = search.onQueryChange,
+                label = { Text(stringResource(Res.string.finder_find_text)) },
+                trailingIcon = if (search.activeListName != null) {
                     {
                         FinderSecondaryAction(
                             label = stringResource(Res.string.search_context_use_manual_short),
-                            onClick = onUseManual,
+                            onClick = search.onUseManual,
                             accessibilityLabel = stringResource(
                                 Res.string.search_context_use_manual,
                             ),
@@ -89,13 +80,13 @@ internal fun FinderSearchControls(
                     null
                 },
                 textStyle = MaterialTheme.typography.bodyLarge.copy(
-                    color = if (activeListName == null) {
+                    color = if (search.activeListName == null) {
                         MaterialTheme.colorScheme.onSurface
                     } else {
                         MaterialTheme.colorScheme.onSurfaceVariant
                     },
                 ),
-                supportingText = if (activeListName != null) {
+                supportingText = if (search.activeListName != null) {
                     { Text(stringResource(Res.string.search_context_manual_inactive)) }
                 } else {
                     null
@@ -105,21 +96,21 @@ internal fun FinderSearchControls(
                 shape = MaterialTheme.shapes.medium,
             )
             SearchContext(
-                activeListName = activeListName,
-                termCount = activeListTermCount,
-                manualQuery = query,
-                matchMode = matchMode,
-                saving = saving,
+                activeListName = search.activeListName,
+                termCount = search.activeListTermCount,
+                manualQuery = search.query,
+                matchMode = search.matchMode,
+                saving = search.saving,
                 compact = false,
-                onTerms = onTerms,
-                onUseManual = onUseManual,
+                onTerms = search.onTerms,
+                onUseManual = search.onUseManual,
                 contextOverride = searchContext,
                 savingLabel = savingLabel,
                 showUseManualAction = false,
                 additionalActions = {
-                    FinderSecondaryAction(searchListsLabel, onSearchLists)
+                    FinderSecondaryAction(search.searchListsLabel, search.onSearchLists)
                     resultsLabel?.let { label ->
-                        FinderSecondaryAction(label, onResults)
+                        FinderSecondaryAction(label, search.onResults)
                     }
                 },
             )

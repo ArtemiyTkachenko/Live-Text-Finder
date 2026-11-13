@@ -23,6 +23,16 @@ internal enum class ImportedImagePhase {
     Unsupported,
 }
 
+/** True while the live camera remains the displayed source and no import is underway. */
+internal val ImportedImagePhase.allowsLiveCamera: Boolean
+    get() = this == ImportedImagePhase.Live || this == ImportedImagePhase.Error
+
+/** True while an image is being picked, read or recognized. */
+internal val ImportedImagePhase.isImportInProgress: Boolean
+    get() = this == ImportedImagePhase.Picking ||
+        this == ImportedImagePhase.Reading ||
+        this == ImportedImagePhase.Recognizing
+
 @Composable
 internal expect fun rememberImportedImageOwner(): ImportedImageOwner
 

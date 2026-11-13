@@ -45,27 +45,126 @@ internal data class NormalizedSearchArea(
     }
 }
 
-/** Owns ephemeral area state and rejects edits created before a reset or a newer edit. */
-internal class LiveSearchAreaOwner {
-    var area: NormalizedSearchArea? = null
-        private set
-    var revision: Long = 0
-        private set
+internal enum class SearchAreaCorner { TopLeft, TopRight, BottomLeft, BottomRight }
 
-    fun apply(expectedRevision: Long, newArea: NormalizedSearchArea?): Boolean {
-        if (expectedRevision != revision) return false
-        if (area != newArea) {
-            area = newArea
-            revision++
-        }
-        return true
+/** Keeps an explicit Full frame precision result as the owner's null-area representation. */
+internal fun normalizeEditorDraftArea(area: NormalizedSearchArea?): NormalizedSearchArea? =
+    area?.takeUnless {
+        it.left == 0f && it.top == 0f && it.right == 1f && it.bottom == 1f
     }
 
-    fun reset() {
-        area = null
-        revision++
+/** Returns the closest corner whose clamped 48dp-style target contains the down point. */
+internal fun searchAreaCornerAt(
+    area: NormalizedSearchArea,
+    x: Float,
+    y: Float,
+    viewportWidth: Float,
+    viewportHeight: Float,
+    targetSize: Float,
+): SearchAreaCorner? {
+    if (!x.isFinite() || !y.isFinite() || !viewportWidth.isFinite() ||
+        !viewportHeight.isFinite() || !targetSize.isFinite() || viewportWidth <= 0f ||
+        viewportHeight <= 0f || targetSize <= 0f
+    ) return null
+    val width = targetSize.coerceAtMost(viewportWidth)
+    val height = targetSize.coerceAtMost(viewportHeight)
+    val candidates = SearchAreaCorner.values().mapNotNull { corner ->
+        val cornerX = when (corner) {
+            SearchAreaCorner.TopLeft, SearchAreaCorner.BottomLeft -> area.left * viewportWidth
+            SearchAreaCorner.TopRight, SearchAreaCorner.BottomRight -> area.right * viewportWidth
+        }
+        val cornerY = when (corner) {
+            SearchAreaCorner.TopLeft, SearchAreaCorner.TopRight -> area.top * viewportHeight
+            SearchAreaCorner.BottomLeft, SearchAreaCorner.BottomRight -> {
+                area.bottom * viewportHeight
+            }
+        }
+        val left = (cornerX - width / 2f).coerceIn(0f, viewportWidth - width)
+        val top = (cornerY - height / 2f).coerceIn(0f, viewportHeight - height)
+        if (x !in left..(left + width) || y !in top..(top + height)) return@mapNotNull null
+        val centerX = left + width / 2f
+        val centerY = top + height / 2f
+        val dx = x - centerX
+        val dy = y - centerY
+        Triple(corner, dx * dx + dy * dy, corner.ordinal)
+    }
+    return candidates.minWithOrNull(compareBy<Triple<SearchAreaCorner, Float, Int>> { it.second }
+        .thenBy { it.third })?.first
+}
+
+/** Moves normalized bounds by preview-local pixels while preserving their size. */
+internal fun moveSearchArea(
+    area: NormalizedSearchArea,
+    deltaX: Float,
+    deltaY: Float,
+    viewportWidth: Float,
+    viewportHeight: Float,
+): NormalizedSearchArea? {
+    if (!deltaX.isFinite() || !deltaY.isFinite() || !viewportWidth.isFinite() ||
+        !viewportHeight.isFinite() || viewportWidth <= 0f || viewportHeight <= 0f
+    ) return null
+    val width = area.right - area.left
+    val height = area.bottom - area.top
+    val left = (area.left + deltaX / viewportWidth).coerceIn(0f, 1f - width)
+    val top = (area.top + deltaY / viewportHeight).coerceIn(0f, 1f - height)
+    return NormalizedSearchArea(left, top, left + width, top + height)
+}
+
+/** Resizes from one corner, anchoring the opposite corner and enforcing a 20% minimum. */
+internal fun resizeSearchArea(
+    area: NormalizedSearchArea,
+    corner: SearchAreaCorner,
+    deltaX: Float,
+    deltaY: Float,
+    viewportWidth: Float,
+    viewportHeight: Float,
+): NormalizedSearchArea? {
+    if (!deltaX.isFinite() || !deltaY.isFinite() || !viewportWidth.isFinite() ||
+        !viewportHeight.isFinite() || viewportWidth <= 0f || viewportHeight <= 0f
+    ) return null
+    val dx = deltaX / viewportWidth
+    val dy = deltaY / viewportHeight
+    val minSize = 0.2f
+    return when (corner) {
+        SearchAreaCorner.TopLeft -> {
+            val left = (area.left + dx).coerceIn(0f, area.right - minSize)
+            val top = (area.top + dy).coerceIn(0f, area.bottom - minSize)
+            NormalizedSearchArea(left, top, area.right, area.bottom)
+        }
+        SearchAreaCorner.TopRight -> {
+            val right = (area.right + dx).coerceIn(area.left + minSize, 1f)
+            val top = (area.top + dy).coerceIn(0f, area.bottom - minSize)
+            NormalizedSearchArea(area.left, top, right, area.bottom)
+        }
+        SearchAreaCorner.BottomLeft -> {
+            val left = (area.left + dx).coerceIn(0f, area.right - minSize)
+            val bottom = (area.bottom + dy).coerceIn(area.top + minSize, 1f)
+            NormalizedSearchArea(left, area.top, area.right, bottom)
+        }
+        SearchAreaCorner.BottomRight -> {
+            val right = (area.right + dx).coerceIn(area.left + minSize, 1f)
+            val bottom = (area.bottom + dy).coerceIn(area.top + minSize, 1f)
+            NormalizedSearchArea(area.left, area.top, right, bottom)
+        }
     }
 }
+
+/** Accessibility corner step; dx/dy are signed 5% travel directions. */
+internal fun resizeSearchAreaByStep(
+    area: NormalizedSearchArea,
+    corner: SearchAreaCorner,
+    horizontalStep: Int,
+    verticalStep: Int,
+    viewportWidth: Float,
+    viewportHeight: Float,
+): NormalizedSearchArea? = resizeSearchArea(
+    area,
+    corner,
+    horizontalStep * viewportWidth * 0.05f,
+    verticalStep * viewportHeight * 0.05f,
+    viewportWidth,
+    viewportHeight,
+)
 
 /** Filters occurrences only when every referenced raw quad fits inside the selected area. */
 internal fun filterOccurrencesToArea(

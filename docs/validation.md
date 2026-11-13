@@ -523,3 +523,494 @@ zero failures/errors/skips**, Android lint (**14 warnings, zero errors**) and sh
 compilation. git diff --check and the changed-Kotlin 100-column check passed. The iOS task verifies
 shared-source compilation only. No APK or device/runtime test was run. Full aggregate log:
 work/redesign/dialogs/final-checks.log.
+
+
+## Phase 7 Android camera timing diagnostics — 2026-11-06
+
+Debug builds now report bounded, mode-separated camera timing summaries under `LTF.CameraTiming`.
+The 64-record buffer records delegate submission to SDK callback (recognition plus callback
+scheduling), callback entry through snapshot adaptation, and only the synchronous `onState`
+delivery interval. Live and capture statistics and cadence are separate. Tracker deliveries record
+accepted/rejected counts, observed identity differences, actual frame dimensions and rotation;
+unavailable rejection reasons remain unspecified. Summaries are event-driven and limited to one
+per two seconds, with no recognized text, query or image logging. Release builds use no observer.
+Diagnostic clock and logging failures are isolated from publication and capture ownership.
+
+Three diagnostic host tests verify bounds, classified statistics, rate limiting and fresh instances.
+Ten production capture-ownership tests include throwing observers and exact fake-clock stage
+boundaries. Capture pixel copy, Compose scheduling and drawing are not measured; these diagnostics
+do not establish full freeze-to-highlight latency or a recognition speed improvement. A device
+trace from the delayed case is still needed before selecting a performance correction.
+
+## Phase 8 Live scanner composition — 2026-11-06
+
+The live scanner now uses a compact app bar, an opaque status band, the weighted camera viewport,
+and one raised bottom dock for search configuration and capture. Manual query entry and list
+identity no longer occupy the large top form card. The query remains at the same composition site
+when IME, window height or font scaling hides the preview, retaining focus and edits. Options stays
+reachable; compact content scrolls. Manager and retained-source controls keep their prior paths.
+
+Native light/dark manual and list fixtures measured **744dp safe content and 400dp image viewports**
+at 360×800 and density 1.0. Tests verify 48dp secondary and 52dp capture targets, action routing,
+saving/cancel-capture stability, and unchanged image bounds across ordinary status messages,
+including full unavailable/area/retained-outline wording. An actual App fixture verifies the
+viewport disappears with IME insets and 1.5 font scale while the query remains focused and editable;
+scrolling exposes Options and capture. Nine theme/layout host tests passed. Native captures use an
+opaque camera placeholder and do not establish physical camera compositing or device IME behavior.
+
+Final checks passed Android debug Kotlin compilation, **351 host tests across 49 suites with zero
+failures/errors/skips**, Android lint (**14 warnings, zero errors**) and shared iOS simulator
+compilation. `git diff --check` and changed-Kotlin import/100-column checks passed; no Kotlin
+formatter is configured. The iOS task verifies shared-source compatibility only. No APK or device
+run was performed. Native captures and the final aggregate log are in
+`work/demo-2/live-dock/`; final aggregate: `final-checks.log`.
+
+## Phase 9 Thin OCR outlines — 2026-11-06
+
+Live, frozen, imported and exported OCR outlines now share one adaptive stroke rule: the black
+outer stroke is capped at 2dp in Compose and 2 source pixels in exported images, and shrinks to
+12% of the quad's minimum perpendicular span. The foreground stroke is half that computed width.
+The shared geometry helper uses Double projections and rejects invalid or degenerate quads. Both
+renderers compute each grouped width once and retain the existing all-black-then-color paint order.
+
+Geometry tests cover the maximum width, 6px text height, rotated and vertical quads, skew, subpixel
+geometry and invalid input. Native graphics tests render a 6px-high text-like glyph with a white
+counter through density-2 Compose and the PNG renderer; both preserve the black stem and white
+counter. A half-pixel PNG overlap checks the earlier foreground color against an exact production
+reference. Existing renderer tests now account for antialiasing with fixed source-color blend
+expectations and independent Paint/Stroke references. Negative checks reject missing foregrounds
+and known wrong colors; source pixels, ownership, rotation and stale-share checks remain covered.
+
+Final checks passed Android debug Kotlin compilation, **357 host tests across 50 suites with zero
+failures/errors/skips**, Android lint (**14 warnings, zero errors**) and shared iOS simulator
+compilation. `git diff --check` and the changed-line 100-column audit passed. The iOS task verifies
+shared-source compatibility only. Density-2 Compose, PNG, and overlap captures were visually
+inspected in `work/thin-outlines/`. No APK or device run was performed.
+
+
+## Acceptance follow-up — 2026-11-07
+
+The canonical aggregate command `./gradlew :androidApp:compileDebugKotlin :shared:testAndroidHostTest :androidApp:lintDebug :shared:compileKotlinIosSimulatorArm64 --console=plain --rerun-tasks` completed successfully (73 tasks, 1m20s). Android host XML reports **357 tests across 50 suites, zero failures/errors/skips**. Android lint reports **14 warnings and zero errors**; shared iOS simulator compilation passed. The full run log is `work/acceptance-2026-11-07/baseline-checks.log`.
+
+Reviewed native captures include density-2 Compose/PNG outline and overlap pixels, live manual/list docks, compact/large-font controls, landscape controls, retained hidden viewport, combined dark long-list content, still navigation, and light/dark large-text Matches. No actionable host-capture issue was identified. These are host fixtures; they do not establish physical display readability, runtime touch/focus behavior, camera composition, or assistive-technology semantics. No phone was connected. The device interaction, scaling, TalkBack, and camera-timing checklist remains pending at `outputs/acceptance-2026-11-07/README.md`.
+
+The timing filter is `adb logcat -v threadtime -s LTF.CameraTiming:D '*:S'`. The diagnostic stages are delegate submission to SDK callback (`ocr`), callback-to-snapshot adaptation (`snapshot`), and synchronous `onState` delivery (`delivery`); pixel-copy, Compose scheduling/drawing, and end-to-end freeze-to-visible latency are outside coverage. No device timing values are claimed.
+
+## Direct live-area editing — 2026-11-07
+
+Added normalized move and four-corner resize helpers with anchored opposite corners, 20% minimum bounds, edge clamping and deterministic clamped handle hit targets. The production preview overlay uses down-position hit testing, total preview-local displacement, slop-crossing movement, multi-pointer cancellation and 48dp accessible corner controls with directional resize/move actions. An editor session keeps draft/full-frame changes temporary, rejects stale tokens/revisions and commits only through the existing area owner. Precision-slider Apply returns a draft when nested; its standalone fallback remains guarded by the owner revision.
+
+Host coverage includes all-corner geometry, invalid viewport/delta inputs, minimum/clamp behavior, edge/overlap hit selection, editor Apply/Cancel/Back-equivalent invalidation/full-frame and stale-session behavior, slider draft-only return, and Android MotionEvent down/move/up for interior move, corner resize, minimum clamp, outside no-op and multi-pointer cancel. Five editor captures (light, dark, paper background, minimum and full frame) were inspected; the paper capture confirms the black under-stroke preserves the dashed boundary on white. The canonical command `./gradlew :androidApp:compileDebugKotlin :shared:testAndroidHostTest :androidApp:lintDebug :shared:compileKotlinIosSimulatorArm64 --console=plain` passed: 363 host tests in 50 suites with zero failures/errors/skips, Android lint 14 warnings and zero errors, and shared iOS simulator compilation. `git diff --check` and the changed-Kotlin 100-column audit passed. The final log and captures are in `work/direct-area/`. Host tests do not validate a physical camera feed, actual device density/input timing, or TalkBack traversal; device testing remains pending.
+
+### Accepted review correction cycle — 2026-11-07
+
+The editor now tracks the original pointer manually from down through touch slop; any second pointer cancels before draft mutation or event consumption, and lifting the original before slop leaves the draft unchanged. Each named corner exposes left/right/up/down resize actions; their production step helper is tested for inward/outward changes and opposite-edge anchoring. The movable-region accessibility node now follows the selected bounds. Precision dialogs use an opening token for updates and dismissal, including standalone Apply/Full frame callbacks; stale Apply, Cancel and dismiss callbacks cannot affect a reopened dialog. Opening Precise from a pending Full frame starts at 100%×100%, and the untouched result remains the null draft.
+
+The full `:shared:testAndroidHostTest` suite passed after these corrections. Added regressions cover a custom-area down/move/up drag, multi-touch before slop, original-pointer lift before slop, all 16 corner/cardinal resize cases, bounds and labels for the movable region and four handles, stale dialog actions across reopen and editor-session changes, and Full frame → Precise → Apply without edits. Refreshed overlay and precision screenshots are in `work/direct-area/` and were inspected. The coordinator owns the final canonical aggregate run after this source revision; physical-device, real camera and TalkBack checks remain pending.
+
+
+Final verification also guards the Precise opener itself against captured callbacks from an older
+editor. The App uses the production session's tested callback, checking its current token, owner
+revision and live source/visibility before opening a dialog. Independent correction verification
+passed with device limitations. The final canonical aggregate passed in 43s: **368 host tests in
+50 suites, zero failures/errors/skips**, Android lint **14 warnings and zero errors**, Android debug
+compilation and shared iOS simulator compilation. No APK or device run was performed.
+
+
+## Documentation, release and performance review — 2026-11-07
+
+Current architecture/requirements and the implementation record now describe the live dock,
+schema-5 preferences, per-entry colours, branded theme defaults and direct area editing. The user
+reported positive testing feedback for the preceding build; this is not a completed historical
+scenario matrix and does not validate the new editor. One post-commit import-order correction is
+included; the current import/whitespace checks passed.
+
+Release preparation adds explicit legacy and modern saved-search backup allowlists, keeps the
+foreground vector byte-identical when moving it out of the obsolete v24 directory, and adds a
+monochrome layer to both adaptive icons. The merged release manifest retains the existing app ID,
+version and non-exported share provider, with release debugging disabled by default. Release Kotlin,
+manifest/resource processing and lint passed together with the canonical debug/shared checks.
+The final host task was UP-TO-DATE; its current XML contains **368 tests across 50 suites, zero
+failures/errors/skips**. Both debug and release lint report **11 warnings and zero errors**; the
+remaining warnings concern tool/dependency updates. No dependency update or lint suppression was
+introduced. Moving the foreground initially exposed stale debug incremental resources; a forced
+rerun resolved that build-cache issue. Final log: `work/release-readiness/final-checks.log`.
+
+The source-based performance review records per-operation resource limits and existing ownership,
+bounds and quota coverage in architecture.md. It establishes no whole-process memory, throughput,
+thermal or battery measurement and introduces no speculative optimization. User device checks remain
+pending for the new gestures, TalkBack, themed launcher, backup/restore and sustained performance.
+No APK/bundle, signing, installation, publishing or device run was performed.
+
+## Shared live and retained search dock — 2026-11-08
+
+Live, frozen and imported search now use one editable query and primary-action dock at the same
+App composition site. Freeze frame, Resume scanning and Return to camera occupy the same full-width
+52dp slot. Retained-image zoom, occurrence navigation/copy, Terms, Results and Lists remain
+available through the existing controls. More contains Lists/share, Options stays in the app bar,
+and share cancellation calls the current share owner. The retired collapsing inspection header
+was removed; its source-return dispatcher remains in use. Direct area editing keeps its own footer.
+
+The source-equivalent 360x800 native ComposeView fixtures use the same query, font scale, window
+insets, app bar, status placement, retained tools and dock siblings for live, frozen and imported
+states. Query bounds were x=16..344dp, y=576..640dp; primary-action bounds were x=16..344dp,
+y=744..796dp for all three states in light/dark themes, with and without a selected occurrence.
+Viewport heights measured 400dp live, 344dp frozen/imported by default, and 276dp frozen/imported
+with an occurrence selected. The earlier retained-only fixture measured 528dp / 460dp before the
+shared dock. Every current viewport remained positive. The compact 320x720 font 1.4, 360x640 font
+1.25 and 800x360 font 1.25 fixtures use the production sibling hierarchy and insets and show the
+query, contextual actions and primary slot through the existing scrolling path. The actual App
+host fixture preserved query focus across IME visibility and large-font/hidden-preview changes.
+These are host-rendered checks, not physical-device camera checks.
+
+Validation after the dock changes: the focused dock, retained source and App IME tests passed. The
+canonical `:androidApp:compileDebugKotlin :shared:testAndroidHostTest :androidApp:lintDebug
+:shared:compileKotlinIosSimulatorArm64` run passed after the final source revision: 368 host tests
+in 50 suites, zero failures/errors/skips, Android lint 11 warnings and zero errors, and iOS
+simulator compilation. The stage log and inspected captures are held in the ignored coordinator
+workspace. Physical-device camera, keyboard and accessibility checks remain deferred to the user.
+
+## Feedback language and camera recovery — 2026-11-08
+
+Options now says “Contains text” and explains whole words with the cat/catalog example. Both query
+fields say “Find text”; visible live-area labels and resize handles say “Scan area”. Custom colors
+use a localized “Custom color” label with the existing swatch, while the advanced RGB editor keeps
+the exact hexadecimal preview and Apply/Cancel behavior. Help now describes the bundled on-device
+recognizer, system photo picker, clipboard, share sheet and saved Android settings without claiming
+that system handoffs or backups never leave the device.
+
+Search-result availability logic is unchanged. A separate resolver supplies import, permission,
+startup, pause, error, cause-neutral unavailable, hidden-preview, area-mapping and current-text guidance;
+it returns no explanation for available results or a search with no usable active terms. The
+results action remains “Search results”, and unavailable counts remain hidden. Camera preview
+feedback offers its existing Retry camera action after a preview stream pauses, as well as after an
+error. The retry callback is guarded by the preview attempt it belongs to. Paused feedback and Retry are
+stacked with non-overlapping bounds and a minimum 48dp recovery target. Host tests combine the
+production live frame tracker, camera feedback layer and status region through Starting, stream,
+pause, retry, replacement attempt, hidden teardown/fresh start and error states; startup produces no
+paused status or fabricated match. Stale stream and stale retry callbacks cannot advance a newer
+attempt. Importing/freezing take priority over residual camera feedback; missing retained sources get
+recovery guidance, while existing retained content waiting to be recognized remains Waiting.
+
+Final canonical validation passed: `:androidApp:compileDebugKotlin`, `:shared:testAndroidHostTest`
+(372 tests, 0 failures, 0 errors, 0 skipped), `:androidApp:lintDebug` (11 warnings, 0 errors) and
+`:shared:compileKotlinIosSimulatorArm64`. The exact command log is
+`/Users/artemii/Documents/Codex/2026-10-30/rea/work/journey-refresh/feedback/final-checks.log`.
+Host-rendered Compose checks cover the updated options/help/results/camera feedback UI at compact
+and large text sizes. No physical-device, camera/OCR accuracy or timing, TalkBack, system picker,
+clipboard, share destination, or backup/restore checks were performed.
+
+
+The correction-cycle Compose captures are in `/Users/artemii/Documents/Codex/2026-10-30/rea/work/journey-refresh/feedback/`: `camera-feedback-paused-retry-light.png`, `camera-feedback-paused-retry-dark-large-text.png`, `search-results-importing-dark.png`, `search-results-freezing-dark.png`, `search-results-missing-import-dark.png`, `search-results-missing-frame-dark.png`, `options-sheet-dark-compact.png`, `options-sheet-light.png`, `highlight-palette-dark-custom-label-large-text.png`, `highlight-palette-light-ready-gated.png` and `custom-highlight-editor-dark-large-text.png`. The paused captures show the message and Retry with a visible gap; missing/import/freezing dialogs show recovery text without stale numeric counts; options/palette captures show friendly labels, and the advanced editor retains its exact hex preview. The final host XML totals 372 tests across 50 suites, with zero failures, errors or skips. `git diff --check`, changed Kotlin import-order audit, 100-column audit and case-insensitive visible “live area” wording audit passed. No physical device, OCR accuracy/timing, camera permission/system-picker, TalkBack or share/backup handoff verification was performed.
+
+## Live capture assistance — 2026-11-08
+
+Hardware capture controls now use production common lease ownership and a narrow CameraX adapter.
+Focused ownership/adapter/rendered-control/tracker/frozen-owner/lifecycle checks passed
+**27 tests**, covering
+stale UI leases, updates, detach and delayed completion; observed zoom/torch capabilities; AF-only
+focus and actual result flags; synchronous, failed and cancelled futures; optimistic zoom state;
+rejected completion executors including background-to-main recovery; snapshot/generation and
+capture gates at zoom start/end; freeze illumination; cleanup failures; and unsupported controls.
+Production control-row renders at 320dp and 1.5× text were inspected, including 48dp targets,
+zoom-boundary disabling, observed light toggle semantics and transient-readiness bounds.
+Lifecycle tests verify permission refresh without feed replacement across pause/resume, and one
+restart epoch plus retired-session teardown across a stop/start coalesced before a Compose frame.
+
+After the final source changes, the focused command passed again and the canonical aggregate
+passed Android debug Kotlin compilation, the full host suite (**382 tests across 54 suites, zero
+failures/errors/skips**), Android lint (**zero errors, 11 warnings**) and iOS simulator shared
+compilation. The final aggregate completed in 26s, with 17 tasks executed and 56 up-to-date.
+Whitespace, changed/new Kotlin 100-column checks and one ASCII-sorted explicit import-block checks
+pass. No Kotlin formatter is configured. Existing validation entries remain unchanged. Logs and
+native control renders are outside the checkout in the capture scratch directory. A generated-output
+hashing stall was diagnosed, its daemon trace/log and generated outputs preserved there, and one
+clean-output recovery succeeded. Final counts use only clean regenerated XML reports.
+
+These are production owner/adapter/component host checks with controlled camera futures and real
+LiveData, plus session wiring inspection. They do not establish physical camera behavior or a full
+App/device render. Hardware zoom/crop/rotation alignment, autofocus effectiveness, flashlight
+behavior through real capture/retry/background transitions, TalkBack, and rapid device lifecycle
+transitions remain pending. Retained-image transforms, OCR engine and analyzer execution were not
+changed; existing source/projection/area/copy/recognizer-lifetime tests remain in the passing suite.
+No APK or device test was run; iOS camera support remains explicitly unavailable.
+
+
+### Integrated camera controls and feedback — 2026-11-08
+
+The accepted camera patch was integrated with the accepted language/recovery changes. The resolved
+camera feed preserves the tested Starting-before-session and attempt-bound Retry helpers, spaced
+paused recovery UI, and the stop-only feed restart key while passing live control ownership/context.
+The complete prior validation history is preserved. Independent integration review passed with
+device limitations. The canonical four-task run passed on the merged source: **386 tests across
+54 suites, zero failures/errors/skips**, Android lint **11 warnings and zero errors**, Android
+compilation and shared iOS simulator compilation. Log: `work/journey-refresh/integration/final-checks.log`.
+The isolated worktree had older generated duplicate report copies; canonical report filenames
+correspond to its recorded 382 tests/54 suites. Merged MAIN reports are the integration evidence.
+No APK, installation, device OCR/alignment/focus/torch, or TalkBack check was performed.
+
+## Still contextual copying and dialog ownership — 2026-11-08
+
+The occurrence dialog now offers Copy line alongside Copy matched text, with Show on image as its
+primary action. Both copy payloads validate the selected original occurrence and its line context
+against reconstructed OCR elements, preserving normalized whitespace and original case. The current
+source ID, exact snapshot, owner token, search/mode, selection and pre-write context guards remain
+in force; copying remains available when locating the image is unavailable. Dialog-opening and
+request identities prevent an earlier suspended clipboard completion or retained callback from
+changing a reopened dialog. Disposed remembered sessions are invalidated, including replacement
+with the same keys. A platform clipboard write that has already started cannot be revoked; tests
+separately verify zero writes before a stale start and suppressed UI completion after a valid start.
+
+The production content assembly reproduced caption-dependent viewport resizing when moving from a
+short navigation caption to a long saved-list term. A one-line ellipsized caption now
+keeps the viewport and focused transform stable across previous/next navigation; its full semantic
+description is retained. This reproduction established resizing, not a downstream transform reset.
+The dialog actions scroll into full view at 320×480dp/1.5× and 320×360dp/2× font, with at least 48dp
+hit targets; short windows require scrolling. Native actions exercise matched and line clipboard
+entries, selection, Show on image and cancellation, including line copy with locating unavailable.
+
+Focused coordinator/session/row/native-Compose checks passed **27 tests**. The expanded frozen-owner
+coordinator suite then passed **3 tests**, including exact normalized line context from OCR elements
+and zero writes for a replaced owner sharing the same snapshot and frame identity. The final
+canonical command passed Android debug Kotlin compilation, the complete host suite (**396 tests across
+55 suites; zero failures, errors or skips**), Android lint (**11 warnings, zero errors**) and shared
+iOS simulator compilation. Explicit ASCII-sorted contiguous imports, changed/new Kotlin 100-column
+and tab checks, `git diff --check`, and preservation of this document's historical prefix passed.
+No repository Kotlin formatter is configured. Logs and 117 regenerated native PNGs are outside the
+checkout in `/Users/artemii/Documents/Codex/2026-10-30/rea/work/journey-refresh/context-copy/`.
+The final log is `correction-final-checks.log`; XML counts are preserved in
+`correction-results-summary.txt` and `correction-host-results/`. Representative captures are
+`retained-dark-live-selected-false.png`, `retained-light-frozen-selected-true.png`,
+`still-matches-dialog-dark-tall-large-text-all-actions.png` and
+`still-matches-dialog-dark-short-double-text-actions.png`. Dock captures show current Find text and
+Contains text language. These are host fixtures and production workflow checks, not a full App or
+physical-device render. Physical clipboard behavior, TalkBack, camera/OCR accuracy, capture-control
+hardware behavior and real crop/rotation/zoom alignment remain pending. No APK, device query,
+installation, network OCR, alerts, persistence or engine changes were performed.
+
+## Scanner screen restructuring — 2026-11-12
+
+Scope: `App.kt` split into the `screen`, `inspection`, `scanarea`, `status` and `lists` packages
+with state holders and region composables; large shared files split by declaration; four
+intended behaviour changes (saved list draft kept across Activity recreation, list-transfer
+context predicate compares captured values, one results-label rule, snackbars for copy, share
+and list-transfer outcomes); typed saved-search errors; remaining screen copy moved to string
+resources. See [architecture](architecture.md) for the resulting structure.
+
+What ran on the development host: `:shared:testAndroidHostTest` from a clean test state,
+`:shared:compileKotlinIosSimulatorArm64` and `:androidApp:compileDebugKotlin`. The final host
+run completed **427 tests with 0 failures**.
+
+Two tests had failed since 2026-11-09, when `padding(bottom = 16.dp)` was added to the shared
+`FinderPrimaryAction`: `LiveTextFinderThemeTest.productionLiveManualDockPreservesViewportAndRoutesActions`
+and `StatusFeedbackTest.mainScannerProductionAssemblyMeasuresPreviewAndKeepsActionsReachable`.
+The padding is kept by decision, and the expectations follow it: the live viewport floor in a
+744dp safe height is 384dp instead of 400dp, and the main-scanner preview must be at least 49%
+of the safe height instead of half (it measures 368dp of 744dp). The first test then showed that
+the dock was 16dp taller with a primary action than with Cancel freeze, so the viewport changed
+size on freeze. The dock now reserves the same bottom space for every action alternative, and
+the unchanged size assertions pass.
+
+File moves were compared with the previous commit and differ only in `package` and `import`
+lines. The declaration splits were compared line by line; three functions changed from
+`private` to `internal` because their callers moved to another file.
+
+Thirteen host test classes left Compose's process-wide UI dispatcher marked as scheduled with
+nothing queued, which stopped recomposition for later tests in the same Robolectric sandbox.
+Each now ends with `drainMainLooper()`. A temporary probe test placed after every host test
+class, in that class's sandbox, reported the thirteen before the fix and none after; the probes
+are not in the repository.
+
+Test changes: call sites of the dock, search bar and capture controls were regrouped into
+`FinderSearchBar` and `FinderCaptureActions`; assertions on saved-search error text became
+assertions on `SearchSessionError`; two expected status texts changed because unreadable or
+unsaved data now shows a generic message instead of the raw exception text. No assertion was
+removed.
+
+No repository Kotlin formatter is configured; changed files were checked for the 100-column
+limit only. Not run: any device or emulator, TalkBack, lint, APK generation. Unverified on a
+device: snackbar position and timing, the saved list draft across rotation, and the freeze,
+import, scan-area editing, match navigation and copy flows after the restructuring.
+
+## Phase 1 element screenshot baselines — 2026-11-12
+
+Before changes, `./gradlew :shared:cleanTestAndroidHostTest :shared:testAndroidHostTest
+:shared:compileKotlinIosSimulatorArm64 :androidApp:compileDebugKotlin --no-build-cache
+--console=plain` passed. The suite ran 427 tests across 61 suites with zero failures, errors,
+or skips. Both compilation targets succeeded.
+
+A single Roborazzi 1.76.0 probe on Robolectric 4.17 and SDK 35 passed record and unchanged
+verification. Changing the probe from blue to red failed verification and produced actual and
+comparison PNGs. The element tests use the Roborazzi library directly from the host test task.
+
+Ten light-theme fixtures live in [the element baseline directory](../shared/src/androidHostTest/screenshots/element).
+Each is 360 × 112 pixels at mdpi with US English, font scale 1.0, and dynamic color off.
+The fixtures cover the enabled, disabled, and destructive primary action, the secondary action,
+the normal, error, and actionable context message, both status summary layouts, and the ready
+live capture control row.
+
+Record or update the element baselines explicitly.
+
+```sh
+./gradlew :shared:cleanTestAndroidHostTest :shared:testAndroidHostTest \
+  --tests '*ElementScreenshotTest' -PltfRecordScreenshots=true --no-build-cache
+```
+
+Verify the entire host suite and compare existing baselines.
+
+```sh
+./gradlew :shared:cleanTestAndroidHostTest :shared:testAndroidHostTest --no-build-cache
+```
+
+Removing `finder-primary-action__enabled__light.png` failed verification without recreating it.
+Changing the enabled action label from Find text to Cancel failed verification for that image
+and produced `_actual.png` and `_compare.png` files under
+`shared/build/reports/screenshot-tests/diffs`. The original fixture and label were restored.
+
+Three consecutive uncached clean host runs and a fourth after `./gradlew clean --no-build-cache`
+each passed 437 tests across 62 suites with zero failures, errors, skips, or differing images.
+The fourth run also passed `:shared:compileKotlinIosSimulatorArm64` and
+`:androidApp:compileDebugKotlin`. There is no configured Kotlin formatter. These host renders
+were verified on the development host. Device rendering, including the native camera preview,
+and pixel stability on other hosts remain unverified.
+
+## Phase 2 region and dialog screenshot baselines — 2026-11-12
+
+The clean checkout at `6018ed3` passed 437 host tests across 62 suites before changes.
+Android debug Kotlin and shared iOS simulator Kotlin compilation both succeeded.
+
+Phase 2 adds 48 PNGs in [the region baseline directory](../shared/src/androidHostTest/screenshots/region).
+They cover six dock states, all four top region layouts, list-manager search and capture
+controls, three saved-list states, still inspection and match navigation, eight dialog states,
+and the Options sheet. All states have a light fixture. The dock, top region, and recognition
+details dialog also have dark and 130% font-scale fixtures.
+
+The region tier renders at 360 × 560 pixels at mdpi. Element and region PNGs trim unused
+background equally on opposite sides and retain a four-pixel gutter where the viewport allows.
+Both recording and verification apply the same crop, preserving the content position relative
+to the viewport center. Dialog and sheet fixtures capture the actual Robolectric window after advancing the
+Compose clock. The Options sheet is expanded. The list
+editor is scrolled to show the validation error and actions. Help and scan-area fixtures capture
+the initial viewport of their scrollable content.
+
+The crop changed the PNG dimensions for both tiers. To refresh all screenshot fixtures after a
+shared rendering change, use the same command with `--tests '*ScreenshotTest'` as the filter.
+
+Record or update only the Phase 2 baselines.
+
+```sh
+./gradlew :shared:cleanTestAndroidHostTest :shared:testAndroidHostTest \
+  --tests '*RegionScreenshotTest' --tests '*DialogScreenshotTest' \
+  -PltfRecordScreenshots=true --no-build-cache
+```
+
+Verify all host tests and existing baselines.
+
+```sh
+./gradlew :shared:cleanTestAndroidHostTest :shared:testAndroidHostTest --no-build-cache
+```
+
+Removing `confirm-destructive-dialog__delete-list__light.png` failed verification and left the
+file absent. Temporarily shifting the enabled primary action down 8 dp failed verification for
+`finder-primary-action__enabled__light.png` and produced actual and comparison PNGs under
+`shared/build/reports/screenshot-tests/diffs`. The fixture and original button position were
+restored.
+
+Three consecutive uncached clean runs each passed 463 tests across 64 suites with zero failures,
+errors, skips, or differing images across all 58 baselines. The third run also passed
+`:shared:compileKotlinIosSimulatorArm64` and `:androidApp:compileDebugKotlin`. There is no
+configured Kotlin formatter. Physical-device rendering, including native camera content, and
+pixel stability across hosts remain unverified.
+
+## Phase 3 screen screenshot baselines — 2026-11-12
+
+Before changes, the clean checkout at `e9fca65` passed 463 host tests across 64 suites
+with 58 matching baselines. Android debug Kotlin and shared iOS simulator Kotlin compilation
+both succeeded.
+
+The [screen baseline directory](../shared/src/androidHostTest/screenshots/screen) contains nine
+360 × 800 PNGs at mdpi. Five use the real `App()` with camera permission denied: light and
+dark permission screens, plus light list manager, Options, and Help. The tests use the actual
+Compose actions to open those states and composite the active window over the app for Options
+and Help. Dark mode also sets the Robolectric night qualifier because `App()` selects its
+theme from the system.
+
+The four light `assembled-finder` fixtures combine `FinderContentAssembly` and production UI
+regions with a deterministic receipt bitmap. They cover live matches, a frozen frame, an imported
+image, and scan-area editing. The host renders these UI states without a physical camera, file
+picker, or OCR. Full-screen captures retain the viewport bounds to preserve layout position.
+
+Record or update only the Phase 3 baselines.
+
+```sh
+./gradlew :shared:cleanTestAndroidHostTest :shared:testAndroidHostTest \
+  --tests '*AppScreenScreenshotTest' --tests '*AssembledScreenScreenshotTest' \
+  -PltfRecordScreenshots=true --no-build-cache
+```
+
+Verify the entire host suite and existing baselines.
+
+```sh
+./gradlew :shared:cleanTestAndroidHostTest :shared:testAndroidHostTest --no-build-cache
+```
+
+Removing `app__list-manager-open__light.png` failed verification and left the file absent.
+Temporarily setting the app's manual query to `invoice` also failed for that image and produced
+actual and comparison PNGs under `shared/build/reports/screenshot-tests/diffs`. The original
+fixture and test setup were restored.
+
+Three consecutive uncached clean runs each passed 471 tests across 66 suites with zero failures,
+errors, skips, or differing images across all 67 baselines. The third run also passed
+`:shared:compileKotlinIosSimulatorArm64` and `:androidApp:compileDebugKotlin`. The project has no
+configured Kotlin formatter. Device rendering, native camera content, OCR results, and
+cross-host pixel stability remain unverified by these screenshot tests.
+
+## Phase 4 screenshot consolidation — 2026-11-12
+
+The clean checkout at `795bd5e` passed 471 host tests across 66 suites with all 67
+baselines matching. Android debug Kotlin and shared iOS simulator Kotlin compilation succeeded.
+
+Eight legacy host test classes use the shared bitmap capture or PNG export functions.
+`LTF_VISUAL_OUTPUT_DIR` still enables their original filenames and measurement files.
+These exports are optional inspection artifacts. Baselines live under
+`shared/src/androidHostTest/screenshots/{element,region,screen}`.
+
+Verify all host tests and baselines.
+
+```sh
+./gradlew :shared:cleanTestAndroidHostTest :shared:testAndroidHostTest --no-build-cache
+```
+
+Explicitly refresh the baseline PNGs.
+
+```sh
+./gradlew :shared:cleanTestAndroidHostTest :shared:testAndroidHostTest \
+  --tests '*ScreenshotTest' -PltfRecordScreenshots=true --no-build-cache
+```
+
+Set `LTF_VISUAL_OUTPUT_DIR` to a writable directory before running the clean verify command
+to also export the legacy PNGs and measurements. For example, after creating the output
+directory, run the verify command prefixed with `LTF_VISUAL_OUTPUT_DIR=/absolute/path`.
+
+Generate the baseline index.
+
+```sh
+./gradlew :shared:generateScreenshotIndex
+```
+
+Open `shared/build/reports/screenshot-index/index.html`. Its thumbnails link to the
+original PNGs, grouped into 10 element, 48 region, and 9 screen fixtures. All 67 links
+resolved. The HTML index is a Git-ignored build output.
+
+Removing `app__list-manager-open__light.png` failed verification and left the reference
+absent. Temporarily adding the query `invoice` failed for that same reference and
+produced actual and comparison PNGs in `shared/build/reports/screenshot-tests/diffs`.
+The reference and test setup were restored.
+
+Three consecutive uncached clean host runs each passed 471 tests across 66 suites with
+zero failures, errors, skips, or differing images across all 67 baselines. The final run
+also passed `:shared:compileKotlinIosSimulatorArm64` and `:androidApp:compileDebugKotlin`.
+One clean run exported the 117 legacy PNGs and two measurement files, all byte-identical
+to the pre-change exports. No Kotlin formatter is configured. The checks cover host
+rendering on the development host. Cross-host pixel stability and physical-device camera,
+OCR, and rendering behavior remain unverified.

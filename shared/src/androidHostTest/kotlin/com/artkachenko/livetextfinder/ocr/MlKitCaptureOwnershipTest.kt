@@ -80,6 +80,10 @@ class MlKitCaptureOwnershipTest {
                 capture = it
                 true
             },
+            diagnostics = CameraTimingDiagnostics(
+                nowNanos = { 3_000_000_000L },
+                log = { throw IllegalStateException("diagnostic sink") },
+            ),
         ) { _, identity -> deliveredIdentity = identity }
 
         assertTrue(analyzer.requestCapture(21))
@@ -113,12 +117,17 @@ class MlKitCaptureOwnershipTest {
         var copies = 0
         var proxyCloses = 0
         val image = SyntheticMediaImage()
+        var delivered = false
         val analyzer = analyzer(
             copyExecutor = copyExecutor,
             copy = {
                 copies++
                 Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888)
             },
+            diagnostics = CameraTimingDiagnostics(
+                nowNanos = { throw IllegalStateException("diagnostic clock") },
+            ),
+            onState = { _, _ -> delivered = true },
         )
 
         analyzer.analyze(imageProxy(image) { proxyCloses++ })
@@ -127,6 +136,45 @@ class MlKitCaptureOwnershipTest {
         assertEquals(0, copies)
         assertTrue(copyExecutor.tasks.isEmpty())
         assertEquals(1, proxyCloses)
+        assertTrue(delivered)
+        analyzer.close()
+    }
+
+    @Test
+    fun productionAnalyzerMeasuresCallbackSnapshotAndStateBoundariesSeparately() {
+        val values = ArrayDeque(
+            listOf(
+                1_000_000L,
+                11_000_000L,
+                41_000_000L,
+                44_000_000L,
+                49_000_000L,
+                50_000_000L,
+                51_000_000L,
+            ),
+        )
+        val logs = mutableListOf<String>()
+        var delivered = false
+        val analyzer = MlKitTextAnalyzer(
+            executor = directExecutor,
+            captureIdentity = { ticket },
+            recognizer = recognizer {
+                Tasks.forResult(Text("measured", emptyList<Text.TextBlock>()))
+            },
+            diagnostics = CameraTimingDiagnostics({ values.removeFirst() }, logs::add),
+        ) { state, identity ->
+            assertEquals(ticket, identity)
+            assertEquals(OcrStatus.Scanning, state.status)
+            delivered = true
+        }
+
+        analyzer.analyze(imageProxy(SyntheticMediaImage()) { })
+        Shadows.shadowOf(Looper.getMainLooper()).idle()
+
+        assertTrue(delivered)
+        assertTrue(logs.single().contains("ocr=n=1,p50=10ms"))
+        assertTrue(logs.single().contains("snapshot=n=1,p50=30ms"))
+        assertTrue(logs.single().contains("delivery=n=1,p50=5ms"))
         analyzer.close()
     }
 
@@ -383,6 +431,8 @@ class MlKitCaptureOwnershipTest {
         },
         onCaptured: (CapturedCameraFrame) -> Boolean = { false },
         onCaptureFailure: (Long, String) -> Unit = { _, _ -> },
+        diagnostics: CameraTimingDiagnostics? = null,
+        onState: (OcrUiState, FrameIdentity) -> Unit = { _, _ -> },
     ): MlKitTextAnalyzer {
         return MlKitTextAnalyzer(
             executor = directExecutor,
@@ -392,7 +442,9 @@ class MlKitCaptureOwnershipTest {
             copyImage = copy,
             onCaptured = onCaptured,
             onCaptureFailure = onCaptureFailure,
-        ) { _, _ -> }
+            diagnostics = diagnostics,
+            onState = onState,
+        )
     }
 
     private fun recognizer(

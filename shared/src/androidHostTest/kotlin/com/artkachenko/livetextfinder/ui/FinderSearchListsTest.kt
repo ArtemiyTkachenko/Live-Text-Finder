@@ -1,8 +1,6 @@
 package com.artkachenko.livetextfinder.ui
 
 import android.app.Activity
-import android.graphics.Bitmap
-import android.graphics.Canvas
 import android.os.Looper
 import android.view.View
 import android.widget.FrameLayout
@@ -30,15 +28,15 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
-import com.artkachenko.livetextfinder.AppContentColumn
+import com.artkachenko.livetextfinder.captureScreenshotBitmap
 import com.artkachenko.livetextfinder.search.PersistedSearchState
 import com.artkachenko.livetextfinder.search.SavedSearchList
 import com.artkachenko.livetextfinder.search.SearchListEditorState
 import com.artkachenko.livetextfinder.search.SearchSessionController
+import com.artkachenko.livetextfinder.search.SearchSessionError
 import com.artkachenko.livetextfinder.search.SearchSessionStore
 import com.artkachenko.livetextfinder.search.dispatchSearchListSelection
-import java.io.File
-import java.io.FileOutputStream
+import com.artkachenko.livetextfinder.writeVisualScreenshot
 import java.util.concurrent.TimeUnit
 import kotlin.math.roundToInt
 import kotlin.test.Test
@@ -194,7 +192,7 @@ class FinderSearchListsTest {
                 editingId = "list-1",
                 name = "A very long search list name that remains fully readable",
                 terms = "first\nsecond",
-                error = "Enter a list name.",
+                error = SearchSessionError.ListNameBlank,
             ),
         )
         val editorScroll = ScrollState(0)
@@ -356,12 +354,14 @@ class FinderSearchListsTest {
                         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
                             FinderSearchControls(
                                 showTitle = false,
-                                query = "invoice",
-                                onQueryChange = ::ignoreText,
-                                searchListsLabel = "Lists",
-                                onSearchLists = ::ignoreAction,
+                                search = FinderSearchBar(
+                                    query = "invoice",
+                                    onQueryChange = ::ignoreText,
+                                    searchListsLabel = "Lists",
+                                    onSearchLists = ::ignoreAction,
+                                ),
+                                onOptions = ::ignoreAction,
                                 searchContext = "Shopping list · 1 term",
-                                onOptions = ::ignoreAction
                             )
                         }
                         FinderSearchLists(
@@ -428,12 +428,14 @@ class FinderSearchListsTest {
                     ) {
                         FinderSearchControls(
                             showTitle = false,
-                            query = "invoice",
-                            onQueryChange = ::ignoreText,
-                            searchListsLabel = "Close lists",
-                            onSearchLists = ::ignoreAction,
+                            search = FinderSearchBar(
+                                query = "invoice",
+                                onQueryChange = ::ignoreText,
+                                searchListsLabel = "Close lists",
+                                onSearchLists = ::ignoreAction,
+                            ),
+                            onOptions = ::ignoreAction,
                             searchContext = "Monthly review · 2 terms",
-                            onOptions = ::ignoreAction
                         )
                         FinderSearchLists(
                             lists = lists,
@@ -494,12 +496,14 @@ class FinderSearchListsTest {
                     ) {
                         FinderSearchControls(
                             showTitle = false,
-                            query = "invoice",
-                            onQueryChange = ::ignoreText,
-                            searchListsLabel = "Close lists",
-                            onSearchLists = ::ignoreAction,
+                            search = FinderSearchBar(
+                                query = "invoice",
+                                onQueryChange = ::ignoreText,
+                                searchListsLabel = "Close lists",
+                                onSearchLists = ::ignoreAction,
+                            ),
+                            onOptions = ::ignoreAction,
                             searchContext = "Monthly review · 2 terms",
-                            onOptions = ::ignoreAction
                         )
                         FinderSearchLists(
                             lists = listOf(
@@ -594,7 +598,7 @@ class FinderSearchListsTest {
 
         click(nodeWithText(semanticsNodes(), "Save list"))
         assertEquals(
-            "Remove blank term lines. Each line must contain a term or phrase.",
+            SearchSessionError.BlankTermLine,
             editor.value.error,
         )
         assertEquals("Draft list", editor.value.name)
@@ -777,9 +781,7 @@ class FinderSearchListsTest {
     }
 
     private fun assertRendered(fileName: String) {
-        val view = checkNotNull(composeView)
-        val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
-        view.draw(Canvas(bitmap))
+        val bitmap = captureScreenshotBitmap(checkNotNull(composeView))
         val colors = mutableSetOf<Int>()
         for (y in 0 until bitmap.height step 2) {
             for (x in 0 until bitmap.width step 2) {
@@ -793,13 +795,7 @@ class FinderSearchListsTest {
             }
         }
         assertTrue(colors.size > 16, "Expected visible rendered manager content")
-        System.getenv("LTF_VISUAL_OUTPUT_DIR")?.let { directory ->
-            val output = File(directory, fileName)
-            output.parentFile?.mkdirs()
-            FileOutputStream(output).use { stream ->
-                assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream))
-            }
-        }
+        assertTrue(writeVisualScreenshot(bitmap, fileName))
         bitmap.recycle()
     }
 
