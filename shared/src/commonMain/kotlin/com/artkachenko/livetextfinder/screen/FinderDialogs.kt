@@ -149,6 +149,12 @@ internal fun FinderDialogs(
             onHelp = { dialogs.helpOpen = true },
             onDismiss = { dialogs.optionsOpen = false },
             recognitionDetailsEnabled = recognitionDetailsAvailable,
+            onResetView = if (floatingLive && hasStillSource) inspection::resetZoom else null,
+            onOccurrences = if (floatingLive && hasStillSource && inspection.rows.isNotEmpty()) {
+                { inspection.copySession.updateDialogOpen(true) }
+            } else {
+                null
+            },
             onRecognitionDetails = if (floatingLive) {
                 { dialogs.recognitionDetailsOpen = true }
             } else {

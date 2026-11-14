@@ -41,10 +41,12 @@ import livetextfinder.shared.generated.resources.finder_options_search_group
 import livetextfinder.shared.generated.resources.finder_options_title
 import livetextfinder.shared.generated.resources.finder_options_transfer_group
 import livetextfinder.shared.generated.resources.highlight_color_custom_description
+import livetextfinder.shared.generated.resources.inspection_results_occurrences
 import livetextfinder.shared.generated.resources.search_list_export
 import livetextfinder.shared.generated.resources.search_list_import
 import livetextfinder.shared.generated.resources.search_list_transfer_help
 import livetextfinder.shared.generated.resources.status_details_title
+import livetextfinder.shared.generated.resources.still_reset_view
 import org.jetbrains.compose.resources.stringResource
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -70,6 +72,8 @@ internal fun FinderOptionsSheet(
     onDismissRequest: () -> Unit,
     onRecognitionDetails: (() -> Unit)? = null,
     recognitionDetailsEnabled: Boolean = true,
+    onOccurrences: (() -> Unit)? = null,
+    onResetView: (() -> Unit)? = null,
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
@@ -121,6 +125,18 @@ internal fun FinderOptionsSheet(
                     modifier = Modifier.padding(horizontal = 12.dp),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (onResetView != null) {
+                FinderOptionsActionRow(
+                    label = stringResource(Res.string.still_reset_view),
+                    onClick = onResetView,
+                )
+            }
+            if (onOccurrences != null) {
+                FinderOptionsActionRow(
+                    label = stringResource(Res.string.inspection_results_occurrences),
+                    onClick = onOccurrences,
                 )
             }
             if (liveAreaLabel != null || showImport) {
@@ -266,6 +282,8 @@ internal fun FinderOptionsSheetHost(
     onDismiss: () -> Unit,
     onRecognitionDetails: (() -> Unit)? = null,
     recognitionDetailsEnabled: Boolean = true,
+    onOccurrences: (() -> Unit)? = null,
+    onResetView: (() -> Unit)? = null,
 ) {
     val savedSearchEditable = sessionState.loaded && !sessionState.recoveryRequired
     val dismissThen: (() -> Unit) -> () -> Unit = { action ->
@@ -302,5 +320,7 @@ internal fun FinderOptionsSheetHost(
         onDismissRequest = onDismiss,
         onRecognitionDetails = onRecognitionDetails?.let(dismissThen),
         recognitionDetailsEnabled = recognitionDetailsEnabled,
+        onOccurrences = onOccurrences?.let(dismissThen),
+        onResetView = onResetView?.let(dismissThen),
     )
 }

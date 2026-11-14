@@ -111,6 +111,33 @@ class AndroidLiveCaptureControlsTest {
     }
 
     @Test
+    fun pinchSubmitsLatestTargetThroughSuccessiveNativeZoomBoundaries() {
+        val fixture = Fixture()
+        val boundaries = mutableListOf<Boolean>()
+        val adapter = fixture.attach { boundaries += it }
+        val lease = fixture.controls.state.value.lease
+        assertTrue(fixture.controls.beginPinch(lease))
+        assertTrue(fixture.controls.scalePinch(lease, 1.25f))
+        val first = fixture.zoomFuture
+        assertTrue(fixture.controls.scalePinch(lease, 1.2f))
+        assertTrue(fixture.controls.scalePinch(lease, 2f))
+        fixture.controls.endPinch(lease)
+        assertEquals(listOf(1.25f), fixture.zoomRequests)
+
+        fixture.zoom.value = zoomState(1.25f)
+        fixture.zoomFuture = ControlledFuture()
+        first.complete(null)
+        assertEquals(listOf(1.25f, 3f), fixture.zoomRequests)
+        assertTrue(fixture.controls.state.value.zoomPending)
+        assertEquals(listOf(true, false, true), boundaries)
+        fixture.zoom.value = zoomState(3f)
+        fixture.zoomFuture.complete(null)
+        assertEquals(listOf(true, false, true, false), boundaries)
+        assertFalse(fixture.controls.state.value.zoomPending)
+        adapter.close()
+    }
+
+    @Test
     fun zoomHardwareFutureGatesResultsCaptureAndGenerationsOnSuccessFailureAndCancel() {
         for (outcome in listOf("success", "failure", "cancel", "synchronous")) {
             val fixture = Fixture()

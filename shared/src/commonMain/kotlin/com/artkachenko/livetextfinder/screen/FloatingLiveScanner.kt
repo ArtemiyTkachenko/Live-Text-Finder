@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
@@ -14,8 +15,13 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
@@ -75,8 +81,12 @@ internal fun FloatingLiveScanner(
     statusEnabled: Boolean = true,
     matchModeEnabled: Boolean = true,
     messages: @Composable () -> Unit = { Unit },
+    retained: FloatingRetainedControls? = null,
+    retainedViewport: @Composable (Modifier) -> Unit = {},
 ) {
-    val keyboardOpen = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+    val density = LocalDensity.current
+    val keyboardOpen = WindowInsets.ime.getBottom(density) > 0
+    var bottomHeight by remember { mutableIntStateOf(0) }
     val cameraState = liveControls.state.value
     val lease = cameraState.lease
     val cameraActionsEnabled = cameraState.ready && !cameraState.zoomPending &&
@@ -88,15 +98,25 @@ internal fun FloatingLiveScanner(
             .imePadding()
             .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 16.dp),
     ) {
-        val showZoom = !keyboardOpen && maxHeight >= 476.dp && cameraState.hasZoom
+        val showZoom = retained == null && !keyboardOpen && maxHeight >= 476.dp && cameraState.hasZoom
         val showLabels = maxHeight >= 336.dp
+        val showRetainedPills = retained != null && !keyboardOpen && showLabels
+        if (retained != null) {
+            val bottom = with(density) { bottomHeight.toDp() }
+            val top = if (keyboardOpen) 0.dp else 56.dp
+            retainedViewport(
+                Modifier.fillMaxWidth().align(Alignment.TopCenter)
+                    .padding(top = top)
+                    .height((maxHeight - bottom - top).coerceAtLeast(0.dp)),
+            )
+        }
         Column(
             modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             if (!keyboardOpen) {
                 FloatingLiveTopRow(
-                    cameraState = cameraState,
+                    cameraState = if (retained == null) cameraState else LiveCaptureState(),
                     flashEnabled = cameraActionsEnabled && !cameraState.torchPending,
                     onFlash = { liveControls.toggleTorch(lease) },
                     onOptions = onOptions,
@@ -113,10 +133,13 @@ internal fun FloatingLiveScanner(
         ) {
             SnackbarHost(snackbarHostState)
             Column(
+                modifier = Modifier.onSizeChanged { bottomHeight = it.height },
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                if (showZoom) {
+                if (showRetainedPills) {
+                    FloatingRetainedPills(checkNotNull(retained))
+                } else if (showZoom) {
                     val zoomTenths = (cameraState.zoom * 10f).roundToInt()
                     FloatingScannerZoomPill(
                         zoomLabel = stringResource(
@@ -149,7 +172,9 @@ internal fun FloatingLiveScanner(
                 )
                 if (!keyboardOpen) {
                     FloatingScannerActionBar(
-                        actions = listOf(
+                        actions = if (retained != null) {
+                            retainedActions(searchBar, retained)
+                        } else listOf(
                             FloatingScannerAction(
                                 icon = Res.drawable.scanner_list,
                                 label = searchBar.searchListsLabel,

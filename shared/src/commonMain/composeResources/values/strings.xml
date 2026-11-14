@@ -290,4 +290,6 @@
     <string name="scanner_share">Share</string>
     <string name="scanner_camera">Camera</string>
     <string name="scanner_zoom_value">%1$d.%2$d×</string>
+    <string name="scanner_cancel_share">Cancel share</string>
+    <string name="scanner_no_match_selected">– of %1$d</string>
 </resources>

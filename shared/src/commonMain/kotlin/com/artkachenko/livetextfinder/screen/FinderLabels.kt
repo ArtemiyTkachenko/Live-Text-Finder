@@ -10,11 +10,9 @@ import livetextfinder.shared.generated.resources.Res
 import livetextfinder.shared.generated.resources.capture_cancel_freeze
 import livetextfinder.shared.generated.resources.capture_cancel_import
 import livetextfinder.shared.generated.resources.capture_freeze
-import livetextfinder.shared.generated.resources.capture_resume
 import livetextfinder.shared.generated.resources.capture_return_to_camera
 import livetextfinder.shared.generated.resources.inspection_lists
 import livetextfinder.shared.generated.resources.inspection_results
-import livetextfinder.shared.generated.resources.inspection_return_frozen
 import livetextfinder.shared.generated.resources.scan_area_option_custom
 import livetextfinder.shared.generated.resources.scan_area_option_full_frame
 import livetextfinder.shared.generated.resources.search_lists_close
@@ -57,7 +55,7 @@ internal fun finderLabels(
         when (freezeMode) {
             FreezeMode.Live -> stringResource(Res.string.capture_freeze)
             FreezeMode.Freezing -> null
-            FreezeMode.Frozen -> stringResource(Res.string.capture_resume)
+            FreezeMode.Frozen -> stringResource(Res.string.capture_return_to_camera)
         }
     }
     val pendingCapture = if (hasLiveCaptureControls && freezeMode == FreezeMode.Freezing) {
@@ -75,8 +73,8 @@ internal fun finderLabels(
         ImportedImagePhase.Error -> null
     }
     val returnToCamera = when (stillSource) {
-        is StillSource.Imported -> stringResource(Res.string.capture_return_to_camera)
-        is StillSource.Frozen -> stringResource(Res.string.inspection_return_frozen)
+        is StillSource.Imported,
+        is StillSource.Frozen -> stringResource(Res.string.capture_return_to_camera)
         null -> null
     }
     val liveArea = if (

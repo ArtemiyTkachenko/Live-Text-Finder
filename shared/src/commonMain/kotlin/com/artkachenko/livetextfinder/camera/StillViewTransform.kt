@@ -109,8 +109,8 @@ internal data class StillViewTransform(
     private fun validViewport(width: Float, height: Float) =
         width.isFinite() && height.isFinite() && width > 0f && height > 0f
 
-    private companion object {
-        const val MIN_ZOOM = 1f
-        const val MAX_ZOOM = 4f
+    companion object {
+        internal const val MIN_ZOOM = 1f
+        internal const val MAX_ZOOM = 4f
     }
 }

@@ -2,6 +2,8 @@ package com.artkachenko.livetextfinder.camera
 
 import android.os.Handler
 import android.os.Looper
+import android.view.MotionEvent
+import android.view.ScaleGestureDetector
 import androidx.camera.core.CameraControl
 import androidx.camera.core.CameraInfo
 import androidx.camera.core.FocusMeteringAction
@@ -31,10 +33,46 @@ internal class AndroidLiveCaptureControls(
     private val zoomObserver = Observer<ZoomState> { updateObservedState() }
     private val torchObserver = Observer<Int> { updateObservedState() }
 
+    private val pinchDetector = ScaleGestureDetector(
+        view.context,
+        object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+            override fun onScaleBegin(detector: ScaleGestureDetector): Boolean =
+                isNativeContextCurrent() && controls.beginPinch(lease)
+
+            override fun onScale(detector: ScaleGestureDetector): Boolean =
+                isNativeContextCurrent() && controls.scalePinch(lease, detector.scaleFactor)
+
+            override fun onScaleEnd(detector: ScaleGestureDetector) {
+                controls.endPinch(lease)
+            }
+        },
+    ).apply {
+        isQuickScaleEnabled = false
+        isStylusScaleEnabled = false
+    }
+    private var trackingTouch = false
+
     init {
+        view.setOnTouchListener { _, event -> onPreviewTouch(event) }
         cameraInfo.zoomState.observe(lifecycleOwner, zoomObserver)
         cameraInfo.torchState.observe(lifecycleOwner, torchObserver)
         refresh()
+    }
+
+    private fun onPreviewTouch(event: MotionEvent): Boolean {
+        if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+            trackingTouch = isNativeContextCurrent() && controls.canPinch(lease)
+        }
+        if (!trackingTouch) return false
+        if (event.actionMasked == MotionEvent.ACTION_CANCEL ||
+            !isNativeContextCurrent() || !controls.canPinch(lease)
+        ) {
+            controls.cancelPinch(lease)
+            trackingTouch = false
+        }
+        pinchDetector.onTouchEvent(event)
+        if (event.actionMasked == MotionEvent.ACTION_UP) trackingTouch = false
+        return true
     }
 
     fun refresh() {
@@ -84,6 +122,7 @@ internal class AndroidLiveCaptureControls(
                 onZoomBoundary(false)
                 controls.update(lease) { it.copy(zoomPending = false) }
                 updateObservedState()
+                controls.dispatchQueuedPinch(lease)
             },
         )
     }
@@ -178,6 +217,7 @@ internal class AndroidLiveCaptureControls(
         cameraInfo.zoomState.removeObserver(zoomObserver)
         cameraInfo.torchState.removeObserver(torchObserver)
         if (wasCurrent) {
+            view.setOnTouchListener(null)
             runCatching { cameraControl.enableTorch(false) }
             runCatching { cameraControl.cancelFocusAndMetering() }
         }

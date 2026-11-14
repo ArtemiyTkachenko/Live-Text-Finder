@@ -49,6 +49,7 @@ import livetextfinder.shared.generated.resources.capture_zoom_out
 import livetextfinder.shared.generated.resources.scanner_chevron_left
 import livetextfinder.shared.generated.resources.scanner_chevron_right
 import livetextfinder.shared.generated.resources.scanner_match_position
+import livetextfinder.shared.generated.resources.scanner_no_match_selected
 import livetextfinder.shared.generated.resources.scanner_zoom_in
 import livetextfinder.shared.generated.resources.scanner_zoom_out
 import livetextfinder.shared.generated.resources.still_match_next
@@ -257,7 +258,13 @@ internal fun FloatingScannerMatchPill(
             enabled = previousEnabled,
             background = Color.Transparent,
         )
-        ScannerPillReadout(stringResource(Res.string.scanner_match_position, position, count))
+        ScannerPillReadout(
+            if (position > 0) {
+                stringResource(Res.string.scanner_match_position, position, count)
+            } else {
+                stringResource(Res.string.scanner_no_match_selected, count)
+            },
+        )
         ScannerIconButton(
             icon = Res.drawable.scanner_chevron_right,
             label = stringResource(Res.string.still_match_next),

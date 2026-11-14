@@ -1,19 +1,13 @@
 package com.artkachenko.livetextfinder.screen
 
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.ime
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.IntSize
 import com.artkachenko.livetextfinder.camera.FreezeMode
 import com.artkachenko.livetextfinder.camera.FrozenFrameOwner
 import com.artkachenko.livetextfinder.camera.ImportedImageOwner
 import com.artkachenko.livetextfinder.camera.ImportedImagePicker
-import com.artkachenko.livetextfinder.camera.ImportedImagePhase
 import com.artkachenko.livetextfinder.camera.LiveCaptureControls
 import com.artkachenko.livetextfinder.camera.allowsLiveCamera
 import com.artkachenko.livetextfinder.camera.liveSearchAreaAvailable
@@ -54,7 +48,7 @@ internal class FinderSourceContext(
  * Creates the image owners and live capture controls and returns this composition's context.
  *
  * The owners and controls are remembered. The returned context is new on every recomposition
- * because its visibility predicate uses the current density and insets, so do not use it as a
+ * and captures the current manager state holder, so do not use it as a
  * `remember` or effect key.
  */
 @Composable
@@ -62,30 +56,11 @@ internal fun finderSourceContext(
     session: SearchSessionController,
     searchEditing: SavedSearchEditingState,
     liveArea: LiveSearchAreaState,
-    rootSizeState: State<IntSize>,
 ): FinderSourceContext {
     val importedOwner = rememberImportedImageOwner()
     ImportedImagePicker(importedOwner)
     val frozenOwner = rememberFrozenFrameOwner()
-    val density = LocalDensity.current
-    val imeInsets = WindowInsets.ime
-    val legacyContentVisible = {
-        val rootSize = rootSizeState.value
-        val isCompact =
-            (rootSize != IntSize.Zero &&
-                rootSize.height / density.density < COMPACT_HEIGHT_DP) ||
-                density.fontScale >= COMPACT_FONT_SCALE
-        !searchEditing.isOpen && !isCompact && imeInsets.getBottom(density) == 0
-    }
-    val isContentVisible = {
-        if (frozenOwner.state.value.mode == FreezeMode.Frozen ||
-            importedOwner.state.value.phase == ImportedImagePhase.Imported
-        ) {
-            legacyContentVisible()
-        } else {
-            !searchEditing.isOpen
-        }
-    }
+    val isContentVisible = { !searchEditing.isOpen }
     val captureContextCurrent = {
         val phase = importedOwner.state.value.phase
         frozenOwner.state.value.mode == FreezeMode.Live &&
@@ -116,6 +91,3 @@ internal fun finderSourceContext(
         isCaptureContextCurrent = captureContextCurrent,
     )
 }
-
-private const val COMPACT_HEIGHT_DP = 500f
-private const val COMPACT_FONT_SCALE = 1.3f

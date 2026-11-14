@@ -8,12 +8,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -39,28 +35,22 @@ import com.artkachenko.livetextfinder.scanarea.LiveSearchAreaState
 import com.artkachenko.livetextfinder.scanarea.ScanAreaEditBar
 import com.artkachenko.livetextfinder.screen.FinderLayoutMode
 import com.artkachenko.livetextfinder.screen.FinderSourceContext
-import com.artkachenko.livetextfinder.screen.FinderTopRegion
 import com.artkachenko.livetextfinder.screen.FloatingLiveScanner
+import com.artkachenko.livetextfinder.screen.FloatingRetainedControls
 import com.artkachenko.livetextfinder.search.ElementOutline
 import com.artkachenko.livetextfinder.search.InMemorySearchSessionStore
 import com.artkachenko.livetextfinder.search.MatchOutlineBounds
 import com.artkachenko.livetextfinder.search.NormalizedSearchArea
 import com.artkachenko.livetextfinder.search.PreviewPoint
-import com.artkachenko.livetextfinder.search.SearchListTransferState
 import com.artkachenko.livetextfinder.search.SearchSessionController
 import com.artkachenko.livetextfinder.search.drawHighlightOutlines
 import com.artkachenko.livetextfinder.search.drawSelectedOccurrenceMarker
-import com.artkachenko.livetextfinder.status.RecognitionDetails
 import com.artkachenko.livetextfinder.status.SearchFeedback
 import com.artkachenko.livetextfinder.status.SearchFeedbackKind
 import com.artkachenko.livetextfinder.status.StatusSource
 import kotlin.math.roundToInt
 import livetextfinder.shared.generated.resources.Res
-import livetextfinder.shared.generated.resources.capture_freeze
-import livetextfinder.shared.generated.resources.capture_return_to_camera
 import livetextfinder.shared.generated.resources.inspection_lists
-import livetextfinder.shared.generated.resources.inspection_results
-import livetextfinder.shared.generated.resources.inspection_return_frozen
 import org.jetbrains.compose.resources.stringResource
 import org.junit.After
 import org.junit.Test
@@ -90,16 +80,19 @@ class AssembledScreenScreenshotTest {
     @Test
     fun scanAreaEditing() = capture(AssemblyState.AreaEditing)
 
-    private fun capture(state: AssemblyState) {
+    @Test
+    fun preparingShare() = capture(AssemblyState.Imported, sharePreparing = true)
+
+    private fun capture(state: AssemblyState, sharePreparing: Boolean = false) {
         val receipt = createReceipt()
         try {
             assertScreenshot(
                 ScreenshotTier.SCREEN,
                 "assembled-finder",
-                state.fixtureName,
+                if (sharePreparing) "share-preparing" else state.fixtureName,
                 ScreenshotVariant.LIGHT,
             ) {
-                AssembledFinder(state, receipt)
+                AssembledFinder(state, receipt, sharePreparing)
             }
         } finally {
             receipt.bitmap.recycle()
@@ -107,7 +100,11 @@ class AssembledScreenScreenshotTest {
     }
 
     @Composable
-    private fun AssembledFinder(state: AssemblyState, receipt: ReceiptFixture) {
+    private fun AssembledFinder(
+        state: AssemblyState,
+        receipt: ReceiptFixture,
+        sharePreparing: Boolean,
+    ) {
         val layoutMode = state.layoutMode
         val areaEditor = remember {
             LiveSearchAreaState().apply {
@@ -122,7 +119,6 @@ class AssembledScreenScreenshotTest {
             searchListsLabel = stringResource(Res.string.inspection_lists),
             onSearchLists = ::ignore,
         )
-        val resultsLabel = stringResource(Res.string.inspection_results, receipt.matches.size)
         if (layoutMode.isLiveCamera) {
             val controls = remember {
                 LiveCaptureControls({ true }, { true }).apply {
@@ -176,38 +172,57 @@ class AssembledScreenScreenshotTest {
             }
             return
         }
-        FinderContentAssembly(
-            scrollState = rememberScrollState(),
-            scrollable = false,
-            modifier = Modifier.fillMaxSize().safeDrawingPadding(),
-            topContent = {
-                FinderTopRegion(
-                    layoutMode = layoutMode,
-                    shouldShowViews = true,
-                    searchBar = searchBar,
-                    inlineResultsLabel = resultsLabel,
-                    transferState = SearchListTransferState(),
-                    onCancelTransfer = ::ignore,
-                    onOptions = ::ignore,
-                    status = { FixtureStatus(state, receipt) },
-                )
-            },
-            managerContent = {},
-            viewportContent = {
-                BoxWithConstraints(
-                    Modifier.weight(1f).fillMaxWidth()
-                        .background(FinderCameraOverlay.viewportBackground),
-                ) {
-                    ReceiptPreview(
-                        image = receipt.bitmap.asImageBitmap(),
-                        matches = receipt.matches,
-                        isStill = true,
-                        selected = state == AssemblyState.Imported,
-                    )
-                }
-            },
-            footerContent = { FixtureDock(state, searchBar, resultsLabel, receipt.matches.size) },
-        )
+        val controls = remember { LiveCaptureControls({ false }, { false }) }
+        Box(Modifier.fillMaxSize().background(FinderCameraOverlay.viewportBackground)) {
+            FloatingLiveScanner(
+                searchBar = searchBar,
+                liveControls = controls,
+                captureEnabled = false,
+                freezePending = false,
+                onFreeze = ::ignore,
+                onCancelFreeze = ::ignore,
+                areaEnabled = false,
+                onArea = ::ignore,
+                importEnabled = false,
+                importPending = false,
+                onImport = ::ignore,
+                onCancelImport = ::ignore,
+                onMatchMode = {},
+                onOptions = ::ignore,
+                statusLabel = sourceStatusMessage(
+                    state.source,
+                    SearchFeedback(SearchFeedbackKind.Matches, receipt.matches.size),
+                ),
+                onStatus = ::ignore,
+                snackbarHostState = remember { SnackbarHostState() },
+                retained = FloatingRetainedControls(
+                    zoom = 1f,
+                    canZoom = true,
+                    position = 1,
+                    matchCount = receipt.matches.size,
+                    canNavigate = true,
+                    canCopy = true,
+                    sharePreparing = sharePreparing,
+                    onZoom = {},
+                    onPrevious = ::ignore,
+                    onNext = ::ignore,
+                    onCopy = ::ignore,
+                    onShare = ::ignore,
+                    onCancelShare = ::ignore,
+                    onCamera = ::ignore,
+                ),
+                retainedViewport = { modifier ->
+                    Box(modifier) {
+                        ReceiptPreview(
+                            image = receipt.bitmap.asImageBitmap(),
+                            matches = receipt.matches,
+                            isStill = true,
+                            selected = state == AssemblyState.Imported,
+                        )
+                    }
+                },
+            )
+        }
     }
 
     @Composable
@@ -231,88 +246,6 @@ class AssembledScreenScreenshotTest {
         override fun torch(enabled: Boolean) = Unit
 
         override fun focus() = Unit
-    }
-
-    @Composable
-    private fun FixtureStatus(state: AssemblyState, receipt: ReceiptFixture) {
-        val source = state.source
-        StatusSummary(
-            message = sourceStatusMessage(
-                source = source,
-                feedback = SearchFeedback(SearchFeedbackKind.Matches, receipt.matches.size),
-                scanning = source == StatusSource.LiveCamera,
-            ),
-            details = RecognitionDetails(
-                source = source,
-                recognizedLineCount = RECEIPT_LINE_COUNT,
-                outlinedElementCount = receipt.matches.size,
-                imageWidth = receipt.bitmap.width,
-                imageHeight = receipt.bitmap.height,
-                rotationDegrees = 0.takeUnless { source == StatusSource.ImportedImage },
-                textSample = "INVOICE 0427",
-                textUnavailable = false,
-                retainedOutlines = false,
-                sourceMessage = null,
-            ),
-            onDetails = ::ignore,
-            stageBand = state.layoutMode.isLiveCamera,
-        )
-    }
-
-    @Composable
-    private fun FixtureDock(
-        state: AssemblyState,
-        searchBar: FinderSearchBar,
-        resultsLabel: String,
-        matchCount: Int,
-    ) {
-        val isStill = state.layoutMode == FinderLayoutMode.StillInspection
-        if (isStill) {
-            Column(Modifier.padding(horizontal = FinderSpacing.large)) {
-                StillInspectionControls(
-                    matchCount = matchCount,
-                    showMatchesAction = false,
-                    zoom = 1f,
-                    canZoom = true,
-                    onZoomIn = ::ignore,
-                    onZoomOut = ::ignore,
-                    onReset = ::ignore,
-                    onMatches = ::ignore,
-                )
-                if (state == AssemblyState.Imported) {
-                    StillMatchNavigationControls(
-                        position = 1,
-                        count = matchCount,
-                        matchedTerm = "invoice",
-                        matchedText = "INVOICE",
-                        canLocate = true,
-                        onPrevious = ::ignore,
-                        onNext = ::ignore,
-                        onCopy = ::ignore,
-                    )
-                }
-            }
-        }
-        val returnLabel = when (state) {
-            AssemblyState.Frozen -> stringResource(Res.string.inspection_return_frozen)
-            AssemblyState.Imported -> stringResource(Res.string.capture_return_to_camera)
-            else -> null
-        }
-        FinderLiveDock(
-            search = searchBar,
-            capture = FinderCaptureActions(
-                captureLabel = if (isStill) null else stringResource(Res.string.capture_freeze),
-                captureEnabled = !isStill,
-                onCapture = ::ignore,
-                pendingCaptureLabel = null,
-                onCancelCapture = ::ignore,
-                secondaryActionLabel = null,
-                onSecondaryAction = ::ignore,
-            ),
-            resultsLabel = resultsLabel,
-            returnLabel = returnLabel,
-            onCancelShare = ::ignore,
-        )
     }
 
     @Composable

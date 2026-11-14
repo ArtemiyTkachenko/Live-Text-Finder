@@ -77,7 +77,7 @@ internal fun FinderScreen(session: SearchSessionController) {
     LiveSearchAreaLifecycle(liveArea::reset)
     val viewportState = remember { mutableStateOf(IntSize.Zero) }
     val rootSizeState = remember { mutableStateOf(IntSize.Zero) }
-    val context = finderSourceContext(session, searchEditing, liveArea, rootSizeState)
+    val context = finderSourceContext(session, searchEditing, liveArea)
     val shareOwner = rememberImageShareOwner()
     val importedState = context.importedOwner.state.value
     val freezeState = context.frozenOwner.state.value
@@ -179,7 +179,7 @@ internal fun FinderScreen(session: SearchSessionController) {
         onSecondaryAction = actions::leaveOrCancelImport,
     )
     val layoutMode = finderLayoutMode(
-        hasStillSource = stillSource != null,
+        hasStillSource = stillSource != null && !searchEditing.isOpen,
         managerOpen = searchEditing.isOpen,
         areaEditing = areaEditing,
     )
@@ -192,12 +192,14 @@ internal fun FinderScreen(session: SearchSessionController) {
         transferState = transferOwner.state,
     )
     val floatingLive = layoutMode == FinderLayoutMode.Live
-    val recognitionDetailsAvailable = importedState.phase.allowsLiveCamera &&
-        freezeState.mode == FreezeMode.Live
-    LaunchedEffect(floatingLive, recognitionDetailsAvailable) {
-        if (!floatingLive || !recognitionDetailsAvailable) dialogs.recognitionDetailsOpen = false
+    val floatingRetained = layoutMode == FinderLayoutMode.StillInspection && shouldShowViews
+    val floatingScanner = floatingLive || floatingRetained
+    val recognitionDetailsAvailable = floatingRetained ||
+        importedState.phase.allowsLiveCamera && freezeState.mode == FreezeMode.Live
+    LaunchedEffect(floatingScanner, recognitionDetailsAvailable) {
+        if (!floatingScanner || !recognitionDetailsAvailable) dialogs.recognitionDetailsOpen = false
     }
-    val floatingViewport = floatingLive || layoutMode == FinderLayoutMode.AreaEditing
+    val floatingViewport = floatingScanner || layoutMode == FinderLayoutMode.AreaEditing
     val viewport: @Composable (Modifier) -> Unit = { modifier ->
         FinderViewport(
             inspection = inspection,
@@ -230,7 +232,7 @@ internal fun FinderScreen(session: SearchSessionController) {
                 shouldShowViews = shouldShowViews,
                 liveStageBand = shouldShowViews && layoutMode.isLiveCamera,
                 floatingContent = floatingContent,
-                floatingDetailsOpen = floatingLive && dialogs.recognitionDetailsOpen,
+                floatingDetailsOpen = floatingScanner && dialogs.recognitionDetailsOpen,
                 onDismissFloatingDetails = { dialogs.recognitionDetailsOpen = false },
                 onRetrySavedData = searchEditing::retrySavedSearches,
                 onRequestReset = { dialogs.resetConfirmOpen = true },
@@ -238,8 +240,8 @@ internal fun FinderScreen(session: SearchSessionController) {
         }
     if (floatingViewport) {
         Box(Modifier.fillMaxSize()) {
-            viewport(Modifier.fillMaxSize())
-            if (floatingLive) {
+            if (!floatingRetained) viewport(Modifier.fillMaxSize())
+            if (floatingScanner) {
                 status { label, messages ->
                     FloatingLiveScanner(
                         searchBar = searchBar,
@@ -261,6 +263,17 @@ internal fun FinderScreen(session: SearchSessionController) {
                         onStatus = searchBar.onTerms,
                         snackbarHostState = snackbarHostState,
                         matchModeEnabled = sessionState.loaded && !sessionState.recoveryRequired,
+                        retained = if (floatingRetained) {
+                            floatingRetainedControls(
+                                inspection,
+                                searchState.resultsAvailable,
+                                shareOwner.state.value.status == ImageShareStatus.Preparing,
+                                actions,
+                            )
+                        } else {
+                            null
+                        },
+                        retainedViewport = viewport,
                         messages = {
                             val transferMessage = transferState.message
                             if (transferState.busy && transferMessage != null) {
@@ -346,7 +359,7 @@ internal fun FinderScreen(session: SearchSessionController) {
         shouldShowViews = shouldShowViews,
         onImportList = transferOwner::importList,
         onExportList = transferOwner::exportSelectedList,
-        floatingLive = floatingLive,
+        floatingLive = floatingScanner,
         recognitionDetailsAvailable = recognitionDetailsAvailable,
     )
 }

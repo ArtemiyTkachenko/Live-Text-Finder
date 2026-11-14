@@ -41,6 +41,9 @@ internal class LiveCaptureControls(
     private var nextLease = 0L
     private var actions: LiveCaptureActions? = null
     private var onDetach: (() -> Unit)? = null
+    private var requestedZoom: Float? = null
+    private var pinchTarget: Float? = null
+    private var queuedPinchTarget: Float? = null
 
     fun attach(actions: LiveCaptureActions, onDetach: () -> Unit): Long {
         detach(state.value.lease)
@@ -62,6 +65,7 @@ internal class LiveCaptureControls(
     fun update(lease: Long, transform: (LiveCaptureState) -> LiveCaptureState) {
         if (isCurrent(lease)) {
             mutableState.value = transform(state.value).copy(lease = lease)
+            if (!canPinch(lease)) cancelPinch(lease)
         }
     }
 
@@ -71,6 +75,8 @@ internal class LiveCaptureControls(
         try {
             onDetach?.invoke()
         } finally {
+            cancelPinch(lease)
+            requestedZoom = null
             onDetach = null
             actions = null
             mutableState.value = LiveCaptureState()
@@ -81,11 +87,63 @@ internal class LiveCaptureControls(
 
     fun zoomOut(lease: Long) = changeZoom(lease, 0.8f)
 
-    private fun changeZoom(lease: Long, factor: Float) {
+    fun canPinch(lease: Long): Boolean =
+        isCurrent(lease) && state.value.ready && state.value.hasZoom && isContextCurrent()
+
+    fun beginPinch(lease: Long): Boolean {
+        if (!canPinch(lease)) return false
+        val pending = requestedZoom.takeIf { state.value.zoomPending }
+        pinchTarget = queuedPinchTarget ?: pending ?: state.value.zoom
+        return true
+    }
+
+    fun scalePinch(lease: Long, factor: Float): Boolean {
+        if (!canPinch(lease)) {
+            cancelPinch(lease)
+            return false
+        }
+        val previous = pinchTarget ?: return false
+        if (!factor.isFinite() || factor <= 0f) return false
         val current = state.value
-        if (!canDispatch(lease) || !current.hasZoom || current.zoomPending) return
-        val target = (current.zoom * factor).coerceIn(current.minZoom, current.maxZoom)
-        if (target.isFinite() && target != current.zoom) {
+        val target = (previous * factor).coerceIn(current.minZoom, current.maxZoom)
+        pinchTarget = target
+        queuedPinchTarget = target
+        dispatchQueuedPinch(lease)
+        return true
+    }
+
+    fun endPinch(lease: Long) {
+        if (isCurrent(lease)) pinchTarget = null
+    }
+
+    fun cancelPinch(lease: Long) {
+        if (!isCurrent(lease)) return
+        pinchTarget = null
+        queuedPinchTarget = null
+    }
+
+    /** Drains at most one target after the native request completes and updates observed zoom. */
+    fun dispatchQueuedPinch(lease: Long) {
+        if (!canPinch(lease)) {
+            cancelPinch(lease)
+            return
+        }
+        if (state.value.zoomPending) return
+        val target = queuedPinchTarget ?: return
+        queuedPinchTarget = null
+        requestZoom(lease, target)
+    }
+
+    private fun changeZoom(lease: Long, factor: Float) {
+        requestZoom(lease, state.value.zoom * factor)
+    }
+
+    private fun requestZoom(lease: Long, ratio: Float) {
+        val current = state.value
+        if (!canDispatch(lease) || !current.hasZoom || !ratio.isFinite()) return
+        val target = ratio.coerceIn(current.minZoom, current.maxZoom)
+        if (target != current.zoom) {
+            requestedZoom = target
             actions?.zoom(target)
         }
     }
