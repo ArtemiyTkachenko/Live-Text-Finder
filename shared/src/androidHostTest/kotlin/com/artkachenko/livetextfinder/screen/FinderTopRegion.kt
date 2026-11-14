@@ -34,13 +34,14 @@ internal fun FinderTopRegion(
     onOptions: () -> Unit,
     status: @Composable () -> Unit,
 ) {
+    val usesDockChrome = layoutMode != FinderLayoutMode.ListManager
     val liveScreen = shouldShowViews && layoutMode.isLiveCamera
-    if (layoutMode.usesDockChrome) {
+    if (usesDockChrome) {
         FinderLiveAppBar(onOptions = onOptions)
     }
     Column(
         Modifier.fillMaxWidth().then(
-            if (layoutMode.usesDockChrome) {
+            if (usesDockChrome) {
                 Modifier
             } else {
                 Modifier.padding(
@@ -51,7 +52,7 @@ internal fun FinderTopRegion(
         ),
         verticalArrangement = Arrangement.spacedBy(FinderSpacing.extraSmall),
     ) {
-        if (!layoutMode.usesDockChrome) {
+        if (!usesDockChrome) {
             FinderSearchControls(
                 showTitle = shouldShowViews,
                 search = searchBar,

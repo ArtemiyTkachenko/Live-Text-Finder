@@ -13,7 +13,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.artkachenko.livetextfinder.camera.liveSearchAreaAvailable
 import livetextfinder.shared.generated.resources.Res
-import livetextfinder.shared.generated.resources.finder_match_help
 import livetextfinder.shared.generated.resources.help_colour_body
 import livetextfinder.shared.generated.resources.help_colour_title
 import livetextfinder.shared.generated.resources.help_done
@@ -23,6 +22,7 @@ import livetextfinder.shared.generated.resources.help_ios_body
 import livetextfinder.shared.generated.resources.help_ios_title
 import livetextfinder.shared.generated.resources.help_lists_body
 import livetextfinder.shared.generated.resources.help_lists_title
+import livetextfinder.shared.generated.resources.help_matching
 import livetextfinder.shared.generated.resources.help_options_location
 import livetextfinder.shared.generated.resources.help_preview_body
 import livetextfinder.shared.generated.resources.help_preview_scan_area
@@ -46,7 +46,7 @@ internal fun UsageHelpDialog(onDismissRequest: () -> Unit) {
                     title = stringResource(Res.string.help_find_title),
                     body = stringResource(
                         Res.string.help_find_body,
-                        stringResource(Res.string.finder_match_help),
+                        stringResource(Res.string.help_matching),
                     ),
                 )
                 HelpSection(

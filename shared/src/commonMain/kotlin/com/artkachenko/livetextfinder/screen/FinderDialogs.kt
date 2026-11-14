@@ -6,6 +6,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import com.artkachenko.livetextfinder.inspection.StillInspectionMatchesDialog
 import com.artkachenko.livetextfinder.inspection.StillInspectionState
 import com.artkachenko.livetextfinder.lists.SavedSearchEditingState
@@ -16,6 +18,7 @@ import com.artkachenko.livetextfinder.search.SearchSessionState
 import com.artkachenko.livetextfinder.ui.ConfirmDestructiveDialog
 import com.artkachenko.livetextfinder.ui.FinderOptionsSheetHost
 import com.artkachenko.livetextfinder.ui.HighlightColorDialog
+import com.artkachenko.livetextfinder.ui.RetainedInspectionActionDispatcher
 import com.artkachenko.livetextfinder.ui.SearchTermResultsDialog
 import com.artkachenko.livetextfinder.ui.UsageHelpDialog
 import livetextfinder.shared.generated.resources.Res
@@ -135,6 +138,8 @@ internal fun FinderDialogs(
         UsageHelpDialog(onDismissRequest = { dialogs.helpOpen = false })
     }
     if (dialogs.optionsOpen) {
+        val focus = LocalFocusManager.current
+        val keyboard = LocalSoftwareKeyboardController.current
         FinderOptionsSheetHost(
             sessionState = sessionState,
             transferState = transferState,
@@ -151,7 +156,14 @@ internal fun FinderDialogs(
             recognitionDetailsEnabled = recognitionDetailsAvailable,
             onResetView = if (floatingLive && hasStillSource) inspection::resetZoom else null,
             onOccurrences = if (floatingLive && hasStillSource && inspection.rows.isNotEmpty()) {
-                { inspection.copySession.updateDialogOpen(true) }
+                {
+                    RetainedInspectionActionDispatcher.showOccurrences(
+                        clearFocus = focus::clearFocus,
+                        hideKeyboard = { keyboard?.hide() },
+                        setTermsOpen = { dialogs.termResultsOpen = it },
+                        setOccurrencesOpen = { inspection.copySession.updateDialogOpen(it) },
+                    )
+                }
             } else {
                 null
             },

@@ -1,7 +1,9 @@
 package com.artkachenko.livetextfinder.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -20,10 +22,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.artkachenko.livetextfinder.search.SearchMatchMode
 import livetextfinder.shared.generated.resources.Res
 import livetextfinder.shared.generated.resources.finder_find_text
-import livetextfinder.shared.generated.resources.inspection_lists
 import livetextfinder.shared.generated.resources.inspection_more
 import livetextfinder.shared.generated.resources.search_context_list_identity
 import livetextfinder.shared.generated.resources.status_cancel
@@ -88,7 +88,7 @@ internal fun FinderLiveDock(
                         )
                     }
                     if (returnLabel != null) {
-                        androidx.compose.foundation.layout.Box {
+                        Box {
                             FinderSecondaryAction(
                                 stringResource(Res.string.inspection_more),
                                 { moreExpanded = true },
@@ -131,7 +131,7 @@ internal fun FinderLiveDock(
                 showUseManualAction = search.activeListName != null,
             )
             if (sharePreparing) {
-                androidx.compose.foundation.layout.Row(
+                Row(
                     horizontalArrangement = Arrangement.spacedBy(FinderSpacing.extraSmall),
                 ) {
                     Text(

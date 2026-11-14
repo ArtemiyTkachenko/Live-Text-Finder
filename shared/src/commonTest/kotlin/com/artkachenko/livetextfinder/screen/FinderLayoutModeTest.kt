@@ -19,19 +19,10 @@ class FinderLayoutModeTest {
     }
 
     @Test
-    fun chromeFlags_matchEachMode() {
-        val flags = FinderLayoutMode.entries.associateWith { mode ->
-            Triple(mode.usesDockChrome, mode.showsDock, mode.isLiveCamera)
-        }
-
+    fun onlyLiveAndAreaEditingUseTheLiveViewport() {
         assertEquals(
-            mapOf(
-                FinderLayoutMode.Live to Triple(true, true, true),
-                FinderLayoutMode.AreaEditing to Triple(true, false, true),
-                FinderLayoutMode.ListManager to Triple(false, false, false),
-                FinderLayoutMode.StillInspection to Triple(true, true, false),
-            ),
-            flags,
+            setOf(FinderLayoutMode.Live, FinderLayoutMode.AreaEditing),
+            FinderLayoutMode.entries.filter { it.isLiveCamera }.toSet(),
         )
     }
 }

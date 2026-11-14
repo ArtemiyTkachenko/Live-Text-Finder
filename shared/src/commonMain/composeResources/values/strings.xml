@@ -70,7 +70,6 @@
     <string name="search_list_cancel">Cancel</string>
     <string name="finder_options">Options</string>
     <string name="finder_find_text">Find text</string>
-    <string name="inspection_edit_search">Edit search</string>
     <string name="inspection_done">Done</string>
     <string name="inspection_more">More</string>
     <string name="inspection_results_terms">Terms</string>
@@ -81,7 +80,6 @@
     <string name="inspection_lists">Lists</string>
     <string name="finder_options_title">Options</string>
     <string name="finder_options_highlight">Highlight color: %1$s</string>
-    <string name="finder_options_matching">Matching</string>
     <string name="finder_options_search_group">Search and matching</string>
     <string name="finder_options_camera_group">Camera and images</string>
     <string name="finder_options_transfer_group">Import and export</string>
@@ -173,7 +171,7 @@
     <string name="status_share_image">Share image</string>
     <string name="status_cancel">Cancel</string>
     <string name="help_still_title">Inspect an image</string>
-    <string name="help_still_body">On a frozen or imported image, pinch to zoom and drag to pan, or use Zoom in, Zoom out and Reset view. Open Matches, select a result and choose Show on image, Copy matched text or Copy line. Sharing still uses the whole image.</string>
+    <string name="help_still_body">On a frozen or imported image, pinch to zoom and drag to pan, or use the zoom buttons. For Reset view and Occurrences, open Options. Select an occurrence to show it on the image, copy the match, or copy its full line. Sharing still uses the whole image.</string>
     <string name="still_zoom_in">Zoom in</string>
     <string name="still_zoom_out">Zoom out</string>
     <string name="still_reset_view">Reset view</string>
@@ -204,7 +202,6 @@
     <string name="capture_light_off">Light off</string>
     <string name="capture_focus">Focus</string>
     <string name="capture_freeze">Freeze frame</string>
-    <string name="capture_resume">Resume live</string>
     <string name="capture_cancel_freeze">Cancel freeze</string>
     <string name="capture_return_to_camera">Return to camera</string>
     <string name="capture_cancel_import">Cancel import</string>
@@ -227,11 +224,12 @@
     <string name="help_title">How to use</string>
     <string name="help_done">Done</string>
     <string name="help_find_title">Find text on Android</string>
-    <string name="help_find_body">Enter a word or phrase, then point the camera at readable printed Latin text. Matching ignores case and finds substrings within each OCR line; phrases do not cross lines. %1$s No match means none was recognized, not proof of absence.</string>
+    <string name="help_matching">By default, a search can match part of a word. Turn on Whole words in the search field to match cat without matching catalog.</string>
+    <string name="help_find_body">Enter a word or phrase, then point the camera at readable printed Latin text. Matching ignores case and searches within each recognized line. Phrases stay within a single line. %1$s No match means none was recognized, not proof of absence.</string>
     <string name="help_lists_title">Search lists</string>
     <string name="help_lists_body">Create one entry per line; all entries are searched at once, and spaces within an entry stay part of its phrase. Selecting a list replaces the manual search. Editing the manual query returns to manual search.</string>
     <string name="help_preview_title">Preview and images</string>
-    <string name="help_preview_body">The keyboard or open Search lists hide the preview. Dismiss the keyboard or close lists to see it; compact windows may need more space. Freeze frame keeps one image until Resume live. Import one JPEG, PNG, or WebP image; Return to camera exits it. OCR runs with the bundled on-device model. When you import, the system photo picker supplies the image. Copied text goes to the system clipboard, and sharing opens the system share sheet. Android saves search settings; device backup settings may affect saved app data. Images and OCR results stay in memory and are discarded when the app is backgrounded or the screen is recreated. An open photo picker can still complete after you return.</string>
+    <string name="help_preview_body">The preview stays visible while you type. Close Lists to return to the preview. Pinch the live preview to zoom. Freeze keeps one frame, and Import opens a JPEG, PNG, or WebP image. Tap Camera to return to the live preview. OCR runs with the bundled on-device model. When you import, the system photo picker supplies the image. Copied text goes to the system clipboard, and sharing opens the system share sheet. Android saves search settings; device backup settings may affect saved app data. Images and OCR results stay in memory and are discarded when the app is backgrounded or the screen is recreated. An open photo picker can still complete after you return.</string>
     <string name="help_preview_scan_area">The optional scan area restricts live matches to fully contained words and phrases; it does not crop capture. Frozen, imported, and shared images use the whole source. Freeze, Import, backgrounding, or recreation resets the area.</string>
     <string name="help_colour_title">Colour and sharing on Android</string>
     <string name="help_colour_body">%1$s The selected colour applies to manual search. Each list entry gets a stable labelled colour across previews and shared images; open Search results to see each entry and its current count. Android saves the query, lists, selection, and colour. Share image is available for frozen or imported images; it prepares a temporary highlighted PNG and opens the system share sheet. Opening it does not confirm delivery or save to your gallery; the chosen app controls what happens next.</string>

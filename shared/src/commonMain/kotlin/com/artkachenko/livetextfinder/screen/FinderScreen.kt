@@ -76,7 +76,6 @@ internal fun FinderScreen(session: SearchSessionController) {
     val liveArea = remember { LiveSearchAreaState() }
     LiveSearchAreaLifecycle(liveArea::reset)
     val viewportState = remember { mutableStateOf(IntSize.Zero) }
-    val rootSizeState = remember { mutableStateOf(IntSize.Zero) }
     val context = finderSourceContext(session, searchEditing, liveArea)
     val shareOwner = rememberImageShareOwner()
     val importedState = context.importedOwner.state.value
@@ -135,7 +134,6 @@ internal fun FinderScreen(session: SearchSessionController) {
     val labels = finderLabels(
         importedPhase = importedState.phase,
         freezeMode = freezeState.mode,
-        stillSource = stillSource,
         areaSelected = liveArea.area != null,
         managerOpen = searchEditing.isOpen,
         hasSearch = selectedList != null || search.query.isNotEmpty(),
@@ -214,7 +212,6 @@ internal fun FinderScreen(session: SearchSessionController) {
             areaEditing = areaEditing,
             areaGestureEnabled = areaGestureEnabled,
             modifier = modifier,
-            showLegacyLiveControls = !floatingViewport,
         )
     }
     val status: @Composable ((@Composable (String, @Composable () -> Unit) -> Unit)?) -> Unit =
@@ -306,24 +303,14 @@ internal fun FinderScreen(session: SearchSessionController) {
             }
         }
     } else {
-        FinderStackedContent(
-            layoutMode = layoutMode,
+        FinderListManagerContent(
             searchBar = searchBar,
             captureActions = captureActions,
-            labels = labels,
-            actions = actions,
-            dialogs = dialogs,
-            inspection = inspection,
-            liveArea = liveArea,
-            context = context,
-            shouldShowViews = shouldShowViews,
-            resultsAvailable = searchState.resultsAvailable,
-            sharePreparing = shareOwner.state.value.status == ImageShareStatus.Preparing,
+            resultsLabel = labels.results,
+            onOptions = { dialogs.optionsOpen = true },
             snackbarHostState = snackbarHostState,
             transferState = transferState,
             onCancelTransfer = transferOwner::cancel,
-            rootSizeState = rootSizeState,
-            viewport = viewport,
             status = { status(null) },
             manager = {
                 if (searchEditing.isOpen) {

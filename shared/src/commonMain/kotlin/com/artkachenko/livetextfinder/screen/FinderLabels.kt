@@ -5,7 +5,6 @@ import com.artkachenko.livetextfinder.camera.FreezeMode
 import com.artkachenko.livetextfinder.camera.ImportedImagePhase
 import com.artkachenko.livetextfinder.camera.allowsLiveCamera
 import com.artkachenko.livetextfinder.camera.liveSearchAreaAvailable
-import com.artkachenko.livetextfinder.inspection.StillSource
 import livetextfinder.shared.generated.resources.Res
 import livetextfinder.shared.generated.resources.capture_cancel_freeze
 import livetextfinder.shared.generated.resources.capture_cancel_import
@@ -27,8 +26,6 @@ internal class FinderLabels(
     val pendingCapture: String?,
     /** Leaves an imported image or cancels a running import. */
     val secondaryAction: String?,
-    /** Returns from a retained image to the camera. */
-    val returnToCamera: String?,
     /** The scan-area entry in the options sheet. */
     val liveArea: String?,
     val searchLists: String,
@@ -41,7 +38,6 @@ internal class FinderLabels(
 internal fun finderLabels(
     importedPhase: ImportedImagePhase,
     freezeMode: FreezeMode,
-    stillSource: StillSource?,
     areaSelected: Boolean,
     managerOpen: Boolean,
     hasSearch: Boolean,
@@ -72,11 +68,6 @@ internal fun finderLabels(
         ImportedImagePhase.Live,
         ImportedImagePhase.Error -> null
     }
-    val returnToCamera = when (stillSource) {
-        is StillSource.Imported,
-        is StillSource.Frozen -> stringResource(Res.string.capture_return_to_camera)
-        null -> null
-    }
     val liveArea = if (
         hasLiveCaptureControls && freezeMode == FreezeMode.Live && liveSearchAreaAvailable()
     ) {
@@ -102,7 +93,6 @@ internal fun finderLabels(
         capture = capture,
         pendingCapture = pendingCapture,
         secondaryAction = secondaryAction,
-        returnToCamera = returnToCamera,
         liveArea = liveArea,
         searchLists = searchLists,
         results = resultsSummary.takeIf { hasSearch },

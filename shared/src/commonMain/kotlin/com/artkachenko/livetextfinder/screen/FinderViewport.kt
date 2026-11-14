@@ -25,13 +25,11 @@ import com.artkachenko.livetextfinder.scanarea.LiveSearchAreaState
 import com.artkachenko.livetextfinder.scanarea.ScanAreaBadge
 import com.artkachenko.livetextfinder.search.NormalizedSearchArea
 import com.artkachenko.livetextfinder.ui.FinderCameraOverlay
-import com.artkachenko.livetextfinder.ui.FinderSpacing
-import com.artkachenko.livetextfinder.ui.LiveCaptureControlRow
 import com.artkachenko.livetextfinder.ui.StillInspectionViewport
 
 /**
  * The camera or retained-image viewport with everything layered on it: match outlines, the
- * scan-area editor and badge, and the live capture controls.
+ * scan-area editor and badge.
  *
  * The viewport reports its measured size through [viewportState] and the camera's recognition
  * state through [onOcrState]. The value parameters are what the caller's composition displayed;
@@ -51,7 +49,6 @@ internal fun FinderViewport(
     areaEditing: Boolean,
     areaGestureEnabled: Boolean,
     modifier: Modifier = Modifier,
-    showLegacyLiveControls: Boolean = true,
 ) {
     val editorDraft = liveArea.editorDraft
     val editorToken = editorDraft?.token ?: 0L
@@ -113,19 +110,9 @@ internal fun FinderViewport(
             context.frozenOwner.state.value.mode == FreezeMode.Live &&
             context.isContentVisible()
         ) {
-            val badgeModifier = Modifier.align(Alignment.TopStart)
             ScanAreaBadge(
-                if (showLegacyLiveControls) badgeModifier else {
-                    badgeModifier.safeDrawingPadding().padding(start = 4.dp, top = 56.dp)
-                },
-            )
-        }
-        if (showLegacyLiveControls && inspection.source == null) {
-            LiveCaptureControlRow(
-                controls = context.liveCaptureControls,
-                contextEnabled = context.isCaptureContextCurrent(),
-                modifier = Modifier.align(Alignment.BottomCenter)
-                    .padding(FinderSpacing.small),
+                Modifier.align(Alignment.TopStart)
+                    .safeDrawingPadding().padding(start = 4.dp, top = 56.dp),
             )
         }
     }

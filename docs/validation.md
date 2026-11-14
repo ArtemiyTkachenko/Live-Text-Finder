@@ -1014,3 +1014,28 @@ One clean run exported the 117 legacy PNGs and two measurement files, all byte-i
 to the pre-change exports. No Kotlin formatter is configured. The checks cover host
 rendering on the development host. Cross-host pixel stability and physical-device camera,
 OCR, and rendering behavior remain unverified.
+
+## Scanner redesign Phase 5 — 2026-11-14
+
+The clean starting checkout at `63b15d0` passed 484 Android host tests with 110 matching
+baselines and both platform compilation targets. After removing unreachable stacked scanner
+UI and updating Help, the clean uncached host suite passed 484 tests across 67 suites with
+zero failures, errors or skips. All 110 Roborazzi comparisons matched. Android debug Kotlin
+and iOS simulator Kotlin compilation succeeded, and the screenshot index was regenerated.
+
+Re-recorded all ten screen fixtures, all region fixtures in `RegionScreenshotTest`, and the
+standalone Help dialog. Only `screen/app__help-open__light.png` and
+`region/usage-help-dialog__open__light.png` changed, reflecting the updated matching,
+keyboard, zoom and inspection instructions. Both changes were visually reviewed. The
+fixtures are under `shared/src/androidHostTest/screenshots`.
+
+Legacy layout fixtures moved to Android host test sources to keep their assertions and
+reference images useful. The obsolete dock-chrome flag assertions were retired with those
+flags. The layout-mode test still verifies live viewport classification. Existing App
+coverage checks full-size preview and query focus through keyboard and compact-layout
+changes. The cleanup preserves the camera lease and fresh-frame gate, scan-area freshness
+checks, and retained copy/navigation guards. The retained occurrence route also clears
+focus, hides the keyboard and closes term results before opening occurrences.
+
+No Kotlin formatter is configured. Device rendering over real camera imagery, one-handed
+reach, physical pinch behavior and TalkBack remain unverified.

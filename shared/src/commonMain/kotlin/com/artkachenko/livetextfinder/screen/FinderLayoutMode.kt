@@ -15,12 +15,6 @@ internal enum class FinderLayoutMode {
     StillInspection,
     ;
 
-    /** True when the app bar and bottom dock replace the inline search bar. */
-    val usesDockChrome: Boolean get() = this != ListManager
-
-    /** True when the bottom dock itself is shown. */
-    val showsDock: Boolean get() = this == Live || this == StillInspection
-
     /** True when the live camera, without an open list manager, is the displayed source. */
     val isLiveCamera: Boolean get() = this == Live || this == AreaEditing
 }
